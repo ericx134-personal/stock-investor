@@ -1,0 +1,220 @@
+import json
+import tempfile
+import unittest
+from datetime import date, timedelta
+from pathlib import Path
+
+from stock_investor.data import Price
+from stock_investor.wave import (
+    append_wave_history,
+    build_wave_conditional_scorecard,
+    build_wave_scorecard,
+    build_wave_walk_forward_outcomes,
+    build_wave_walk_forward_scorecard,
+    calculate_wave,
+    classify_wave_directional_evidence,
+    classify_wave_walk_forward_evidence,
+    evaluate_wave_history,
+    load_wave_history,
+    wave_age_bucket,
+    wave_magnitude_bucket,
+)
+
+
+def wave_history():
+    values = []
+    anchors = [(0, 100), (45, 145), (85, 112), (130, 170), (175, 135), (230, 190)]
+    for (start, left), (end, right) in zip(anchors[:-1], anchors[1:]):
+        for offset in range(start, end):
+            fraction = (offset - start) / (end - start)
+            values.append(left + (right - left) * fraction)
+    values.extend([190 + offset * 0.4 for offset in range(70)])
+    return [
+        Price(date(2025, 1, 1) + timedelta(days=offset), value)
+        for offset, value in enumerate(values)
+    ]
+
+
+class WaveTests(unittest.TestCase):
+    def test_confirmed_pivots_describe_active_multiweek_wave(self):
+        signal = calculate_wave("ABC", wave_history())
+        self.assertGreaterEqual(signal.pivot_count, 4)
+        self.assertEqual(signal.direction, "ADVANCING")
+        self.assertEqual(signal.last_pivot_type, "LOW")
+        self.assertGreater(signal.wave_age_sessions, 20)
+        self.assertGreater(signal.active_wave_return, 0)
+        self.assertIsNotNone(signal.support)
+        self.assertIsNotNone(signal.resistance)
+        self.assertLess(signal.support_zone_low, signal.support_zone_high)
+        self.assertLess(signal.resistance_zone_low, signal.resistance_zone_high)
+
+    def test_wave_history_and_long_horizon_evaluation_are_idempotent(self):
+        signal = calculate_wave("ABC", wave_history())
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "wave.jsonl"
+            self.assertEqual(append_wave_history({"ABC": signal}, path), 1)
+            self.assertEqual(append_wave_history({"ABC": signal}, path), 0)
+            records = load_wave_history(path)
+        outcomes = evaluate_wave_history(records, {"ABC": wave_history()})
+        scorecard = build_wave_scorecard(outcomes)
+        self.assertEqual(json.loads(json.dumps(records))[0]["feature_version"], "wave-v1")
+        self.assertEqual(set(outcomes[0]["returns"]), {"21d", "63d", "126d"})
+        self.assertEqual(scorecard, [])
+
+    def test_short_history_refuses_to_invent_wave(self):
+        with self.assertRaisesRegex(ValueError, "at least 126"):
+            calculate_wave("ABC", wave_history()[:100])
+
+    def test_walk_forward_wave_experiment_is_causal_and_non_overlapping(self):
+        history = wave_history()
+        spy = [
+            Price(item.date, 200 + index * 0.1)
+            for index, item in enumerate(history)
+        ]
+        outcomes = build_wave_walk_forward_outcomes({"ABC": history, "SPY": spy})
+        extended = history + [
+            Price(history[-1].date + timedelta(days=offset + 1), 218 + offset)
+            for offset in range(30)
+        ]
+        extended_spy = spy + [
+            Price(spy[-1].date + timedelta(days=offset + 1), 230 + offset * 0.1)
+            for offset in range(30)
+        ]
+        extended_outcomes = build_wave_walk_forward_outcomes(
+            {"ABC": extended, "SPY": extended_spy}
+        )
+        extended_by_key = {
+            (item["signal_date"], item["horizon"]): item
+            for item in extended_outcomes
+        }
+        for outcome in outcomes:
+            same = extended_by_key[(outcome["signal_date"], outcome["horizon"])]
+            self.assertEqual(outcome["regime"], same["regime"])
+            self.assertEqual(outcome["forward_return"], same["forward_return"])
+            self.assertTrue(outcome["non_overlapping_within_symbol_horizon"])
+            self.assertIsNotNone(outcome["excess_return"])
+        for horizon in (21, 63, 126):
+            dates = [
+                date.fromisoformat(item["signal_date"])
+                for item in outcomes
+                if item["horizon"] == f"{horizon}d"
+            ]
+            self.assertTrue(
+                all((right - left).days >= horizon for left, right in zip(dates, dates[1:]))
+            )
+        scorecard = build_wave_walk_forward_scorecard(outcomes)
+        self.assertTrue(scorecard)
+        self.assertIn("median_return", scorecard[0])
+        self.assertIn("mean_max_gain", scorecard[0])
+        self.assertIn("mean_max_loss", scorecard[0])
+        self.assertIn("beat_benchmark_rate", scorecard[0])
+        self.assertIn("symbol_positive_excess_rate", scorecard[0])
+        self.assertIn("symbol_positive_excess_ci_low", scorecard[0])
+        self.assertIn("symbol_positive_excess_ci_high", scorecard[0])
+        self.assertIn("top_symbol_observation_share", scorecard[0])
+        self.assertIn("evidence_classification", scorecard[0])
+        self.assertIn("symbol_positive_return_rate", scorecard[0])
+        self.assertIn("symbol_positive_return_ci_low", scorecard[0])
+        self.assertIn("symbol_positive_return_ci_high", scorecard[0])
+        self.assertIn("directional_evidence_classification", scorecard[0])
+        self.assertGreater(scorecard[0]["benchmark_symbols"], 0)
+        self.assertLessEqual(
+            scorecard[0]["beat_benchmark_ci_low"],
+            scorecard[0]["beat_benchmark_rate"],
+        )
+        self.assertGreaterEqual(
+            scorecard[0]["beat_benchmark_ci_high"],
+            scorecard[0]["beat_benchmark_rate"],
+        )
+        self.assertGreaterEqual(scorecard[0]["beat_benchmark_ci_low"], 0)
+        self.assertLessEqual(scorecard[0]["beat_benchmark_ci_high"], 1)
+        self.assertGreaterEqual(scorecard[0]["symbol_positive_excess_ci_low"], 0)
+        self.assertLessEqual(scorecard[0]["symbol_positive_excess_ci_high"], 1)
+
+    def test_robust_evidence_requires_pooled_and_cross_symbol_agreement(self):
+        robust_caution = {
+            "observations": 20,
+            "benchmark_symbols": 12,
+            "top_symbol_observation_share": 0.15,
+            "beat_benchmark_ci_low": 0.1,
+            "beat_benchmark_ci_high": 0.4,
+            "symbol_positive_excess_ci_low": 0.1,
+            "symbol_positive_excess_ci_high": 0.4,
+        }
+        self.assertEqual(
+            classify_wave_walk_forward_evidence(robust_caution), "CAUTION"
+        )
+        self.assertEqual(
+            classify_wave_walk_forward_evidence(
+                {**robust_caution, "benchmark_symbols": 3}
+            ),
+            "INCONCLUSIVE",
+        )
+        self.assertEqual(
+            classify_wave_walk_forward_evidence(
+                {**robust_caution, "symbol_positive_excess_ci_high": 0.7}
+            ),
+            "INCONCLUSIVE",
+        )
+
+    def test_predeclared_conditional_buckets_and_thin_sample_refusal(self):
+        self.assertEqual(wave_age_bucket(10), "EARLY")
+        self.assertEqual(wave_age_bucket(11), "MATURE")
+        self.assertEqual(wave_age_bucket(26), "EXTENDED")
+        self.assertEqual(wave_magnitude_bucket(0.119, 0.08)[1], "DEVELOPING")
+        self.assertEqual(wave_magnitude_bucket(0.12, 0.08)[1], "ESTABLISHED")
+        self.assertEqual(wave_magnitude_bucket(-0.25, 0.08)[1], "EXTENDED")
+        outcomes = [
+            {
+                "symbol": f"S{index}",
+                "regime": "Advancing wave",
+                "horizon": "21d",
+                "wave_age_sessions": 8,
+                "active_wave_return": 0.1,
+                "reversal_threshold": 0.08,
+                "forward_return": 0.1,
+                "excess_return": 0.05,
+                "max_gain": 0.15,
+                "max_loss": -0.02,
+            }
+            for index in range(7)
+        ]
+        row = build_wave_conditional_scorecard(outcomes)[0]
+        self.assertEqual(row["wave_age_bucket"], "EARLY")
+        self.assertEqual(row["wave_magnitude_bucket"], "DEVELOPING")
+        self.assertEqual(row["evidence_classification"], "INCONCLUSIVE")
+        self.assertEqual(row["directional_evidence_classification"], "WAIT")
+
+    def test_directional_evidence_requires_pooled_and_cross_symbol_agreement(self):
+        robust_sell = {
+            "observations": 20,
+            "directional_symbols": 12,
+            "top_symbol_return_observation_share": 0.15,
+            "positive_rate_ci_low": 0.1,
+            "positive_rate_ci_high": 0.4,
+            "symbol_positive_return_ci_low": 0.1,
+            "symbol_positive_return_ci_high": 0.4,
+        }
+        self.assertEqual(classify_wave_directional_evidence(robust_sell), "SELL")
+        self.assertEqual(
+            classify_wave_directional_evidence(
+                {
+                    **robust_sell,
+                    "positive_rate_ci_low": 0.6,
+                    "positive_rate_ci_high": 0.9,
+                    "symbol_positive_return_ci_low": 0.6,
+                    "symbol_positive_return_ci_high": 0.9,
+                }
+            ),
+            "BUY",
+        )
+        self.assertEqual(
+            classify_wave_directional_evidence(
+                {**robust_sell, "symbol_positive_return_ci_high": 0.7}
+            ),
+            "WAIT",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,19 @@
+{
+  "STEADY": {
+    "summary": "Durable compounder with healthy cash generation.",
+    "status": "ACTIVE",
+    "review_by": "2027-01-15",
+    "invalidation_rules": {
+      "revenue_growth_below": -0.05,
+      "free_cash_flow_margin_below": 0.05
+    }
+  },
+  "SLIPPING": {
+    "summary": "Turnaround depends on stabilizing revenue and cash flow.",
+    "status": "ACTIVE",
+    "review_by": "2026-01-15",
+    "invalidation_rules": {
+      "revenue_growth_below": -0.1
+    }
+  }
+}

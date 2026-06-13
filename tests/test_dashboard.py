@@ -1,0 +1,366 @@
+import tempfile
+import unittest
+import json
+from datetime import date, timedelta
+from pathlib import Path
+
+from stock_investor.dashboard import build_dashboard
+
+
+class DashboardTests(unittest.TestCase):
+    def test_dashboard_prioritizes_and_escapes_alerts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            alerts = Path(directory) / "alerts.jsonl"
+            alerts.write_text(
+                '{"symbol":"ABC","portfolio_weight":0.2,"latest_close":10,'
+                '"observed_at":"2026-01-01","alert":{"action":"TRIM_REVIEW",'
+                '"score":-0.4,"reasons":["Drawdown < review"]},'
+                '"technicals":{"drawdown_from_high":-0.3,"return_12_to_1":0.1}}\n'
+            )
+            scorecard = Path(directory) / "scorecard.json"
+            scorecard.write_text(
+                '[{"action":"TRIM_REVIEW","horizon":"21d","observations":4,'
+                '"directional_success_rate":0.75,"mean_directional_return":0.1}]'
+            )
+            decision_scorecard = Path(directory) / "decision-scorecard.json"
+            decision_scorecard.write_text(
+                '[{"model_version":"test-v1","action":"HOLD","horizon":"21d",'
+                '"observations":3,"positive_rate":0.67,"mean_excess_return":0.04,'
+                '"directional_success_rate":0.67}]'
+            )
+            page = build_dashboard(
+                alerts,
+                scorecard_path=scorecard,
+                decision_scorecard_path=decision_scorecard,
+            )
+        self.assertIn("ABC", page)
+        self.assertIn("TRIM REVIEW", page)
+        self.assertIn("Drawdown &lt; review", page)
+        self.assertIn("100%", page)
+        self.assertIn("75%", page)
+        self.assertIn("Bearish / trim review", page)
+        self.assertIn("K-line evidence", page)
+        self.assertIn("Priority Board", page)
+        self.assertIn('class="decision-board"', page)
+        self.assertIn('class="signal-column buy-column"', page)
+        self.assertIn('class="signal-column sell-column"', page)
+        self.assertIn('<details class="signal-column wait-column">', page)
+        self.assertNotIn('<details class="signal-column wait-column" open>', page)
+        self.assertIn("WAIT is folded by default", page)
+        self.assertIn("All-Decision Forward Evidence", page)
+        self.assertIn("Includes HOLD and ordinary REVIEW decisions", page)
+        self.assertIn('class="holding-row trim_review signal-wait"', page)
+        self.assertIn('data-detail-target="holding-detail-0"', page)
+        self.assertIn('id="holding-drawer"', page)
+        self.assertIn('data-tab-target="research"', page)
+        self.assertIn("Gain / loss", page)
+        self.assertIn("<strong>WAIT</strong><b>--</b>", page)
+        self.assertIn("no wave analog", page)
+        self.assertNotIn("Prioritized Signals", page)
+
+    def test_dashboard_does_not_blend_evidence_across_model_versions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            snapshot = Path(directory) / "snapshot.json"
+            snapshot.write_text(
+                json.dumps(
+                    {
+                        "model_version": "decision-support-v2",
+                        "observed_at": "2026-01-01",
+                        "results": [
+                            {
+                                "symbol": "ABC",
+                                "alert": {
+                                    "action": "TRIM_REVIEW",
+                                    "score": -0.4,
+                                    "reasons": [],
+                                },
+                            }
+                        ],
+                    }
+                )
+            )
+            scorecard = Path(directory) / "scorecard.json"
+            scorecard.write_text(
+                '[{"model_version":"decision-support-v1","action":"TRIM_REVIEW",'
+                '"horizon":"21d","observations":4,"directional_success_rate":0.75,'
+                '"mean_directional_return":0.1}]'
+            )
+            comparison = Path(directory) / "comparison.json"
+            comparison.write_text(
+                json.dumps(
+                    {
+                        "baseline": {"actionable_rate": 0.8},
+                        "candidate": {"actionable_rate": 0.6},
+                        "actionable_count_change": -5,
+                        "changed_symbols": {"ABC": {}},
+                    }
+                )
+            )
+            coverage = Path(directory) / "coverage.json"
+            coverage.write_text(
+                json.dumps(
+                    {
+                        "quality_coverage_rate": 0.5,
+                        "valuation_coverage_rate": 0.25,
+                        "revisions_coverage_rate": 0.0,
+                        "v3_buy_ready_symbols": ["ABC"],
+                    }
+                )
+            )
+            page = build_dashboard(
+                snapshot,
+                scorecard_path=scorecard,
+                comparison_path=comparison,
+                fundamental_coverage_path=coverage,
+            )
+        self.assertIn("decision-support-v2", page)
+        self.assertNotIn("75%", page)
+        self.assertIn("Model Experiment", page)
+        self.assertIn("Fundamental Coverage", page)
+        self.assertIn("ABC", page)
+
+    def test_dashboard_separates_exploratory_wave_history_from_live_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "snapshot.json"
+            snapshot.write_text(
+                json.dumps(
+                    {
+                        "model_version": "decision-support-v3",
+                        "results": [
+                            {
+                                "symbol": "ABC",
+                                "alert": {"action": "HOLD", "score": 0.1, "reasons": []},
+                            }
+                        ],
+                    }
+                )
+            )
+            wave_snapshot = root / "wave-snapshot.json"
+            wave_snapshot.write_text(
+                json.dumps(
+                    {
+                        "waves": {
+                            "ABC": {
+                                "regime": "Advancing wave",
+                                "active_wave_return": 0.12,
+                                "wave_age_sessions": 30,
+                            }
+                        }
+                    }
+                )
+            )
+            experiment = root / "wave-experiment-scorecard.json"
+            experiment.write_text(
+                json.dumps(
+                    [
+                        {
+                            "regime": "Advancing wave",
+                            "horizon": "63d",
+                            "positive_rate": 0.7,
+                            "positive_rate_ci_low": 0.55,
+                            "positive_rate_ci_high": 0.85,
+                            "directional_symbols": 10,
+                            "symbol_positive_return_rate": 0.8,
+                            "symbol_positive_return_ci_low": 0.55,
+                            "symbol_positive_return_ci_high": 0.95,
+                            "top_symbol_return_observation_share": 0.1,
+                            "beat_benchmark_rate": 0.6,
+                            "beat_benchmark_ci_low": 0.31,
+                            "beat_benchmark_ci_high": 0.83,
+                            "benchmark_symbols": 10,
+                            "symbol_positive_excess_rate": 0.6,
+                            "symbol_positive_excess_ci_low": 0.31,
+                            "symbol_positive_excess_ci_high": 0.83,
+                            "top_symbol_observation_share": 0.1,
+                            "median_return": 0.08,
+                            "mean_max_gain": 0.2,
+                            "mean_max_loss": -0.1,
+                            "observations": 10,
+                        }
+                    ]
+                )
+            )
+            conditional = root / "wave-conditional-scorecard.json"
+            conditional.write_text(
+                json.dumps(
+                    [
+                        {
+                            "regime": "Advancing wave",
+                            "horizon": "63d",
+                            "wave_age_bucket": "EXTENDED",
+                            "wave_magnitude_bucket": "DEVELOPING",
+                            "positive_rate": 0.8,
+                            "beat_benchmark_rate": 0.8,
+                            "beat_benchmark_ci_low": 0.3,
+                            "beat_benchmark_ci_high": 0.95,
+                            "benchmark_symbols": 4,
+                            "symbol_positive_excess_rate": 0.75,
+                            "symbol_positive_excess_ci_low": 0.3,
+                            "symbol_positive_excess_ci_high": 0.95,
+                            "top_symbol_observation_share": 0.25,
+                            "median_return": 0.1,
+                            "mean_max_gain": 0.2,
+                            "mean_max_loss": -0.1,
+                            "observations": 5,
+                        }
+                    ]
+                )
+            )
+            page = build_dashboard(
+                snapshot,
+                wave_snapshot_path=wave_snapshot,
+                wave_experiment_scorecard_path=experiment,
+                wave_conditional_scorecard_path=conditional,
+            )
+        self.assertIn("Historical Wave Experiment", page)
+        self.assertIn("Current Wave Analog Ranking", page)
+        self.assertIn("Live Structural Wave Evidence", page)
+        self.assertIn("Exploratory historical 63d analogs", page)
+        self.assertIn("60% (31%–83%) beat SPY", page)
+        self.assertIn("cross-stock breadth", page)
+        self.assertIn("Cross-stock breadth (95% CI)", page)
+        self.assertIn("Inconclusive", page)
+        self.assertIn('id="tab-research" class="tab-view"', page)
+        self.assertIn('id="holding-detail-0" class="holding-detail" hidden', page)
+        self.assertIn("not a promoted prediction model", page)
+        self.assertIn("Conditional Wave Precision Audit", page)
+        self.assertIn("Conditional precision refused", page)
+        self.assertIn("<strong>BUY</strong><b>70%</b>", page)
+        self.assertIn("robust direction evidence", page)
+        self.assertIn("direction gate", page)
+
+    def test_review_outcome_without_directional_rate_does_not_crash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "snapshot.json"
+            snapshot.write_text(
+                json.dumps(
+                    {
+                        "model_version": "decision-support-v3",
+                        "results": [
+                            {
+                                "symbol": "ABC",
+                                "alert": {"action": "REVIEW", "score": -0.1, "reasons": []},
+                            }
+                        ],
+                    }
+                )
+            )
+            scorecard = root / "decision-scorecard.json"
+            scorecard.write_text(
+                '[{"model_version":"decision-support-v3","action":"REVIEW",'
+                '"horizon":"21d","observations":5,"positive_rate":0.6,'
+                '"directional_success_rate":null}]'
+            )
+            page = build_dashboard(snapshot, decision_scorecard_path=scorecard)
+        self.assertIn("60% positive-return rate across 5 matured outcomes", page)
+
+    def test_robust_conditional_direction_can_override_inconclusive_broad_direction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "snapshot.json"
+            snapshot.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "symbol": "ABC",
+                                "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                            }
+                        ]
+                    }
+                )
+            )
+            wave_snapshot = root / "waves.json"
+            start = date(2025, 1, 1)
+            wave_snapshot.write_text(
+                json.dumps(
+                    {
+                        "waves": {
+                            "ABC": {
+                                "regime": "Advancing wave",
+                                "wave_age_sessions": 15,
+                                "active_wave_return": 0.1,
+                                "reversal_threshold": 0.08,
+                                "last_pivot_date": (start + timedelta(days=110)).isoformat(),
+                                "last_pivot_price": 110,
+                                "support_zone_low": 106,
+                                "support_zone_high": 112,
+                                "resistance_zone_low": 124,
+                                "resistance_zone_high": 130,
+                            }
+                        }
+                    }
+                )
+            )
+            broad = root / "broad.json"
+            broad.write_text(
+                json.dumps(
+                    [
+                        {
+                            "regime": "Advancing wave",
+                            "horizon": "21d",
+                            "observations": 20,
+                            "positive_rate": 0.4,
+                            "median_return": -0.01,
+                            "mean_max_gain": 0.1,
+                            "mean_max_loss": -0.1,
+                        }
+                    ]
+                )
+            )
+            conditional = root / "conditional.json"
+            conditional.write_text(
+                json.dumps(
+                    [
+                        {
+                            "regime": "Advancing wave",
+                            "horizon": "21d",
+                            "wave_age_bucket": "MATURE",
+                            "wave_magnitude_bucket": "DEVELOPING",
+                            "observations": 18,
+                            "directional_symbols": 14,
+                            "positive_rate": 0.83,
+                            "positive_rate_ci_low": 0.6,
+                            "positive_rate_ci_high": 0.95,
+                            "symbol_positive_return_rate": 0.79,
+                            "symbol_positive_return_ci_low": 0.52,
+                            "symbol_positive_return_ci_high": 0.92,
+                            "top_symbol_return_observation_share": 0.12,
+                            "median_return": 0.1,
+                            "mean_max_gain": 0.2,
+                            "mean_max_loss": -0.05,
+                        }
+                    ]
+                )
+            )
+            prices = root / "prices.csv"
+            prices.write_text(
+                "date,symbol,close,open,high,low,volume\n"
+                + "".join(
+                    f"{(start + timedelta(days=index)).isoformat()},ABC,{100 + index * 0.15:.2f},"
+                    f"{99.5 + index * 0.15:.2f},{101 + index * 0.15:.2f},"
+                    f"{99 + index * 0.15:.2f},{100000 + index * 100}\n"
+                    for index in range(130)
+                )
+            )
+            page = build_dashboard(
+                snapshot,
+                wave_snapshot_path=wave_snapshot,
+                wave_experiment_scorecard_path=broad,
+                wave_conditional_scorecard_path=conditional,
+                prices_path=prices,
+            )
+        self.assertIn("<strong>BUY</strong><b>83%</b>", page)
+        self.assertIn("Conditional age/magnitude evidence used", page)
+        self.assertIn("direction gate <b>BUY</b>", page)
+        self.assertIn('class="kline-chart"', page)
+        self.assertIn("126-session daily K-line", page)
+        self.assertIn("Support zone", page)
+        self.assertIn('<details class="advanced-details">', page)
+        self.assertNotIn('<details class="advanced-details" open>', page)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,34 @@
+{
+  "model_version": "decision-support-v3",
+  "purpose": "Selective human-review alerts with conservative fundamental-data coverage",
+  "signal_weights": {
+    "trend": 0.25,
+    "momentum": 0.2,
+    "quality": 0.25,
+    "valuation": 0.2,
+    "revisions": 0.1
+  },
+  "buy_candidate_threshold": 0.5,
+  "require_revisions_for_buy": false,
+  "selectivity_rules": {
+    "drawdown_review_threshold": -0.3,
+    "severe_drawdown_threshold": -0.5,
+    "negative_trend_threshold": -0.5,
+    "negative_revisions_threshold": -0.5,
+    "trim_score_threshold": -0.25,
+    "minimum_deterioration_signals": 2
+  },
+  "rationale": "Preserve v2 selectivity while treating unavailable analyst revisions as a neutral optional signal rather than fabricated evidence.",
+  "fundamental_data_rules": {
+    "required_for_buy": ["quality", "valuation"],
+    "optional_neutral_when_unavailable": ["earnings revisions"],
+    "ifrs_quality_supported": true,
+    "ifrs_adr_valuation_requires_point_in_time_fx_and_adr_ratio": true
+  },
+  "promotion_status": "experimental",
+  "evaluation": {
+    "forward_sessions": [21, 63, 126],
+    "minimum_episode_sessions": 21,
+    "same_close_execution": false
+  }
+}

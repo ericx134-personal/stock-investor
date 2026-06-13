@@ -1,0 +1,33 @@
+{
+  "model_version": "decision-support-v1",
+  "purpose": "Human-review buy, add, hold, review, and trim alerts",
+  "signal_weights": {
+    "trend": 0.25,
+    "momentum": 0.2,
+    "quality": 0.25,
+    "valuation": 0.2,
+    "revisions": 0.1
+  },
+  "buy_candidate_threshold": 0.45,
+  "require_revisions_for_buy": true,
+  "technical_definitions": {
+    "trend": "Distance from 200-day average plus recent average slope",
+    "momentum": "12-month return excluding the latest month"
+  },
+  "required_buy_controls": [
+    "complete fundamentals",
+    "fresh SEC data when used",
+    "position limit",
+    "sector exposure",
+    "theme exposure when configured",
+    "correlation exposure",
+    "volatility sizing",
+    "gross exposure only when configured to block buys",
+    "thesis invalidation and review dates when configured"
+  ],
+  "evaluation": {
+    "forward_sessions": [21, 63, 126],
+    "minimum_episode_sessions": 21,
+    "same_close_execution": false
+  }
+}

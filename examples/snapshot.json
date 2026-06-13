@@ -1,0 +1,27 @@
+[
+  {
+    "symbol": "EXAMPLE_BUY",
+    "portfolio_weight": 0.0,
+    "max_portfolio_weight": 0.1,
+    "drawdown_from_high": -0.08,
+    "trend": 0.8,
+    "momentum": 0.7,
+    "quality": 0.9,
+    "valuation": 0.3,
+    "revisions": 0.5,
+    "thesis_broken": false
+  },
+  {
+    "symbol": "EXAMPLE_RISK",
+    "portfolio_weight": 0.22,
+    "max_portfolio_weight": 0.15,
+    "drawdown_from_high": -0.25,
+    "trend": -0.7,
+    "momentum": -0.4,
+    "quality": 0.2,
+    "valuation": 0.4,
+    "revisions": -0.8,
+    "thesis_broken": false
+  }
+]
+

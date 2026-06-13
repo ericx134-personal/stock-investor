@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.venv/
+.env
+data/private/
+data/*.jsonl
+data/*.json
+examples/prices.csv
+portfolio/

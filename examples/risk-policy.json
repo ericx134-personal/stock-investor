@@ -1,0 +1,15 @@
+{
+  "sector_limit": 0.35,
+  "theme_limit": 0.25,
+  "correlated_exposure_limit": 0.4,
+  "correlation_threshold": 0.75,
+  "annual_risk_budget_per_position": 0.025,
+  "correlation_lookback": 120,
+  "minimum_correlation_observations": 60,
+  "factor_proxies": {
+    "US_market": "SPY"
+  },
+  "factor_beta_limit": 1.25,
+  "gross_exposure_limit": 1.0,
+  "gross_exposure_blocks_buy": false
+}
