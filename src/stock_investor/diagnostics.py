@@ -127,6 +127,27 @@ def build_price_health_report(
             if latest is not None and history[0].date <= session <= latest.date
         }
         missing_sessions = sorted(relevant_expected - observed_dates)
+        session_coverage = (
+            1 - len(missing_sessions) / len(relevant_expected)
+            if relevant_expected
+            else None
+        )
+        ohlcv_coverage = ohlcv_rows / len(history) if history else 0.0
+        quality_score = 1.0
+        if status != "FRESH":
+            quality_score -= 0.5
+        if session_coverage is None:
+            quality_score -= 0.15
+        elif session_coverage < 1:
+            quality_score -= min(0.3, 1 - session_coverage)
+        if ohlcv_coverage < 0.8:
+            quality_score -= 0.25
+        if suspicious_range_dates or suspicious_close_gaps:
+            quality_score -= 0.1
+        quality_score = max(0.0, quality_score)
+        quality_status = (
+            "GOOD" if quality_score >= 0.9 else "REVIEW" if quality_score >= 0.6 else "POOR"
+        )
         rows.append(
             {
                 "symbol": symbol,
@@ -134,7 +155,7 @@ def build_price_health_report(
                 "latest_date": latest.date.isoformat() if latest else None,
                 "age_calendar_days": age_days,
                 "history_rows": len(history),
-                "ohlcv_coverage_rate": ohlcv_rows / len(history) if history else 0.0,
+                "ohlcv_coverage_rate": ohlcv_coverage,
                 "suspicious_intraday_range_count": len(suspicious_range_dates),
                 "suspicious_intraday_range_dates": suspicious_range_dates[-10:],
                 "suspicious_close_gap_count": len(suspicious_close_gaps),
@@ -150,11 +171,9 @@ def build_price_health_report(
                 "expected_session_count": len(relevant_expected),
                 "missing_session_count": len(missing_sessions),
                 "missing_session_dates": [item.isoformat() for item in missing_sessions[-10:]],
-                "session_coverage_rate": (
-                    1 - len(missing_sessions) / len(relevant_expected)
-                    if relevant_expected
-                    else None
-                ),
+                "session_coverage_rate": session_coverage,
+                "data_quality_score": quality_score,
+                "data_quality_status": quality_status,
                 "source": source["name"],
                 "source_confidence": source["confidence"],
                 "adjustment_type": source["adjustment_type"],
@@ -188,6 +207,9 @@ def build_price_health_report(
                 for item in row["suspicious_close_gaps"]
             )
         ],
+        "data_quality_status_counts": dict(
+            sorted(Counter(row["data_quality_status"] for row in rows).items())
+        ),
         "all_held_symbols_fresh": bool(rows) and all(row["status"] == "FRESH" for row in rows),
         "symbols": rows,
     }

@@ -322,6 +322,11 @@ Every complete refresh fingerprints the exact positions and prices inputs with
 SHA-256 and byte counts in `input-integrity.json`. This supports deterministic
 reproduction and prevents a reused filename from obscuring changed inputs.
 
+The per-symbol data-quality scorecard combines freshness, expected-session
+coverage, OHLCV completeness, and suspicious-range/gap flags. It rates data as
+`GOOD`, `REVIEW`, or `POOR`; it measures analysis readiness, never investment
+quality.
+
 ### Model V2 Selectivity Experiment
 
 `decision-support-v2` is an experimental candidate, not the promoted default.

@@ -629,6 +629,7 @@ def build_dashboard(
     )
     price_health_rows = "".join(
         f"""<tr><td><b>{html.escape(str(row.get("symbol", "")))}</b></td>
+        <td><span class="health-status {str(row.get("data_quality_status", "")).lower()}">{html.escape(str(row.get("data_quality_status", "")))}</span> {_percent(row.get("data_quality_score"))}</td>
         <td><span class="health-status {str(row.get("status", "")).lower()}">{html.escape(str(row.get("status", "")))}</span></td>
         <td>{html.escape(str(row.get("latest_date") or "missing"))}</td>
         <td>{html.escape(str(row.get("age_calendar_days") if row.get("age_calendar_days") is not None else "missing"))}</td>
@@ -644,7 +645,7 @@ def build_dashboard(
     )
     price_health_panel = (
         f"""<section class="panel"><h2>Per-Symbol Price Freshness</h2>
-        <table><thead><tr><th>Symbol</th><th>Status</th><th>Latest</th><th>Age days</th><th>Session coverage</th><th>Missing</th><th>OHLCV coverage</th><th>Extreme ranges</th><th>Close gaps</th><th>Cost basis</th><th>Adjustment</th><th>Source</th></tr></thead>
+        <table><thead><tr><th>Symbol</th><th>Data quality</th><th>Status</th><th>Latest</th><th>Age days</th><th>Session coverage</th><th>Missing</th><th>OHLCV coverage</th><th>Extreme ranges</th><th>Close gaps</th><th>Cost basis</th><th>Adjustment</th><th>Source</th></tr></thead>
         <tbody>{price_health_rows}</tbody></table>
         <p class="note">Expected sessions use the latest 252 observed {html.escape(str(price_health.get("expected_session_source") or "benchmark"))} market dates, avoiding an invented holiday calendar. Source confidence distinguishes declared provenance from conservative filename inference.</p></section>"""
         if price_health
@@ -1100,6 +1101,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .health-summary {{ align-items:center; display:flex; gap:10px }} .health-status {{ border-radius:999px; display:inline-block; font-size:10px; font-weight:800; letter-spacing:.4px; padding:5px 8px }}
 .health-status.pass,.health-status.ready {{ background:var(--green-dim); color:var(--green) }} .health-status.fail,.health-status.blocked {{ background:#321214; color:var(--red) }} .health-status.pending {{ background:#2b240f; color:var(--amber) }} .health-status.degraded {{ background:#35240c; color:#ffb84d }}
 .health-status.fresh {{ background:var(--green-dim); color:var(--green) }} .health-status.stale,.health-status.missing {{ background:#321214; color:var(--red) }}
+.health-status.good {{ background:var(--green-dim); color:var(--green) }} .health-status.review {{ background:#2b240f; color:var(--amber) }} .health-status.poor {{ background:#321214; color:var(--red) }}
 .board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }}
 .drawer-backdrop {{ background:rgba(0,0,0,.78); display:none; inset:0; position:fixed; z-index:20 }} .drawer-backdrop.open {{ display:block }}
 .drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:720px; overflow:auto; padding:22px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .2s ease; width:min(94vw,720px); z-index:30 }}

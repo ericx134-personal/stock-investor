@@ -63,6 +63,9 @@ class DiagnosticTests(unittest.TestCase):
         )
         self.assertEqual(report["symbols_with_possible_splits"], ["A"])
         self.assertIsNotNone(report["symbols"][0]["cost_basis_reconciliation_warning"])
+        self.assertEqual(report["symbols"][0]["data_quality_status"], "REVIEW")
+        self.assertEqual(report["symbols"][1]["data_quality_status"], "POOR")
+        self.assertEqual(report["data_quality_status_counts"], {"POOR": 1, "REVIEW": 1})
         self.assertEqual(
             infer_price_source("prices.csv", "licensed-provider")["confidence"],
             "DECLARED",

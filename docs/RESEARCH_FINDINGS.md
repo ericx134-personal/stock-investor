@@ -721,3 +721,7 @@ not assumed to be split- or dividend-adjusted.
 No current close-gap event meets the possible-split heuristic. Cost-basis
 reconciliation remains warning-only; the system never mutates imported
 position quantities or average costs.
+
+The first per-symbol data-quality scorecard rates 26 holdings `GOOD` and one
+holding, `SPCX`, `REVIEW`. `SPCX` remains price-fresh but lacks complete OHLCV
+history, so it is unsuitable for K-line conclusions.
