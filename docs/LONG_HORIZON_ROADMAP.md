@@ -34,7 +34,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [~] B007 Preserve provider and retrieval timestamps per data batch.
 - [x] B008 Add deterministic price-file content hashes.
 - [x] B009 Add data-quality scorecards by symbol.
-- [ ] B010 Block graphical conclusions when required chart data is invalid.
+- [x] B010 Block graphical conclusions when required chart data is invalid.
 
 ## C. Real-Portfolio Learning Loop
 

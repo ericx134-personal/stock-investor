@@ -13,7 +13,7 @@ from .data import Price
 WAVE_FEATURE_VERSION = "wave-v1"
 WAVE_EXPERIMENT_VERSION = "wave-walk-forward-v1"
 WAVE_CONDITIONAL_VERSION = "wave-conditional-v2"
-WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v2"
+WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v3"
 WAVE_OUTCOME_WINDOWS = (21, 63, 126)
 MIN_WAVE_HISTORY = 126
 MIN_REVERSAL = 0.08
@@ -715,10 +715,14 @@ def build_directional_forecasts(
     broad_scorecard: list[dict],
     conditional_scorecard: list[dict],
     prices: dict[str, list[Price]] | None = None,
+    blocked_reasons: dict[str, str] | None = None,
 ) -> list[dict]:
     forecasts = []
     for symbol in sorted(held_symbols):
         wave = waves.get(symbol)
+        blocked_reason = (blocked_reasons or {}).get(symbol)
+        if blocked_reason:
+            wave = None
         if not wave:
             history = (prices or {}).get(symbol, [])
             if not history:
@@ -737,7 +741,7 @@ def build_directional_forecasts(
                     "direction": "WAIT",
                     "probability": None,
                     "horizon": None,
-                    "regime": "Wave evidence unavailable",
+                    "regime": blocked_reason or "Wave evidence unavailable",
                     "evidence_source": "NONE",
                     "observations": 0,
                     "directional_symbols": 0,

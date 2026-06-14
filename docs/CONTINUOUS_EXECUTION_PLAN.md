@@ -57,7 +57,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [ ] M017 Detect symbol changes, mergers, and delistings.
 - [x] M018 Add deterministic hashes for every input data batch.
 - [x] M019 Build a per-symbol data-quality scorecard.
-- [ ] M020 Block forecasts and charts when required inputs fail quality gates.
+- [x] M020 Block forecasts and charts when required inputs fail quality gates.
 
 ## Phase 3: Operational Stability
 

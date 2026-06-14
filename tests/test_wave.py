@@ -311,6 +311,20 @@ class WaveTests(unittest.TestCase):
         self.assertEqual(forecast["evidence_source"], "NONE")
         self.assertEqual(forecast["signal_date"], history[-1].date.isoformat())
 
+    def test_directional_forecast_waits_when_data_quality_blocks_wave(self):
+        history = wave_history()
+        forecast = build_directional_forecasts(
+            {"ABC": calculate_wave("ABC", history)},
+            {"ABC"},
+            [],
+            [],
+            {"ABC": history},
+            {"ABC": "Data quality gate blocked direction: STALE / POOR"},
+        )[0]
+        self.assertEqual(forecast["direction"], "WAIT")
+        self.assertEqual(forecast["evidence_source"], "NONE")
+        self.assertIn("Data quality gate blocked", forecast["regime"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -438,6 +438,35 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('<details class="advanced-details">', page)
         self.assertNotIn('<details class="advanced-details" open>', page)
 
+    def test_poor_data_quality_blocks_kline_chart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "snapshot.json"
+            snapshot.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "symbol": "ABC",
+                                "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                            }
+                        ]
+                    }
+                )
+            )
+            quality = root / "price-health.json"
+            quality.write_text(
+                json.dumps(
+                    {
+                        "symbols": [
+                            {"symbol": "ABC", "data_quality_status": "POOR"}
+                        ]
+                    }
+                )
+            )
+            page = build_dashboard(snapshot, price_health_path=quality)
+        self.assertIn("K-line chart blocked by the data-quality gate", page)
+
 
 if __name__ == "__main__":
     unittest.main()

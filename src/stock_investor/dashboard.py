@@ -166,7 +166,10 @@ def _kline_chart(
     signal_class: str,
     probability: float | None,
     price_plan: dict | None = None,
+    data_quality_status: str | None = None,
 ) -> str:
+    if data_quality_status == "POOR":
+        return '<div class="chart-unavailable">K-line chart blocked by the data-quality gate.</div>'
     candles = [
         item
         for item in history[-126:]
@@ -583,6 +586,9 @@ def build_dashboard(
         if price_health_path and Path(price_health_path).exists()
         else None
     )
+    price_health_by_symbol = {
+        row.get("symbol"): row for row in (price_health or {}).get("symbols", [])
+    }
     conditional_wave_evidence = {
         (
             row.get("regime"),
@@ -710,6 +716,9 @@ def build_dashboard(
             signal_class,
             signal_probability,
             price_plan,
+            (price_health_by_symbol.get(record.get("symbol", "")) or {}).get(
+                "data_quality_status"
+            ),
         )
         unrealized_return = record.get("unrealized_return")
         return_class = (

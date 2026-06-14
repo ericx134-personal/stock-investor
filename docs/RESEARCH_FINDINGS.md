@@ -137,6 +137,7 @@ engagement rather than decision quality.
 | `wave-conditional-v2` | Current exploratory audit | Predeclared conditions plus leave-one-symbol-out gate |
 | `wave-direction-v1` | Frozen observational ledger | Original displayed forecasts preserved for forward evaluation |
 | `wave-direction-v2` | Current observational ledger | Displayed forecasts requiring leave-one-symbol-out stability |
+| `wave-direction-v3` | Current observational ledger | v2 plus explicit stale/poor data-quality blocking |
 
 None is promoted as a proven predictive model.
 
@@ -725,3 +726,8 @@ position quantities or average costs.
 The first per-symbol data-quality scorecard rates 26 holdings `GOOD` and one
 holding, `SPCX`, `REVIEW`. `SPCX` remains price-fresh but lacks complete OHLCV
 history, so it is unsuitable for K-line conclusions.
+
+`wave-direction-v3` blocks directional conclusions for STALE or POOR inputs and
+blocks K-line rendering for POOR inputs. The current real portfolio has no
+POOR symbol, so the refreshed board remains 1 SELL and 26 WAIT; the new
+versioned ledger preserves the unchanged conclusion for forward comparison.

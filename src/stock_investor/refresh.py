@@ -141,6 +141,22 @@ def run_refresh(
         "prices": _file_fingerprint(prices_path),
     }
     _write_json(input_integrity, paths["input_integrity"])
+    price_health = build_price_health_report(
+        prices,
+        held_symbols,
+        as_of=date.today(),
+        source=infer_price_source(prices_path, price_source, price_adjustment),
+        expected_sessions={
+            item.date for item in prices.get(benchmark_symbol or "", [])
+        },
+        expected_session_source=benchmark_symbol,
+    )
+    _write_json(price_health, paths["price_health"])
+    blocked_forecast_reasons = {
+        row["symbol"]: f'Data quality gate blocked direction: {row["status"]} / {row["data_quality_status"]}'
+        for row in price_health["symbols"]
+        if row["status"] != "FRESH" or row["data_quality_status"] == "POOR"
+    }
     fundamentals = (
         load_fundamentals(fundamentals_path)
         if fundamentals_path and Path(fundamentals_path).exists()
@@ -219,6 +235,7 @@ def run_refresh(
         wave_experiment_scorecard,
         wave_conditional_scorecard,
         prices,
+        blocked_forecast_reasons,
     )
     append_directional_forecast_history(
         direction_forecasts, paths["direction_forecasts"]
@@ -273,17 +290,6 @@ def run_refresh(
         (history[-1].date for history in prices.values() if history), default=None
     )
     missing_prices = sorted(symbol for symbol in held_symbols if not prices.get(symbol))
-    price_health = build_price_health_report(
-        prices,
-        held_symbols,
-        as_of=date.today(),
-        source=infer_price_source(prices_path, price_source, price_adjustment),
-        expected_sessions={
-            item.date for item in prices.get(benchmark_symbol or "", [])
-        },
-        expected_session_source=benchmark_symbol,
-    )
-    _write_json(price_health, paths["price_health"])
     kline_ready = sum(
         bool(result.technicals and result.technicals.ohlcv_available)
         for result in results

@@ -263,6 +263,12 @@ classification. A BUY or SELL survives only when every removal retains the
 same direction. The prior `wave-direction-v1` ledger remains immutable;
 forecasts under this stricter rule use `wave-direction-v2`.
 
+`wave-direction-v3` adds data-quality gating without rewriting v1 or v2.
+STALE or POOR data forces a displayed WAIT with an explicit blocked reason.
+POOR data also blocks K-line rendering. REVIEW-quality data remains visible
+with warnings because incomplete OHLCV does not necessarily invalidate
+close-only structural evidence.
+
 Every direction displayed on the portfolio board is now recorded in a separate
 append-only, versioned direction ledger. BUY and SELL forecasts retain their
 displayed historical analog rate, selected broad or conditional evidence
