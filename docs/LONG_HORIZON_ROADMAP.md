@@ -5,6 +5,9 @@ project. Work is ordered by evidence value and dependency, not novelty. No task
 may place trades. A research result becomes a promoted signal only after its
 predeclared validation standard passes.
 
+The ordered execution sequence and completion gates live in
+[`100_MILESTONE_EXECUTION_PLAN.md`](100_MILESTONE_EXECUTION_PLAN.md).
+
 Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## A. Prediction Accountability
@@ -178,6 +181,8 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## Execution Rule
 
-At each continuation, choose the highest-value pending task whose dependencies
-are satisfied. Finish it end to end: implementation, tests, real-data refresh,
-artifact inspection, and documentation. Keep all trading actions disabled.
+At each continuation, first choose the highest-value unblocked milestone from
+`100_MILESTONE_EXECUTION_PLAN.md`, then use this roadmap for its detailed
+research backlog. Finish it end to end: implementation, tests, real-data
+refresh, artifact inspection, and documentation. Keep all trading actions
+disabled.

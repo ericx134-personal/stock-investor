@@ -5,6 +5,7 @@ A long-running, evidence-based portfolio monitoring project.
 For teammates joining the project, start with
 [Research Findings](docs/RESEARCH_FINDINGS.md),
 [Collaborating Safely](docs/COLLABORATING.md), and the
+[100-Milestone Execution Plan](docs/100_MILESTONE_EXECUTION_PLAN.md) and
 [Long-Horizon Roadmap](docs/LONG_HORIZON_ROADMAP.md). To connect real portfolio
 data safely, follow the [Robinhood MCP Setup](docs/ROBINHOOD_MCP_SETUP.md).
 
