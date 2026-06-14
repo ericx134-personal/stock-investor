@@ -5,7 +5,7 @@ A long-running, evidence-based portfolio monitoring project.
 For teammates joining the project, start with
 [Research Findings](docs/RESEARCH_FINDINGS.md),
 [Collaborating Safely](docs/COLLABORATING.md), and the
-[100-Milestone Execution Plan](docs/100_MILESTONE_EXECUTION_PLAN.md) and
+[Continuous Execution Plan](docs/CONTINUOUS_EXECUTION_PLAN.md) and
 [Long-Horizon Roadmap](docs/LONG_HORIZON_ROADMAP.md). To connect real portfolio
 data safely, follow the [Robinhood MCP Setup](docs/ROBINHOOD_MCP_SETUP.md).
 
@@ -307,7 +307,8 @@ PYTHONPATH=src python3 -m stock_investor.cli refresh \
 
 This writes the monitor snapshot, append-only alerts and all-decision ledger,
 K-line and structural-wave observations, portfolio-risk history, forward
-outcomes, scorecards, diagnostics, comparison, dashboard, and finally
+outcomes, scorecards, diagnostics, the machine-readable `model-health.json`
+gate summary, comparison, dashboard, and finally
 `refresh-manifest.json`. The manifest is written last so an interrupted run
 cannot appear current.
 

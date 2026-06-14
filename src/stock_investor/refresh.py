@@ -11,6 +11,7 @@ from .data import load_positions, load_prices
 from .diagnostics import (
     analyze_alert_burden,
     analyze_fundamental_coverage,
+    build_model_health_summary,
     compare_monitor_files,
 )
 from .evaluation import (
@@ -73,6 +74,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "outcomes": output_dir / f"{slug}-outcomes.json",
         "scorecard": output_dir / f"{slug}-scorecard.json",
         "diagnostic": output_dir / f"{slug}-diagnostic.json",
+        "model_health": output_dir / "model-health.json",
         "coverage": output_dir / "fundamental-coverage.json",
         "kline_history": output_dir / "kline-history.jsonl",
         "kline_outcomes": output_dir / "kline-outcomes.json",
@@ -244,6 +246,36 @@ def run_refresh(
     coverage = analyze_fundamental_coverage(positions, fundamentals)
     _write_json(diagnostic, paths["diagnostic"])
     _write_json(coverage, paths["coverage"])
+    latest_price_date = max(
+        (history[-1].date for history in prices.values() if history), default=None
+    )
+    missing_prices = sorted(symbol for symbol in held_symbols if not prices.get(symbol))
+    kline_ready = sum(
+        bool(result.technicals and result.technicals.ohlcv_available)
+        for result in results
+    )
+    wave_ready = sum(symbol in waves for symbol in held_symbols)
+    model_health = build_model_health_summary(
+        read_only=True,
+        price_coverage_rate=(
+            (len(held_symbols) - len(missing_prices)) / len(held_symbols)
+            if held_symbols
+            else 1.0
+        ),
+        prices_fresh=bool(
+            latest_price_date and (date.today() - latest_price_date).days <= 7
+        ),
+        kline_coverage_rate=kline_ready / len(results) if results else 0.0,
+        wave_coverage_rate=wave_ready / len(held_symbols) if held_symbols else 0.0,
+        diagnostic=diagnostic,
+        fundamental_coverage_rate=(
+            len(coverage["v3_buy_ready_symbols"]) / len(positions)
+            if positions
+            else 0.0
+        ),
+        direction_forecast_scorecard=direction_forecast_scorecard,
+    )
+    _write_json(model_health, paths["model_health"])
 
     comparison_path = None
     if baseline_snapshot_path and Path(baseline_snapshot_path).exists():
@@ -265,15 +297,12 @@ def run_refresh(
             wave_experiment_scorecard_path=paths["wave_experiment_scorecard"],
             wave_conditional_scorecard_path=paths["wave_conditional_scorecard"],
             direction_forecast_scorecard_path=paths["direction_forecast_scorecard"],
+            model_health_path=paths["model_health"],
             prices_path=prices_path,
         ),
         paths["dashboard"],
     )
 
-    latest_price_date = max(
-        (history[-1].date for history in prices.values() if history), default=None
-    )
-    missing_prices = sorted(symbol for symbol in held_symbols if not prices.get(symbol))
     warnings = []
     if latest_price_date and (date.today() - latest_price_date).days > 7:
         warnings.append(
@@ -295,12 +324,9 @@ def run_refresh(
         warnings.append("No forward outcome horizon has matured yet.")
 
     actions = Counter(result.alert.action for result in results)
-    kline_ready = sum(
-        bool(result.technicals and result.technicals.ohlcv_available)
-        for result in results
-    )
     manifest = {
-        "status": "READY" if not warnings else "DEGRADED",
+        "status": model_health["overall_status"],
+        "model_health": model_health,
         "read_only": True,
         "model_version": model_version,
         "started_at": started_at.isoformat(),
@@ -320,7 +346,7 @@ def run_refresh(
         "matured_kline_observations": sum(
             row["observations"] for row in kline_scorecard
         ),
-        "wave_ready_count": sum(symbol in waves for symbol in held_symbols),
+        "wave_ready_count": wave_ready,
         "matured_wave_observations": sum(
             row["observations"] for row in wave_scorecard
         ),

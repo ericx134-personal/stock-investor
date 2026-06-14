@@ -50,11 +50,32 @@ class DashboardTests(unittest.TestCase):
                 '"observations":1,"pending":2,"mean_probability":0.8,'
                 '"directional_success_rate":1.0,"brier_score":0.04}]'
             )
+            model_health = Path(directory) / "model-health.json"
+            model_health.write_text(
+                json.dumps(
+                    {
+                        "overall_status": "PENDING",
+                        "failed_gates": [],
+                        "pending_gates": ["matured_directional_evidence"],
+                        "blocking_failures": [],
+                        "gates": [
+                            {
+                                "id": "read_only",
+                                "status": "PASS",
+                                "actual": True,
+                                "threshold": True,
+                                "detail": "No brokerage writes.",
+                            }
+                        ],
+                    }
+                )
+            )
             page = build_dashboard(
                 alerts,
                 scorecard_path=scorecard,
                 decision_scorecard_path=decision_scorecard,
                 direction_forecast_scorecard_path=direction_scorecard,
+                model_health_path=model_health,
             )
         self.assertIn("ABC", page)
         self.assertIn("TRIM REVIEW", page)
@@ -72,6 +93,8 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("WAIT is folded by default", page)
         self.assertIn("All-Decision Forward Evidence", page)
         self.assertIn("Displayed Direction Forecast Validation", page)
+        self.assertIn("Explicit Model-Health Gates", page)
+        self.assertIn("Read Only", page)
         self.assertIn("wave-direction-v1", page)
         self.assertIn("<td>3</td><td>1</td><td>2</td>", page)
         self.assertIn("Brier score", page)

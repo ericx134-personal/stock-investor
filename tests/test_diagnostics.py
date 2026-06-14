@@ -6,6 +6,7 @@ from pathlib import Path
 from stock_investor.diagnostics import (
     analyze_fundamental_coverage,
     analyze_alert_burden,
+    build_model_health_summary,
     compare_monitor_files,
     load_monitor_records,
 )
@@ -18,6 +19,43 @@ def record(symbol, action, reasons):
 
 
 class DiagnosticTests(unittest.TestCase):
+    def test_model_health_separates_failures_from_pending_evidence(self):
+        summary = build_model_health_summary(
+            read_only=True,
+            price_coverage_rate=1.0,
+            prices_fresh=True,
+            kline_coverage_rate=0.9,
+            wave_coverage_rate=0.9,
+            diagnostic={"actionable_rate": 0.6, "data_review_rate": 0.1},
+            fundamental_coverage_rate=0.9,
+            direction_forecast_scorecard=[],
+        )
+        self.assertEqual(summary["schema_version"], "model-health-v1")
+        self.assertEqual(summary["overall_status"], "DEGRADED")
+        self.assertEqual(summary["failed_gates"], ["alert_selectivity"])
+        self.assertEqual(
+            summary["pending_gates"],
+            ["matured_directional_evidence", "two_sided_directional_evidence"],
+        )
+        self.assertEqual(summary["blocking_failures"], [])
+
+    def test_model_health_blocks_required_price_failure(self):
+        summary = build_model_health_summary(
+            read_only=True,
+            price_coverage_rate=0.9,
+            prices_fresh=True,
+            kline_coverage_rate=0.9,
+            wave_coverage_rate=0.9,
+            diagnostic={"actionable_rate": 0.1, "data_review_rate": 0.1},
+            fundamental_coverage_rate=0.9,
+            direction_forecast_scorecard=[
+                {"direction": "BUY", "observations": 20},
+                {"direction": "SELL", "observations": 20},
+            ],
+        )
+        self.assertEqual(summary["overall_status"], "BLOCKED")
+        self.assertEqual(summary["blocking_failures"], ["price_coverage"])
+
     def test_latest_symbol_alerts_measure_fatigue_and_causes(self):
         report = analyze_alert_burden(
             [

@@ -68,6 +68,16 @@ def _optional_money(value: object) -> str:
     return "pending" if value is None else f"${float(value):,.2f}"
 
 
+def _health_value(value: object) -> str:
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, float) and 0 <= value <= 1:
+        return f"{value:.0%}"
+    if isinstance(value, dict):
+        return " · ".join(f"{key} {item}" for key, item in sorted(value.items()))
+    return str(value)
+
+
 def _rate_interval(rate: object, low: object, high: object) -> str:
     if rate is None or low is None or high is None:
         return "pending"
@@ -483,6 +493,7 @@ def build_dashboard(
     wave_experiment_scorecard_path: str | Path | None = None,
     wave_conditional_scorecard_path: str | Path | None = None,
     direction_forecast_scorecard_path: str | Path | None = None,
+    model_health_path: str | Path | None = None,
     prices_path: str | Path | None = None,
 ) -> str:
     records = _latest_by_symbol(_load_jsonl(alerts_path))
@@ -561,6 +572,11 @@ def build_dashboard(
         and Path(direction_forecast_scorecard_path).exists()
         else []
     )
+    model_health = (
+        json.loads(Path(model_health_path).read_text())
+        if model_health_path and Path(model_health_path).exists()
+        else None
+    )
     conditional_wave_evidence = {
         (
             row.get("regime"),
@@ -587,6 +603,24 @@ def build_dashboard(
         (row.get("action"), row.get("horizon")): row
         for row in relevant_decision_scorecard
     }
+    health_gate_rows = "".join(
+        f"""<tr><td><span class="health-status {str(gate.get("status", "")).lower()}">{html.escape(str(gate.get("status", "")))}</span></td>
+        <td>{html.escape(str(gate.get("id", "")).replace("_", " ").title())}</td>
+        <td>{html.escape(_health_value(gate.get("actual", "")))}</td>
+        <td>{html.escape(_health_value(gate.get("threshold", "")))}</td>
+        <td>{html.escape(str(gate.get("detail", "")))}</td></tr>"""
+        for gate in (model_health or {}).get("gates", [])
+    )
+    model_health_panel = (
+        f"""<section class="panel"><h2>Explicit Model-Health Gates</h2>
+        <p class="health-summary"><span class="health-status {str(model_health.get("overall_status", "")).lower()}">{html.escape(str(model_health.get("overall_status", "")))}</span>
+        {len(model_health.get("failed_gates", []))} failed · {len(model_health.get("pending_gates", []))} pending · {len(model_health.get("blocking_failures", []))} blocking</p>
+        <table><thead><tr><th>Status</th><th>Gate</th><th>Actual</th><th>Threshold</th><th>Meaning</th></tr></thead>
+        <tbody>{health_gate_rows}</tbody></table>
+        <p class="note">PENDING means evidence has not matured; it is not treated as a pass or a failed prediction. BLOCKED means a safety or required-data gate failed.</p></section>"""
+        if model_health
+        else ""
+    )
 
     board_rows: dict[str, list[tuple[float, float, str, str]]] = {
         "BUY": [],
@@ -1034,6 +1068,8 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .outlook,.board-action {{ border-radius:999px; display:inline-block; font-size:11px; font-weight:800; letter-spacing:.5px; padding:6px 9px; text-align:center }}
 .outlook.positive,.outlook.favorable {{ background:var(--green-dim); color:var(--green) }} .outlook.caution {{ background:#321214; color:var(--red) }}
 .outlook.watch {{ background:#2b240f; color:var(--amber) }} .outlook.unknown {{ background:#202020; color:#c8c8c8 }}
+.health-summary {{ align-items:center; display:flex; gap:10px }} .health-status {{ border-radius:999px; display:inline-block; font-size:10px; font-weight:800; letter-spacing:.4px; padding:5px 8px }}
+.health-status.pass,.health-status.ready {{ background:var(--green-dim); color:var(--green) }} .health-status.fail,.health-status.blocked {{ background:#321214; color:var(--red) }} .health-status.pending {{ background:#2b240f; color:var(--amber) }} .health-status.degraded {{ background:#35240c; color:#ffb84d }}
 .board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }}
 .drawer-backdrop {{ background:rgba(0,0,0,.78); display:none; inset:0; position:fixed; z-index:20 }} .drawer-backdrop.open {{ display:block }}
 .drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:720px; overflow:auto; padding:22px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .2s ease; width:min(94vw,720px); z-index:30 }}
@@ -1144,6 +1180,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <p class="note">Win rate is ranked only from matured forward outcomes. Small samples are shown, never hidden.</p></section>
 </section>
 <section id="tab-health" class="tab-view" role="tabpanel" hidden>
+{model_health_panel}
 <section class="grid">
   <div class="stat"><b>{diagnostic["symbols"]}</b><span>Holdings monitored</span></div>
   <div class="stat"><b>{actions.get("TRIM_REVIEW", 0)}</b><span>Trim reviews</span></div>

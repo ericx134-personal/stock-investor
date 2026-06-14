@@ -12,7 +12,7 @@
 ## Development Workflow
 
 1. Choose the highest-value unblocked milestone from
-   `docs/100_MILESTONE_EXECUTION_PLAN.md`, using
+   `docs/CONTINUOUS_EXECUTION_PLAN.md`, using
    `docs/LONG_HORIZON_ROADMAP.md` for detailed backlog context.
 2. Write down the hypothesis and validation rule before inspecting outcomes.
 3. Implement the smallest complete change with focused tests.
@@ -44,5 +44,5 @@
 - `docs/STRATEGY.md`: detailed product and validation decisions.
 - `docs/RESEARCH_FINDINGS.md`: concise team research handoff.
 - `docs/LONG_HORIZON_ROADMAP.md`: prioritized long-running backlog.
-- `docs/100_MILESTONE_EXECUTION_PLAN.md`: ordered milestones and completion gates.
+- `docs/CONTINUOUS_EXECUTION_PLAN.md`: canonical adaptive milestones and completion gates.
 - `examples/`: sanitized public input formats and demo data.

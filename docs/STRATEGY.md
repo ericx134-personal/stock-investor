@@ -281,6 +281,12 @@ on most holdings is likely too noisy even when its individual reasons are
 valid. Future model versions should prove that they improve selectivity and
 forward outcomes without silently changing or overwriting version 1.
 
+The refresh pipeline also writes `model-health.json`, a versioned
+machine-readable summary of explicit gates. Safety and required price-data
+failures are blocking; data coverage and selectivity failures mark the model
+degraded; insufficient matured outcomes remain pending rather than receiving a
+false pass or failure.
+
 ### Model V2 Selectivity Experiment
 
 `decision-support-v2` is an experimental candidate, not the promoted default.

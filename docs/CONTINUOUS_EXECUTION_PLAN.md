@@ -1,8 +1,9 @@
-# Stock Investor: 100-Milestone Execution Plan
+# Stock Investor Continuous Execution Plan
 
 This is the ordered execution plan for continuously improving the read-only
 stock decision-support system. The broader `LONG_HORIZON_ROADMAP.md` remains
-the research backlog; this document defines the next 100 verifiable milestones.
+the research backlog; this document defines the current sequence of verifiable
+milestones.
 
 Success means better calibrated and more stable decisions on matured forward
 outcomes, not more BUY or SELL labels. No milestone may place trades.
@@ -13,6 +14,11 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 - Complete milestones in dependency order, choosing the highest-value unblocked
   item at each continuation.
+- Treat milestone count as an implementation aid, not a target. Add, merge,
+  split, reorder, or retire milestones when evidence and dependencies justify
+  it; never create filler merely to preserve a number.
+- Keep this as the single canonical execution list. Before adding work, search
+  for overlap and consolidate duplicate or confusing tasks.
 - Predeclare the hypothesis, metric, sample gate, and failure condition before
   inspecting experimental outcomes.
 - Preserve every forecast and model version. Never rewrite failed predictions.
@@ -32,7 +38,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M007 Require cross-symbol breadth and concentration gates.
 - [x] M008 Require leave-one-symbol-out directional stability.
 - [x] M009 Display structural BUY/SELL review zones on K-line charts.
-- [ ] M010 Add one machine-readable model-health summary with explicit pass/fail gates.
+- [x] M010 Add one machine-readable model-health summary with explicit pass/fail gates.
 
 ## Phase 2: Data Reliability
 
@@ -151,9 +157,9 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [ ] M099 Complete a disaster-recovery and reproducibility audit.
 - [ ] M100 Demonstrate sustained calibrated improvement on matured sealed outcomes.
 
-## Completion Gate For M100
+## Long-Term Completion Gate
 
-M100 is complete only after a challenger beats the frozen champion on a sealed
+The long-term objective is complete only after a challenger beats the frozen champion on a sealed
 forward period with adequate BUY and SELL samples, while passing calibration,
 drawdown, cross-symbol, cross-period, data-quality, and operational-reliability
 gates. Until then, continuous improvement remains active.

@@ -189,3 +189,141 @@ def analyze_fundamental_coverage(
         "sec_snapshot_count": len(fundamentals),
         "taxonomy_counts": dict(sorted(taxonomy_counts.items())),
     }
+
+
+def build_model_health_summary(
+    *,
+    read_only: bool,
+    price_coverage_rate: float,
+    prices_fresh: bool,
+    kline_coverage_rate: float,
+    wave_coverage_rate: float,
+    diagnostic: dict,
+    fundamental_coverage_rate: float,
+    direction_forecast_scorecard: list[dict],
+) -> dict:
+    """Apply explicit operational and evidence gates to one machine-readable view."""
+    matured_by_direction = {
+        direction: sum(
+            int(row.get("observations", 0))
+            for row in direction_forecast_scorecard
+            if row.get("direction") == direction
+        )
+        for direction in ("BUY", "SELL")
+    }
+    matured_directional = sum(matured_by_direction.values())
+    gates = [
+        {
+            "id": "read_only",
+            "category": "safety",
+            "status": "PASS" if read_only else "FAIL",
+            "blocking": True,
+            "actual": read_only,
+            "threshold": True,
+            "detail": "No brokerage write or trade action is permitted.",
+        },
+        {
+            "id": "price_coverage",
+            "category": "data",
+            "status": "PASS" if price_coverage_rate >= 1 else "FAIL",
+            "blocking": True,
+            "actual": price_coverage_rate,
+            "threshold": 1.0,
+            "detail": "Every held symbol must have price history.",
+        },
+        {
+            "id": "price_freshness",
+            "category": "data",
+            "status": "PASS" if prices_fresh else "FAIL",
+            "blocking": True,
+            "actual": prices_fresh,
+            "threshold": True,
+            "detail": "Latest prices must be no more than seven calendar days old.",
+        },
+        {
+            "id": "kline_coverage",
+            "category": "data",
+            "status": "PASS" if kline_coverage_rate >= 0.8 else "FAIL",
+            "blocking": False,
+            "actual": kline_coverage_rate,
+            "threshold": 0.8,
+            "detail": "At least 80% of holdings should have complete OHLCV chart evidence.",
+        },
+        {
+            "id": "wave_coverage",
+            "category": "data",
+            "status": "PASS" if wave_coverage_rate >= 0.8 else "FAIL",
+            "blocking": False,
+            "actual": wave_coverage_rate,
+            "threshold": 0.8,
+            "detail": "At least 80% of holdings should have structural wave evidence.",
+        },
+        {
+            "id": "alert_selectivity",
+            "category": "behavior",
+            "status": (
+                "PASS" if float(diagnostic.get("actionable_rate", 0)) <= 0.5 else "FAIL"
+            ),
+            "blocking": False,
+            "actual": float(diagnostic.get("actionable_rate", 0)),
+            "threshold": 0.5,
+            "detail": "Action-review rate should not exceed 50%.",
+        },
+        {
+            "id": "data_review_burden",
+            "category": "behavior",
+            "status": (
+                "PASS" if float(diagnostic.get("data_review_rate", 0)) <= 0.25 else "FAIL"
+            ),
+            "blocking": False,
+            "actual": float(diagnostic.get("data_review_rate", 0)),
+            "threshold": 0.25,
+            "detail": "Data-review rate should not exceed 25%.",
+        },
+        {
+            "id": "fundamental_coverage",
+            "category": "data",
+            "status": "PASS" if fundamental_coverage_rate >= 0.8 else "FAIL",
+            "blocking": False,
+            "actual": fundamental_coverage_rate,
+            "threshold": 0.8,
+            "detail": "At least 80% of holdings should be ready for fundamental evaluation.",
+        },
+        {
+            "id": "matured_directional_evidence",
+            "category": "validation",
+            "status": "PASS" if matured_directional >= 30 else "PENDING",
+            "blocking": False,
+            "actual": matured_directional,
+            "threshold": 30,
+            "detail": "At least 30 matured BUY/SELL forecast outcomes are required.",
+        },
+        {
+            "id": "two_sided_directional_evidence",
+            "category": "validation",
+            "status": (
+                "PASS"
+                if min(matured_by_direction.values()) >= 10
+                else "PENDING"
+            ),
+            "blocking": False,
+            "actual": matured_by_direction,
+            "threshold": {"BUY": 10, "SELL": 10},
+            "detail": "Both BUY and SELL require at least 10 matured outcomes.",
+        },
+    ]
+    counts = Counter(gate["status"] for gate in gates)
+    blocking_failures = [gate["id"] for gate in gates if gate["blocking"] and gate["status"] == "FAIL"]
+    failed = [gate["id"] for gate in gates if gate["status"] == "FAIL"]
+    pending = [gate["id"] for gate in gates if gate["status"] == "PENDING"]
+    overall = "BLOCKED" if blocking_failures else "DEGRADED" if failed else "PENDING" if pending else "READY"
+    return {
+        "schema_version": "model-health-v1",
+        "overall_status": overall,
+        "gate_counts": dict(sorted(counts.items())),
+        "blocking_failures": blocking_failures,
+        "failed_gates": failed,
+        "pending_gates": pending,
+        "matured_directional_by_direction": matured_by_direction,
+        "gates": gates,
+    }

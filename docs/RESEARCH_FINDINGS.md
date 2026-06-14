@@ -672,3 +672,19 @@ Every new research result must state:
 
 Research that cannot answer these questions remains a hypothesis and cannot
 change the promoted model.
+
+## Model-Health V1 Baseline
+
+`model-health-v1` consolidates explicit safety, data, behavior, and validation
+gates into one machine-readable artifact. On the June 14, 2026 real-portfolio
+refresh, the system is `DEGRADED`, not blocked:
+
+- Five gates pass: read-only safety, complete held-symbol price coverage, price
+  freshness, K-line coverage, and structural-wave coverage.
+- Three gates fail: alert selectivity, data-review burden, and fundamental
+  coverage.
+- Two validation gates remain pending because no BUY or SELL forecast horizon
+  has matured.
+
+Pending evidence is never treated as a pass. Blocking safety or required-price
+failures are kept separate from non-blocking research-quality failures.
