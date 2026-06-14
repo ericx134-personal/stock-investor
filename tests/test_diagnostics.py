@@ -1,12 +1,13 @@
 import json
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from stock_investor.diagnostics import (
     analyze_fundamental_coverage,
     analyze_alert_burden,
+    assess_refresh_staleness,
     build_model_health_summary,
     build_price_health_report,
     compare_monitor_files,
@@ -23,6 +24,23 @@ def record(symbol, action, reasons):
 
 
 class DiagnosticTests(unittest.TestCase):
+    def test_refresh_staleness_detects_current_stale_and_missing(self):
+        now = datetime(2026, 1, 3, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            self.assertEqual(
+                assess_refresh_staleness(path, now=now)["status"], "MISSING"
+            )
+            path.write_text(json.dumps({"completed_at": "2026-01-02T12:00:00+00:00"}))
+            self.assertEqual(
+                assess_refresh_staleness(path, now=now, max_age_hours=36)["status"],
+                "CURRENT",
+            )
+            self.assertEqual(
+                assess_refresh_staleness(path, now=now, max_age_hours=6)["status"],
+                "STALE",
+            )
+
     def test_price_health_reports_each_symbol_and_honest_source_confidence(self):
         report = build_price_health_report(
             {

@@ -328,6 +328,15 @@ Every completed refresh appends `refresh-history.jsonl` with duration, status,
 input hashes, and per-artifact byte sizes. The current manifest remains the
 last-written current-state artifact.
 
+Check freshness without running analysis:
+
+```bash
+PYTHONPATH=src python3 -m stock_investor.cli check-refresh \
+  data/private/refresh-manifest.json --max-age-hours 36
+```
+
+The command exits non-zero when the manifest is missing or stale.
+
 Record your judgment and response without changing the original alert:
 
 ```bash

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .data import Position, Price
@@ -239,6 +239,31 @@ def load_monitor_records(path: str | Path) -> list[dict]:
         record["observed_at"] = payload.get("observed_at")
         records.append(record)
     return records
+
+
+def assess_refresh_staleness(
+    manifest_path: str | Path,
+    *,
+    now: datetime | None = None,
+    max_age_hours: float = 36,
+) -> dict:
+    path = Path(manifest_path)
+    if not path.exists():
+        return {"status": "MISSING", "stale": True, "age_hours": None}
+    payload = json.loads(path.read_text())
+    completed = payload.get("completed_at")
+    if not completed:
+        return {"status": "INVALID", "stale": True, "age_hours": None}
+    observed = datetime.fromisoformat(str(completed).replace("Z", "+00:00"))
+    current = now or datetime.now(timezone.utc)
+    age_hours = (current.astimezone(timezone.utc) - observed.astimezone(timezone.utc)).total_seconds() / 3600
+    return {
+        "status": "STALE" if age_hours > max_age_hours else "CURRENT",
+        "stale": age_hours > max_age_hours,
+        "age_hours": age_hours,
+        "max_age_hours": max_age_hours,
+        "completed_at": observed.isoformat(),
+    }
 
 
 def _reason_category(reason: str) -> str:

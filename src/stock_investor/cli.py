@@ -18,6 +18,7 @@ from .brief import build_brief, write_brief
 from .data import load_positions, load_prices
 from .dashboard import build_dashboard, write_dashboard
 from .diagnostics import (
+    assess_refresh_staleness,
     analyze_fundamental_coverage,
     compare_monitor_files,
     diagnose_alert_file,
@@ -617,6 +618,12 @@ def _diagnose_alerts(alerts_path: str, output_path: str | None) -> int:
     return 0
 
 
+def _check_refresh(manifest_path: str, max_age_hours: float) -> int:
+    report = assess_refresh_staleness(manifest_path, max_age_hours=max_age_hours)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 1 if report["stale"] else 0
+
+
 def _compare_models(
     baseline_path: str, candidate_path: str, output_path: str | None
 ) -> int:
@@ -943,6 +950,12 @@ def main() -> int:
     diagnose_fundamentals_parser.add_argument("--fundamentals")
     diagnose_fundamentals_parser.add_argument("--output")
 
+    check_refresh_parser = subparsers.add_parser(
+        "check-refresh", help="exit non-zero when a refresh manifest is missing or stale"
+    )
+    check_refresh_parser.add_argument("manifest")
+    check_refresh_parser.add_argument("--max-age-hours", type=float, default=36)
+
     dashboard_parser = subparsers.add_parser(
         "dashboard", help="generate a local read-only portfolio dashboard"
     )
@@ -1110,6 +1123,8 @@ def main() -> int:
         return _diagnose_fundamentals(
             args.positions, args.fundamentals, args.output
         )
+    if args.command == "check-refresh":
+        return _check_refresh(args.manifest, args.max_age_hours)
     if args.command == "dashboard":
         return _dashboard(
             args.alerts,

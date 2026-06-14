@@ -65,7 +65,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M022 Add refresh locking to prevent overlapping runs.
 - [ ] M023 Add bounded retries and provider failure classification.
 - [x] M024 Persist refresh-run history, duration, and artifact sizes.
-- [ ] M025 Alert when a scheduled refresh is stale or incomplete.
+- [x] M025 Alert when a scheduled refresh is stale or incomplete.
 - [ ] M026 Add atomic writes for every current-state artifact.
 - [ ] M027 Add retention and archival policy for private generated artifacts.
 - [ ] M028 Verify sanitized backup and restore.
