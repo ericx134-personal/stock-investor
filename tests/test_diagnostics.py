@@ -1,16 +1,20 @@
 import json
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 from stock_investor.diagnostics import (
     analyze_fundamental_coverage,
     analyze_alert_burden,
     build_model_health_summary,
+    build_price_health_report,
     compare_monitor_files,
+    infer_price_source,
     load_monitor_records,
 )
 from stock_investor.data import Position
+from stock_investor.data import Price
 from stock_investor.fundamentals import FundamentalSnapshot
 
 
@@ -19,6 +23,22 @@ def record(symbol, action, reasons):
 
 
 class DiagnosticTests(unittest.TestCase):
+    def test_price_health_reports_each_symbol_and_honest_source_confidence(self):
+        report = build_price_health_report(
+            {"A": [Price(date(2026, 1, 9), 10, 9, 11, 8, 100)]},
+            {"A", "B"},
+            as_of=date(2026, 1, 10),
+            source=infer_price_source("robinhood-prices.csv"),
+        )
+        self.assertEqual(report["status_counts"], {"FRESH": 1, "MISSING": 1})
+        self.assertFalse(report["all_held_symbols_fresh"])
+        self.assertEqual(report["symbols"][0]["ohlcv_coverage_rate"], 1)
+        self.assertEqual(report["source"]["confidence"], "INFERRED")
+        self.assertEqual(
+            infer_price_source("prices.csv", "licensed-provider")["confidence"],
+            "DECLARED",
+        )
+
     def test_model_health_separates_failures_from_pending_evidence(self):
         summary = build_model_health_summary(
             read_only=True,

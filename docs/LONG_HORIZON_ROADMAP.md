@@ -25,13 +25,13 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## B. Data Integrity
 
-- [ ] B001 Add per-symbol latest-price freshness status.
+- [x] B001 Add per-symbol latest-price freshness status.
 - [ ] B002 Detect missing sessions and suspicious price gaps.
 - [ ] B003 Detect stale or implausible OHLCV fields.
 - [ ] B004 Track adjusted versus unadjusted price provenance.
 - [ ] B005 Detect splits and reconcile position cost bases.
 - [ ] B006 Detect symbol changes and delistings.
-- [ ] B007 Preserve provider and retrieval timestamps per data batch.
+- [~] B007 Preserve provider and retrieval timestamps per data batch.
 - [ ] B008 Add deterministic price-file content hashes.
 - [ ] B009 Add data-quality scorecards by symbol.
 - [ ] B010 Block graphical conclusions when required chart data is invalid.

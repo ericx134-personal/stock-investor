@@ -494,6 +494,7 @@ def build_dashboard(
     wave_conditional_scorecard_path: str | Path | None = None,
     direction_forecast_scorecard_path: str | Path | None = None,
     model_health_path: str | Path | None = None,
+    price_health_path: str | Path | None = None,
     prices_path: str | Path | None = None,
 ) -> str:
     records = _latest_by_symbol(_load_jsonl(alerts_path))
@@ -577,6 +578,11 @@ def build_dashboard(
         if model_health_path and Path(model_health_path).exists()
         else None
     )
+    price_health = (
+        json.loads(Path(price_health_path).read_text())
+        if price_health_path and Path(price_health_path).exists()
+        else None
+    )
     conditional_wave_evidence = {
         (
             row.get("regime"),
@@ -619,6 +625,23 @@ def build_dashboard(
         <tbody>{health_gate_rows}</tbody></table>
         <p class="note">PENDING means evidence has not matured; it is not treated as a pass or a failed prediction. BLOCKED means a safety or required-data gate failed.</p></section>"""
         if model_health
+        else ""
+    )
+    price_health_rows = "".join(
+        f"""<tr><td><b>{html.escape(str(row.get("symbol", "")))}</b></td>
+        <td><span class="health-status {str(row.get("status", "")).lower()}">{html.escape(str(row.get("status", "")))}</span></td>
+        <td>{html.escape(str(row.get("latest_date") or "missing"))}</td>
+        <td>{html.escape(str(row.get("age_calendar_days") if row.get("age_calendar_days") is not None else "missing"))}</td>
+        <td>{_percent(row.get("ohlcv_coverage_rate"))}</td>
+        <td>{html.escape(str(row.get("source", "")))} · {html.escape(str(row.get("source_confidence", "")).lower())}</td></tr>"""
+        for row in (price_health or {}).get("symbols", [])
+    )
+    price_health_panel = (
+        f"""<section class="panel"><h2>Per-Symbol Price Freshness</h2>
+        <table><thead><tr><th>Symbol</th><th>Status</th><th>Latest</th><th>Age days</th><th>OHLCV coverage</th><th>Source</th></tr></thead>
+        <tbody>{price_health_rows}</tbody></table>
+        <p class="note">Source confidence distinguishes explicitly declared provenance from conservative filename inference. Freshness currently uses calendar days; expected-session validation is a separate milestone.</p></section>"""
+        if price_health
         else ""
     )
 
@@ -1070,6 +1093,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .outlook.watch {{ background:#2b240f; color:var(--amber) }} .outlook.unknown {{ background:#202020; color:#c8c8c8 }}
 .health-summary {{ align-items:center; display:flex; gap:10px }} .health-status {{ border-radius:999px; display:inline-block; font-size:10px; font-weight:800; letter-spacing:.4px; padding:5px 8px }}
 .health-status.pass,.health-status.ready {{ background:var(--green-dim); color:var(--green) }} .health-status.fail,.health-status.blocked {{ background:#321214; color:var(--red) }} .health-status.pending {{ background:#2b240f; color:var(--amber) }} .health-status.degraded {{ background:#35240c; color:#ffb84d }}
+.health-status.fresh {{ background:var(--green-dim); color:var(--green) }} .health-status.stale,.health-status.missing {{ background:#321214; color:var(--red) }}
 .board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }}
 .drawer-backdrop {{ background:rgba(0,0,0,.78); display:none; inset:0; position:fixed; z-index:20 }} .drawer-backdrop.open {{ display:block }}
 .drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:720px; overflow:auto; padding:22px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .2s ease; width:min(94vw,720px); z-index:30 }}
@@ -1181,6 +1205,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 </section>
 <section id="tab-health" class="tab-view" role="tabpanel" hidden>
 {model_health_panel}
+{price_health_panel}
 <section class="grid">
   <div class="stat"><b>{diagnostic["symbols"]}</b><span>Holdings monitored</span></div>
   <div class="stat"><b>{actions.get("TRIM_REVIEW", 0)}</b><span>Trim reviews</span></div>

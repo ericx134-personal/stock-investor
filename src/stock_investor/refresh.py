@@ -11,8 +11,10 @@ from .data import load_positions, load_prices
 from .diagnostics import (
     analyze_alert_burden,
     analyze_fundamental_coverage,
+    build_price_health_report,
     build_model_health_summary,
     compare_monitor_files,
+    infer_price_source,
 )
 from .evaluation import (
     build_directional_forecast_scorecard,
@@ -75,6 +77,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "scorecard": output_dir / f"{slug}-scorecard.json",
         "diagnostic": output_dir / f"{slug}-diagnostic.json",
         "model_health": output_dir / "model-health.json",
+        "price_health": output_dir / "price-health.json",
         "coverage": output_dir / "fundamental-coverage.json",
         "kline_history": output_dir / "kline-history.jsonl",
         "kline_outcomes": output_dir / "kline-outcomes.json",
@@ -110,6 +113,7 @@ def run_refresh(
     baseline_snapshot_path: str | Path | None = None,
     benchmark_symbol: str | None = "SPY",
     episode_sessions: int = 21,
+    price_source: str | None = None,
 ) -> dict:
     """Refresh all read-only decision-support artifacts, writing the manifest last."""
     started_at = datetime.now(timezone.utc)
@@ -250,6 +254,13 @@ def run_refresh(
         (history[-1].date for history in prices.values() if history), default=None
     )
     missing_prices = sorted(symbol for symbol in held_symbols if not prices.get(symbol))
+    price_health = build_price_health_report(
+        prices,
+        held_symbols,
+        as_of=date.today(),
+        source=infer_price_source(prices_path, price_source),
+    )
+    _write_json(price_health, paths["price_health"])
     kline_ready = sum(
         bool(result.technicals and result.technicals.ohlcv_available)
         for result in results
@@ -262,9 +273,7 @@ def run_refresh(
             if held_symbols
             else 1.0
         ),
-        prices_fresh=bool(
-            latest_price_date and (date.today() - latest_price_date).days <= 7
-        ),
+        prices_fresh=price_health["all_held_symbols_fresh"],
         kline_coverage_rate=kline_ready / len(results) if results else 0.0,
         wave_coverage_rate=wave_ready / len(held_symbols) if held_symbols else 0.0,
         diagnostic=diagnostic,
@@ -298,6 +307,7 @@ def run_refresh(
             wave_conditional_scorecard_path=paths["wave_conditional_scorecard"],
             direction_forecast_scorecard_path=paths["direction_forecast_scorecard"],
             model_health_path=paths["model_health"],
+            price_health_path=paths["price_health"],
             prices_path=prices_path,
         ),
         paths["dashboard"],
@@ -335,6 +345,8 @@ def run_refresh(
         "position_count": len(positions),
         "held_position_count": len(held_symbols),
         "missing_price_symbols": missing_prices,
+        "price_health_status_counts": price_health["status_counts"],
+        "price_source": price_health["source"],
         "action_counts": dict(sorted(actions.items())),
         "actionable_rate": diagnostic["actionable_rate"],
         "data_review_rate": diagnostic["data_review_rate"],

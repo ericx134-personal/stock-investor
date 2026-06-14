@@ -688,3 +688,14 @@ refresh, the system is `DEGRADED`, not blocked:
 
 Pending evidence is never treated as a pass. Blocking safety or required-price
 failures are kept separate from non-blocking research-quality failures.
+
+## Per-Symbol Price Freshness Baseline
+
+The June 14, 2026 refresh writes `price-health-v1` with declared provenance
+`Robinhood MCP read-only export`. All 27 held symbols have a latest observation
+dated June 12, 2026 and pass the current seven-calendar-day freshness gate.
+
+Freshness does not imply complete chart data. `SPCX` is fresh but has 0% full
+OHLCV coverage in the current file, so downstream K-line conclusions remain
+unavailable for it. Expected-market-session gap detection remains a separate
+next milestone.

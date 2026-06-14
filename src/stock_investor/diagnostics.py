@@ -2,13 +2,74 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
-from .data import Position
+from .data import Position, Price
 from .fundamentals import FundamentalSnapshot
 
 
 ACTIONABLE_ACTIONS = {"BUY_CANDIDATE", "ADD_CANDIDATE", "REVIEW", "TRIM_REVIEW"}
+
+
+def infer_price_source(path: str | Path, declared_source: str | None = None) -> dict:
+    if declared_source:
+        return {"name": declared_source, "confidence": "DECLARED"}
+    name = Path(path).name.lower()
+    if "robinhood" in name:
+        return {"name": "Robinhood MCP export", "confidence": "INFERRED"}
+    if "alpaca" in name:
+        return {"name": "Alpaca Market Data export", "confidence": "INFERRED"}
+    return {"name": "CSV import", "confidence": "UNKNOWN"}
+
+
+def build_price_health_report(
+    prices: dict[str, list[Price]],
+    symbols: set[str],
+    *,
+    as_of: date,
+    source: dict,
+    fresh_days: int = 7,
+) -> dict:
+    rows = []
+    for symbol in sorted(symbols):
+        history = prices.get(symbol, [])
+        latest = history[-1] if history else None
+        age_days = (as_of - latest.date).days if latest else None
+        ohlcv_rows = sum(
+            item.open is not None
+            and item.high is not None
+            and item.low is not None
+            and item.volume is not None
+            for item in history
+        )
+        status = (
+            "MISSING"
+            if latest is None
+            else "FRESH" if age_days is not None and age_days <= fresh_days else "STALE"
+        )
+        rows.append(
+            {
+                "symbol": symbol,
+                "status": status,
+                "latest_date": latest.date.isoformat() if latest else None,
+                "age_calendar_days": age_days,
+                "history_rows": len(history),
+                "ohlcv_coverage_rate": ohlcv_rows / len(history) if history else 0.0,
+                "source": source["name"],
+                "source_confidence": source["confidence"],
+            }
+        )
+    counts = Counter(row["status"] for row in rows)
+    return {
+        "schema_version": "price-health-v1",
+        "as_of": as_of.isoformat(),
+        "freshness_threshold_calendar_days": fresh_days,
+        "source": source,
+        "status_counts": dict(sorted(counts.items())),
+        "all_held_symbols_fresh": bool(rows) and all(row["status"] == "FRESH" for row in rows),
+        "symbols": rows,
+    }
 
 
 def load_monitor_records(path: str | Path) -> list[dict]:

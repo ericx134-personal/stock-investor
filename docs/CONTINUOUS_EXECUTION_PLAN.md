@@ -42,7 +42,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## Phase 2: Data Reliability
 
-- [ ] M011 Add per-symbol price freshness and source provenance.
+- [x] M011 Add per-symbol price freshness and source provenance.
 - [ ] M012 Detect missing expected market sessions.
 - [ ] M013 Detect invalid and implausible OHLCV values.
 - [ ] M014 Detect suspicious one-session gaps and classify likely corporate actions.

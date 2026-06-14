@@ -70,12 +70,31 @@ class DashboardTests(unittest.TestCase):
                     }
                 )
             )
+            price_health = Path(directory) / "price-health.json"
+            price_health.write_text(
+                json.dumps(
+                    {
+                        "symbols": [
+                            {
+                                "symbol": "ABC",
+                                "status": "FRESH",
+                                "latest_date": "2026-01-01",
+                                "age_calendar_days": 1,
+                                "ohlcv_coverage_rate": 0.9,
+                                "source": "Test provider",
+                                "source_confidence": "DECLARED",
+                            }
+                        ]
+                    }
+                )
+            )
             page = build_dashboard(
                 alerts,
                 scorecard_path=scorecard,
                 decision_scorecard_path=decision_scorecard,
                 direction_forecast_scorecard_path=direction_scorecard,
                 model_health_path=model_health,
+                price_health_path=price_health,
             )
         self.assertIn("ABC", page)
         self.assertIn("TRIM REVIEW", page)
@@ -94,6 +113,8 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("All-Decision Forward Evidence", page)
         self.assertIn("Displayed Direction Forecast Validation", page)
         self.assertIn("Explicit Model-Health Gates", page)
+        self.assertIn("Per-Symbol Price Freshness", page)
+        self.assertIn("Test provider · declared", page)
         self.assertIn("Read Only", page)
         self.assertIn("wave-direction-v1", page)
         self.assertIn("<td>3</td><td>1</td><td>2</td>", page)

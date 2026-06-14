@@ -302,13 +302,15 @@ PYTHONPATH=src python3 -m stock_investor.cli refresh \
   --model-version decision-support-v3 \
   --account-summary portfolio/robinhood-summary.json \
   --baseline-snapshot data/private/model-v1-snapshot.json \
-  --benchmark SPY
+  --benchmark SPY \
+  --price-source "Robinhood MCP read-only export"
 ```
 
 This writes the monitor snapshot, append-only alerts and all-decision ledger,
 K-line and structural-wave observations, portfolio-risk history, forward
 outcomes, scorecards, diagnostics, the machine-readable `model-health.json`
-gate summary, comparison, dashboard, and finally
+gate summary, per-symbol `price-health.json` freshness/provenance report,
+comparison, dashboard, and finally
 `refresh-manifest.json`. The manifest is written last so an interrupted run
 cannot appear current.
 

@@ -287,6 +287,12 @@ failures are blocking; data coverage and selectivity failures mark the model
 degraded; insufficient matured outcomes remain pending rather than receiving a
 false pass or failure.
 
+`price-health.json` records each held symbol's latest date, calendar-day age,
+history length, OHLCV completeness, and price-source provenance. Explicit
+`--price-source` values are marked declared; conservative filename inference is
+marked inferred or unknown. Fresh prices and complete K-line data remain
+separate concepts.
+
 ### Model V2 Selectivity Experiment
 
 `decision-support-v2` is an experimental candidate, not the promoted default.

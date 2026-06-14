@@ -660,6 +660,7 @@ def _dashboard(
     wave_conditional_scorecard_path: str | None,
     direction_forecast_scorecard_path: str | None,
     model_health_path: str | None,
+    price_health_path: str | None,
     prices_path: str | None,
 ) -> int:
     write_dashboard(
@@ -677,6 +678,7 @@ def _dashboard(
             wave_conditional_scorecard_path=wave_conditional_scorecard_path,
             direction_forecast_scorecard_path=direction_forecast_scorecard_path,
             model_health_path=model_health_path,
+            price_health_path=price_health_path,
             prices_path=prices_path,
         ),
         output_path,
@@ -699,6 +701,7 @@ def _refresh(
     baseline_snapshot_path: str | None,
     benchmark_symbol: str | None,
     episode_sessions: int,
+    price_source: str | None,
 ) -> int:
     manifest = run_refresh(
         positions_path,
@@ -714,6 +717,7 @@ def _refresh(
         baseline_snapshot_path=baseline_snapshot_path,
         benchmark_symbol=benchmark_symbol,
         episode_sessions=episode_sessions,
+        price_source=price_source,
     )
     print(
         f"Refresh {manifest['status']}: {manifest['position_count']} positions; "
@@ -941,6 +945,7 @@ def main() -> int:
     dashboard_parser.add_argument("--wave-conditional-scorecard")
     dashboard_parser.add_argument("--direction-forecast-scorecard")
     dashboard_parser.add_argument("--model-health")
+    dashboard_parser.add_argument("--price-health")
     dashboard_parser.add_argument("--prices")
 
     refresh_parser = subparsers.add_parser(
@@ -964,6 +969,7 @@ def main() -> int:
     refresh_parser.add_argument("--baseline-snapshot")
     refresh_parser.add_argument("--benchmark", default="SPY")
     refresh_parser.add_argument("--episode-sessions", type=int, default=21)
+    refresh_parser.add_argument("--price-source")
 
     args = parser.parse_args()
     if args.command == "score":
@@ -1100,6 +1106,7 @@ def main() -> int:
             args.wave_conditional_scorecard,
             args.direction_forecast_scorecard,
             args.model_health,
+            args.price_health,
             args.prices,
         )
     if args.command == "refresh":
@@ -1117,6 +1124,7 @@ def main() -> int:
             args.baseline_snapshot,
             args.benchmark,
             args.episode_sessions,
+            args.price_source,
         )
     return 2
 
