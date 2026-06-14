@@ -717,3 +717,7 @@ action. The classification is not confirmation and does not rewrite prices.
 The current Robinhood CSV's adjustment semantics are not auditable from the
 file itself. The live baseline is therefore explicitly recorded as `unknown`,
 not assumed to be split- or dividend-adjusted.
+
+No current close-gap event meets the possible-split heuristic. Cost-basis
+reconciliation remains warning-only; the system never mutates imported
+position quantities or average costs.

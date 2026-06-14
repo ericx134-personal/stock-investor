@@ -10,6 +10,16 @@ from .fundamentals import FundamentalSnapshot
 
 
 ACTIONABLE_ACTIONS = {"BUY_CANDIDATE", "ADD_CANDIDATE", "REVIEW", "TRIM_REVIEW"}
+COMMON_SPLIT_RATIOS = (2, 3, 4, 5, 10)
+
+
+def _possible_split_ratio(close_ratio: float) -> str | None:
+    for ratio in COMMON_SPLIT_RATIOS:
+        if abs(close_ratio / ratio - 1) <= 0.05:
+            return f"{ratio}:1"
+        if abs(close_ratio * ratio - 1) <= 0.05:
+            return f"1:{ratio}"
+    return None
 
 
 def infer_price_source(
@@ -95,13 +105,16 @@ def build_price_health_report(
                 {
                     "date": item.date.isoformat(),
                     "close_return": move,
-                    "classification": (
-                        "POSSIBLE_CORPORATE_ACTION"
+                    "classification": "EXTREME_MOVE",
+                    "possible_split_ratio": (
+                        _possible_split_ratio(item.close / previous.close)
                         if intraday_range is not None and intraday_range <= 0.2
-                        else "EXTREME_MOVE"
+                        else None
                     ),
                 }
             )
+            if suspicious_close_gaps[-1]["possible_split_ratio"]:
+                suspicious_close_gaps[-1]["classification"] = "POSSIBLE_SPLIT"
         status = (
             "MISSING"
             if latest is None
@@ -126,6 +139,14 @@ def build_price_health_report(
                 "suspicious_intraday_range_dates": suspicious_range_dates[-10:],
                 "suspicious_close_gap_count": len(suspicious_close_gaps),
                 "suspicious_close_gaps": suspicious_close_gaps[-10:],
+                "cost_basis_reconciliation_warning": (
+                    "Review position quantity and average cost against the possible split."
+                    if any(
+                        item["classification"] == "POSSIBLE_SPLIT"
+                        for item in suspicious_close_gaps
+                    )
+                    else None
+                ),
                 "expected_session_count": len(relevant_expected),
                 "missing_session_count": len(missing_sessions),
                 "missing_session_dates": [item.isoformat() for item in missing_sessions[-10:]],
@@ -158,6 +179,14 @@ def build_price_health_report(
         ],
         "symbols_with_suspicious_close_gaps": [
             row["symbol"] for row in rows if row["suspicious_close_gap_count"] > 0
+        ],
+        "symbols_with_possible_splits": [
+            row["symbol"]
+            for row in rows
+            if any(
+                item["classification"] == "POSSIBLE_SPLIT"
+                for item in row["suspicious_close_gaps"]
+            )
         ],
         "all_held_symbols_fresh": bool(rows) and all(row["status"] == "FRESH" for row in rows),
         "symbols": rows,

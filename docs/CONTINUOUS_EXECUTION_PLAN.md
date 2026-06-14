@@ -53,7 +53,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M013 Detect invalid and implausible OHLCV values.
 - [x] M014 Detect suspicious one-session gaps and classify likely corporate actions.
 - [x] M015 Track adjusted/unadjusted price semantics per provider.
-- [ ] M016 Detect splits and preserve cost-basis reconciliation warnings.
+- [x] M016 Detect splits and preserve cost-basis reconciliation warnings.
 - [ ] M017 Detect symbol changes, mergers, and delistings.
 - [ ] M018 Add deterministic hashes for every input data batch.
 - [ ] M019 Build a per-symbol data-quality scorecard.

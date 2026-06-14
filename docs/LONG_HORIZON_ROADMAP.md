@@ -29,7 +29,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] B002 Detect missing sessions and suspicious price gaps.
 - [x] B003 Detect stale or implausible OHLCV fields.
 - [x] B004 Track adjusted versus unadjusted price provenance.
-- [ ] B005 Detect splits and reconcile position cost bases.
+- [x] B005 Detect splits and reconcile position cost bases.
 - [ ] B006 Detect symbol changes and delistings.
 - [~] B007 Preserve provider and retrieval timestamps per data batch.
 - [ ] B008 Add deterministic price-file content hashes.

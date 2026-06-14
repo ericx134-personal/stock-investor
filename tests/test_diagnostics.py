@@ -55,8 +55,14 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(report["symbols_with_suspicious_close_gaps"], ["A"])
         self.assertEqual(
             report["symbols"][0]["suspicious_close_gaps"][-1]["classification"],
-            "POSSIBLE_CORPORATE_ACTION",
+            "POSSIBLE_SPLIT",
         )
+        self.assertEqual(
+            report["symbols"][0]["suspicious_close_gaps"][-1]["possible_split_ratio"],
+            "2:1",
+        )
+        self.assertEqual(report["symbols_with_possible_splits"], ["A"])
+        self.assertIsNotNone(report["symbols"][0]["cost_basis_reconciliation_warning"])
         self.assertEqual(
             infer_price_source("prices.csv", "licensed-provider")["confidence"],
             "DECLARED",

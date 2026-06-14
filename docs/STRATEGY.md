@@ -313,6 +313,11 @@ Price provenance separately records adjustment semantics as `none`, `split`,
 because the exported file does not retain an auditable adjustment declaration.
 No downstream component may silently assume a stronger adjustment guarantee.
 
+Close-gap candidates near common integer split or reverse-split ratios, with a
+normal intraday range, are marked `POSSIBLE_SPLIT`. The system emits a
+cost-basis reconciliation warning but never changes position quantity or
+average cost automatically.
+
 ### Model V2 Selectivity Experiment
 
 `decision-support-v2` is an experimental candidate, not the promoted default.
