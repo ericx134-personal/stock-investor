@@ -62,7 +62,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 ## Phase 3: Operational Stability
 
 - [x] M021 Add a production-safe read-only daily refresh command.
-- [ ] M022 Add refresh locking to prevent overlapping runs.
+- [x] M022 Add refresh locking to prevent overlapping runs.
 - [ ] M023 Add bounded retries and provider failure classification.
 - [ ] M024 Persist refresh-run history, duration, and artifact sizes.
 - [ ] M025 Alert when a scheduled refresh is stale or incomplete.

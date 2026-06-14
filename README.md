@@ -321,6 +321,9 @@ cannot appear current.
 directory and account summary, price source, and adjustment semantics are
 explicitly supplied.
 
+Production-safe refreshes also use an atomic `.refresh.lock`; overlapping runs
+are rejected and the lock is removed after either success or failure.
+
 Record your judgment and response without changing the original alert:
 
 ```bash

@@ -156,7 +156,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 ## L. Operations And Read-Only Automation
 
 - [x] L001 Add a production-safe daily refresh command.
-- [ ] L002 Add refresh locking to prevent overlapping runs.
+- [x] L002 Add refresh locking to prevent overlapping runs.
 - [ ] L003 Add retry and failure reporting for read-only providers.
 - [ ] L004 Add manifest history and run-duration tracking.
 - [ ] L005 Add alerting for stale refreshes.

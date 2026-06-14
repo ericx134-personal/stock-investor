@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -91,6 +93,23 @@ def validate_production_refresh(
         raise ValueError("production-safe refresh requires a declared price source")
     if not price_adjustment:
         raise ValueError("production-safe refresh requires declared adjustment semantics")
+
+
+@contextmanager
+def refresh_lock(output_dir: str | Path):
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    lock_path = output / ".refresh.lock"
+    try:
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError as error:
+        raise RuntimeError(f"refresh already running: {lock_path}") from error
+    try:
+        with os.fdopen(descriptor, "w") as handle:
+            handle.write(f"pid={os.getpid()}\n")
+        yield
+    finally:
+        lock_path.unlink(missing_ok=True)
 
 
 def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:

@@ -5,10 +5,20 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
-from stock_investor.refresh import run_refresh, validate_production_refresh
+from stock_investor.refresh import refresh_lock, run_refresh, validate_production_refresh
 
 
 class RefreshTests(unittest.TestCase):
+    def test_refresh_lock_rejects_overlap_and_cleans_up(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with refresh_lock(directory):
+                with self.assertRaisesRegex(RuntimeError, "already running"):
+                    with refresh_lock(directory):
+                        pass
+            self.assertFalse((Path(directory) / ".refresh.lock").exists())
+            with refresh_lock(directory):
+                self.assertTrue((Path(directory) / ".refresh.lock").exists())
+
     def test_production_refresh_requires_private_declared_inputs(self):
         with self.assertRaisesRegex(ValueError, "private directory"):
             validate_production_refresh(

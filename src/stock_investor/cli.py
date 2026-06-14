@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from contextlib import nullcontext
 import time
 from datetime import date, timedelta
 from pathlib import Path
@@ -45,7 +46,7 @@ from .monitor import run_monitor, write_alert_history, write_monitor_snapshot
 from .providers.alpaca import fetch_daily_bars, write_prices_csv
 from .providers.robinhood import extract_historicals_from_session, load_historical_response
 from .providers.sec import fetch_company_facts, fetch_submissions, fetch_ticker_ciks
-from .refresh import run_refresh, validate_production_refresh
+from .refresh import refresh_lock, run_refresh, validate_production_refresh
 from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk_history
 from .robinhood import (
     import_robinhood_snapshot,
@@ -714,23 +715,25 @@ def _refresh(
             price_source=price_source,
             price_adjustment=price_adjustment,
         )
-    manifest = run_refresh(
-        positions_path,
-        prices_path,
-        output_dir,
-        model_version,
-        cash_balance=cash_balance,
-        account_summary_path=account_summary_path,
-        fundamentals_path=fundamentals_path,
-        risk_policy_path=risk_policy_path,
-        theses_path=theses_path,
-        feedback_path=feedback_path,
-        baseline_snapshot_path=baseline_snapshot_path,
-        benchmark_symbol=benchmark_symbol,
-        episode_sessions=episode_sessions,
-        price_source=price_source,
-        price_adjustment=price_adjustment,
-    )
+    lock = refresh_lock(output_dir) if production_safe else nullcontext()
+    with lock:
+        manifest = run_refresh(
+            positions_path,
+            prices_path,
+            output_dir,
+            model_version,
+            cash_balance=cash_balance,
+            account_summary_path=account_summary_path,
+            fundamentals_path=fundamentals_path,
+            risk_policy_path=risk_policy_path,
+            theses_path=theses_path,
+            feedback_path=feedback_path,
+            baseline_snapshot_path=baseline_snapshot_path,
+            benchmark_symbol=benchmark_symbol,
+            episode_sessions=episode_sessions,
+            price_source=price_source,
+            price_adjustment=price_adjustment,
+        )
     print(
         f"Refresh {manifest['status']}: {manifest['position_count']} positions; "
         f"latest prices {manifest['latest_price_date'] or 'unavailable'}; "
