@@ -381,9 +381,11 @@ class DashboardTests(unittest.TestCase):
                 prices_path=prices,
             )
         self.assertIn("<strong>BUY</strong><b>83%</b>", page)
-        self.assertIn("Buy zone $106.00–$112.00", page)
+        self.assertIn('class="price-target">$106.00–$112.00</small>', page)
         self.assertIn("<h3>$106.00–$112.00</h3>", page)
-        self.assertIn("Reference midpoint", page)
+        self.assertIn('class="info-tip"', page)
+        self.assertIn('class="target-zone buy"', page)
+        self.assertIn("BUY $106.00–$112.00", page)
         self.assertIn("Conditional age/magnitude evidence used", page)
         self.assertIn("direction gate <b>BUY</b>", page)
         self.assertIn('class="kline-chart"', page)

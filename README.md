@@ -235,9 +235,10 @@ directional win rate.
 The board also shows close, gain/loss, and weight.
 Robust BUY and SELL directions also show a structural review price range:
 BUY uses the confirmed support zone and SELL uses the confirmed resistance
-zone. The detail drawer shows the range midpoint and its distance from the
-current price. The dashboard refuses to invent a price when that structural
-zone is unavailable.
+zone. The detail drawer draws the active range and midpoint directly on the
+K-line chart; a compact info tooltip holds distance and methodology details.
+The dashboard refuses to invent a price when that structural zone is
+unavailable.
 Clicking a holding opens its full evidence in a side panel. Larger research
 tables and model-health diagnostics stay behind separate tabs. Directional
 views are not certain predictions. Signal rankings use only matured forward

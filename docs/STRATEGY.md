@@ -224,8 +224,10 @@ advanced details.
 
 For a robust BUY or SELL direction, the dashboard derives a review price range
 from the same confirmed structure: BUY maps to the support zone and SELL maps
-to the resistance zone. It displays the midpoint only as a reference and
-refuses to invent a price if the matching structural zone is unavailable.
+to the resistance zone. The active range and reference midpoint are drawn
+directly on the K-line chart; supporting text is kept in an info tooltip. The
+dashboard refuses to invent a price if the matching structural zone is
+unavailable.
 
 The historical wave experiment is a separate exploratory surface. It replays
 only information available at each historical signal date, uses non-overlapping

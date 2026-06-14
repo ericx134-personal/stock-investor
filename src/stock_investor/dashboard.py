@@ -155,6 +155,7 @@ def _kline_chart(
     signal_label: str,
     signal_class: str,
     probability: float | None,
+    price_plan: dict | None = None,
 ) -> str:
     candles = [
         item
@@ -210,6 +211,22 @@ def _kline_chart(
             f'width="{plot_width:.1f}" height="{max(1, zone_bottom - zone_top):.1f}"/>'
             f'<text class="zone-label" x="{left + 4:.1f}" y="{zone_top + 11:.1f}">{label}</text>'
         )
+    target_zone = ""
+    if price_plan:
+        target_top = y(float(price_plan["high"]))
+        target_bottom = y(float(price_plan["low"]))
+        target_mid = y(float(price_plan["midpoint"]))
+        target_label = f'{signal_label} ${price_plan["low"]:.2f}–${price_plan["high"]:.2f}'
+        target_zone = (
+            f'<rect class="target-zone {signal_class}" x="{left:.1f}" y="{target_top:.1f}" '
+            f'width="{plot_width:.1f}" height="{max(1, target_bottom - target_top):.1f}"/>'
+            f'<line class="target-mid {signal_class}" x1="{left:.1f}" y1="{target_mid:.1f}" '
+            f'x2="{left + plot_width:.1f}" y2="{target_mid:.1f}"/>'
+            f'<rect class="target-label-bg {signal_class}" x="{left + 5:.1f}" '
+            f'y="{max(top + 2, target_top + 3):.1f}" width="126" height="17" rx="4"/>'
+            f'<text class="target-label" x="{left + 11:.1f}" '
+            f'y="{max(top + 14, target_top + 15):.1f}">{html.escape(target_label)}</text>'
+        )
     grid = []
     for fraction in (0, 0.25, 0.5, 0.75, 1):
         grid_y = top + plot_height * fraction
@@ -263,7 +280,7 @@ def _kline_chart(
       <div class="chart-heading"><div><small>126-session daily K-line</small><h3>Price wave in context</h3></div>
       <span class="chart-signal {signal_class}">{html.escape(signal_label)} {signal_probability}</span></div>
       <svg class="kline-chart" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(signal_label)} evidence on daily candlestick chart">
-        {''.join(grid)}{''.join(zones)}{''.join(candle_shapes)}{pivot_line}
+        {''.join(grid)}{''.join(zones)}{target_zone}{''.join(candle_shapes)}{pivot_line}
         <line class="volume-divider" x1="{left}" y1="{volume_top - 5}" x2="{left + plot_width}" y2="{volume_top - 5}"/>
         {date_labels}
       </svg>
@@ -408,11 +425,15 @@ def _price_plan_card(plan: dict | None, signal_class: str) -> str:
           <div><small>PRICE PLAN</small><h3>Structural price zone unavailable</h3></div>
           <p>The system refuses to invent a buy or sell price without a confirmed structural zone.</p>
         </section>"""
+    tooltip = (
+        f'{plan["proximity"]} Based on {plan["source"]}. '
+        "Review area only; no automatic order."
+    )
     return f"""<section class="price-plan {signal_class}">
       <div><small>{html.escape(plan["label"])}</small>
       <h3>{_optional_money(plan["low"])}–{_optional_money(plan["high"])}</h3></div>
-      <div class="price-plan-mid"><small>Reference midpoint</small><b>{_optional_money(plan["midpoint"])}</b></div>
-      <p>{html.escape(plan["proximity"])} Based on {html.escape(plan["source"])}; treat this as a review area, not an automatic order.</p>
+      <div class="price-plan-mid"><small>Mid</small><b>{_optional_money(plan["midpoint"])}</b></div>
+      <span class="info-tip" tabindex="0" data-tip="{html.escape(tooltip)}" aria-label="{html.escape(tooltip)}">i</span>
     </section>"""
 
 
@@ -615,15 +636,6 @@ def build_dashboard(
             wave,
             record.get("latest_close") or wave.get("latest_close"),
         )
-        price_plan_label = (
-            f'{price_plan["label"]} {_optional_money(price_plan["low"])}–{_optional_money(price_plan["high"])}'
-            if price_plan
-            else (
-                "Structural price zone unavailable"
-                if signal_label in {"BUY", "SELL"}
-                else ""
-            )
-        )
         evidence_graphics = _evidence_graphics(
             historical_wave, wave, signal_label, signal_class
         )
@@ -633,6 +645,7 @@ def build_dashboard(
             signal_label,
             signal_class,
             signal_probability,
+            price_plan,
         )
         unrealized_return = record.get("unrealized_return")
         return_class = (
@@ -717,7 +730,7 @@ def build_dashboard(
                 <span class="decision-signal {signal_class}">
                   <strong>{signal_label}</strong><b>{signal_percent}</b>
                   <small>{signal_evidence}</small>
-                  {f'<small class="price-target">{html.escape(price_plan_label)}</small>' if price_plan_label else ''}
+                  {f'<small class="price-target">{_optional_money(price_plan["low"])}–{_optional_money(price_plan["high"])}</small>' if price_plan else ''}
                 </span>
                 <span class="board-basics">
                   <span><small>Close</small><b>${float(record.get("latest_close") or 0):,.2f}</b></span>
@@ -1037,16 +1050,21 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .evidence-bar span,.evidence-bar small {{ color:var(--muted); font-size:11px }} .evidence-bar b {{ color:var(--text); font-size:12px }}
 .bar-track {{ background:#242424; border-radius:999px; height:7px; margin:4px 0; overflow:hidden }} .bar-track i {{ background:var(--tone); border-radius:999px; display:block; height:100% }}
 .evidence-bar.relative .bar-track i {{ background:#aaa }} .evidence-bar.relative b {{ color:#ddd }}
-.price-plan {{ align-items:center; background:#0b0b0b; border:1px solid var(--line); border-left:4px solid var(--amber); border-radius:10px; display:grid; gap:8px 16px; grid-template-columns:1fr auto; margin:0 0 12px; padding:15px }}
+.price-plan {{ align-items:center; background:#0b0b0b; border:1px solid var(--line); border-left:4px solid var(--amber); border-radius:10px; display:grid; gap:8px 16px; grid-template-columns:1fr auto auto; margin:0 0 12px; padding:13px 15px }}
 .price-plan.buy {{ border-left-color:var(--green) }} .price-plan.sell {{ border-left-color:var(--red) }}
 .price-plan small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.5px; text-transform:uppercase }}
 .price-plan h3 {{ font-size:25px; margin:2px 0 0 }} .price-plan-mid {{ text-align:right }} .price-plan-mid b {{ display:block; font-size:18px }}
-.price-plan p {{ color:var(--muted); font-size:11px; grid-column:1 / -1; margin:0 }} .price-plan.unavailable {{ display:block }}
+.price-plan.unavailable {{ display:block }} .info-tip {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--muted); cursor:help; display:flex; font-size:11px; font-weight:800; height:20px; justify-content:center; position:relative; width:20px }}
+.info-tip::after {{ background:#222; border:1px solid #555; border-radius:6px; bottom:29px; color:#ddd; content:attr(data-tip); display:none; font-size:11px; font-weight:500; line-height:1.35; padding:8px; position:absolute; right:-6px; text-transform:none; width:240px; z-index:5 }}
+.info-tip:hover::after,.info-tip:focus::after {{ display:block }} .info-tip:focus {{ border-color:#aaa; outline:none }}
 .kline-chart-card {{ background:#0b0b0b; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; padding:13px }}
 .chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ font-size:17px; margin:1px 0 0 }}
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
 .kline-chart {{ display:block; height:auto; overflow:visible; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
 .support-zone {{ fill:rgba(0,200,5,.10) }} .resistance-zone {{ fill:rgba(255,90,95,.10) }} .zone-label {{ fill:#999; font-size:8px; text-transform:uppercase }}
+.target-zone.buy {{ fill:rgba(0,200,5,.22); stroke:var(--green); stroke-width:1 }} .target-zone.sell {{ fill:rgba(255,90,95,.22); stroke:var(--red); stroke-width:1 }}
+.target-mid {{ stroke-width:1.7; stroke-dasharray:4 3 }} .target-mid.buy {{ stroke:var(--green) }} .target-mid.sell {{ stroke:var(--red) }}
+.target-label-bg.buy {{ fill:#006b22 }} .target-label-bg.sell {{ fill:#8b252a }} .target-label {{ fill:#fff; font-size:8px; font-weight:800 }}
 .up-candle {{ fill:var(--green); stroke:var(--green); stroke-width:1 }} .down-candle {{ fill:var(--red); stroke:var(--red); stroke-width:1 }} .volume {{ opacity:.22; stroke:none }}
 .active-wave {{ fill:none; stroke-width:2.2; stroke-dasharray:5 3 }} .active-wave.buy,.pivot-point.buy {{ stroke:var(--green); fill:var(--green) }} .active-wave.sell,.pivot-point.sell {{ stroke:var(--red); fill:var(--red) }} .active-wave.wait,.pivot-point.wait {{ stroke:var(--amber); fill:var(--amber) }}
 .volume-divider {{ stroke:#333; stroke-width:1 }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
