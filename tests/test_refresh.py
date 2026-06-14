@@ -80,6 +80,9 @@ class RefreshTests(unittest.TestCase):
                 output / "model-v3-alerts.jsonl"
             ).read_text().splitlines()
             manifest = json.loads((output / "refresh-manifest.json").read_text())
+            refresh_history_lines = (
+                output / "refresh-history.jsonl"
+            ).read_text().splitlines()
 
         self.assertTrue(first["read_only"])
         self.assertEqual(manifest["action_counts"], second["action_counts"])
@@ -97,6 +100,7 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("model_health", manifest["artifacts"])
         self.assertIn("price_health", manifest["artifacts"])
         self.assertIn("input_integrity", manifest["artifacts"])
+        self.assertIn("refresh_history", manifest["artifacts"])
         self.assertEqual(manifest["model_health"]["schema_version"], "model-health-v1")
         self.assertEqual(manifest["input_integrity"]["schema_version"], "input-integrity-v1")
         self.assertEqual(len(manifest["input_integrity"]["prices"]["sha256"]), 64)
@@ -104,6 +108,9 @@ class RefreshTests(unittest.TestCase):
             first["input_integrity"]["prices"]["sha256"],
             second["input_integrity"]["prices"]["sha256"],
         )
+        self.assertGreaterEqual(manifest["duration_seconds"], 0)
+        self.assertGreater(manifest["total_artifact_bytes"], 0)
+        self.assertGreater(len(refresh_history_lines), 1)
         self.assertEqual(manifest["price_source"]["confidence"], "UNKNOWN")
         self.assertEqual(sum(manifest["price_health_status_counts"].values()), 1)
         self.assertEqual(sum(manifest["data_quality_status_counts"].values()), 1)

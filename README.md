@@ -324,6 +324,10 @@ explicitly supplied.
 Production-safe refreshes also use an atomic `.refresh.lock`; overlapping runs
 are rejected and the lock is removed after either success or failure.
 
+Every completed refresh appends `refresh-history.jsonl` with duration, status,
+input hashes, and per-artifact byte sizes. The current manifest remains the
+last-written current-state artifact.
+
 Record your judgment and response without changing the original alert:
 
 ```bash

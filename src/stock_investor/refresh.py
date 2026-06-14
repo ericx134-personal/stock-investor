@@ -127,6 +127,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "model_health": output_dir / "model-health.json",
         "price_health": output_dir / "price-health.json",
         "input_integrity": output_dir / "input-integrity.json",
+        "refresh_history": output_dir / "refresh-history.jsonl",
         "coverage": output_dir / "fundamental-coverage.json",
         "kline_history": output_dir / "kline-history.jsonl",
         "kline_outcomes": output_dir / "kline-outcomes.json",
@@ -400,13 +401,35 @@ def run_refresh(
         warnings.append("No forward outcome horizon has matured yet.")
 
     actions = Counter(result.alert.action for result in results)
+    completed_at = datetime.now(timezone.utc)
+    artifact_sizes = {
+        name: path.stat().st_size
+        for name, path in paths.items()
+        if name not in {"manifest", "refresh_history"} and path.exists()
+    }
+    refresh_record = {
+        "schema_version": "refresh-run-v1",
+        "started_at": started_at.isoformat(),
+        "completed_at": completed_at.isoformat(),
+        "duration_seconds": (completed_at - started_at).total_seconds(),
+        "status": model_health["overall_status"],
+        "model_version": model_version,
+        "input_integrity": input_integrity,
+        "artifact_bytes": artifact_sizes,
+        "total_artifact_bytes": sum(artifact_sizes.values()),
+    }
+    with paths["refresh_history"].open("a") as handle:
+        handle.write(json.dumps(refresh_record, sort_keys=True) + "\n")
     manifest = {
         "status": model_health["overall_status"],
         "model_health": model_health,
         "read_only": True,
         "model_version": model_version,
         "started_at": started_at.isoformat(),
-        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": completed_at.isoformat(),
+        "duration_seconds": refresh_record["duration_seconds"],
+        "artifact_bytes": artifact_sizes,
+        "total_artifact_bytes": refresh_record["total_artifact_bytes"],
         "latest_price_date": latest_price_date.isoformat() if latest_price_date else None,
         "position_count": len(positions),
         "held_position_count": len(held_symbols),

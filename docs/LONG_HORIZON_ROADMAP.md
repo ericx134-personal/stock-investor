@@ -158,7 +158,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] L001 Add a production-safe daily refresh command.
 - [x] L002 Add refresh locking to prevent overlapping runs.
 - [ ] L003 Add retry and failure reporting for read-only providers.
-- [ ] L004 Add manifest history and run-duration tracking.
+- [x] L004 Add manifest history and run-duration tracking.
 - [ ] L005 Add alerting for stale refreshes.
 - [ ] L006 Add scheduled weekly and monthly briefs.
 - [ ] L007 Add artifact retention and archival policy.
