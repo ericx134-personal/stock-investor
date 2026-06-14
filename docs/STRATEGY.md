@@ -303,6 +303,11 @@ prices, negative volume, high below low/open/close, or low above open/close.
 An intraday high/low range above 50% is retained but marked suspicious for
 review; the diagnostic does not assume the bar is wrong.
 
+Close-to-close moves above 40% are also retained and flagged. A large close
+move with a normal intraday range is classified as a possible corporate-action
+candidate; otherwise it is classified as an extreme-move candidate. These are
+review labels only, not automatic corrections.
+
 ### Model V2 Selectivity Experiment
 
 `decision-support-v2` is an experimental candidate, not the promoted default.

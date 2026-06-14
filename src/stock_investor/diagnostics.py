@@ -54,6 +54,27 @@ def build_price_health_report(
             and item.low > 0
             and item.high / item.low - 1 > 0.5
         ]
+        suspicious_close_gaps = []
+        for previous, item in zip(history[:-1], history[1:]):
+            move = item.close / previous.close - 1
+            if abs(move) <= 0.4:
+                continue
+            intraday_range = (
+                item.high / item.low - 1
+                if item.high is not None and item.low is not None and item.low > 0
+                else None
+            )
+            suspicious_close_gaps.append(
+                {
+                    "date": item.date.isoformat(),
+                    "close_return": move,
+                    "classification": (
+                        "POSSIBLE_CORPORATE_ACTION"
+                        if intraday_range is not None and intraday_range <= 0.2
+                        else "EXTREME_MOVE"
+                    ),
+                }
+            )
         status = (
             "MISSING"
             if latest is None
@@ -76,6 +97,8 @@ def build_price_health_report(
                 "ohlcv_coverage_rate": ohlcv_rows / len(history) if history else 0.0,
                 "suspicious_intraday_range_count": len(suspicious_range_dates),
                 "suspicious_intraday_range_dates": suspicious_range_dates[-10:],
+                "suspicious_close_gap_count": len(suspicious_close_gaps),
+                "suspicious_close_gaps": suspicious_close_gaps[-10:],
                 "expected_session_count": len(relevant_expected),
                 "missing_session_count": len(missing_sessions),
                 "missing_session_dates": [item.isoformat() for item in missing_sessions[-10:]],
@@ -103,6 +126,9 @@ def build_price_health_report(
         ],
         "symbols_with_suspicious_ohlcv": [
             row["symbol"] for row in rows if row["suspicious_intraday_range_count"] > 0
+        ],
+        "symbols_with_suspicious_close_gaps": [
+            row["symbol"] for row in rows if row["suspicious_close_gap_count"] > 0
         ],
         "all_held_symbols_fresh": bool(rows) and all(row["status"] == "FRESH" for row in rows),
         "symbols": rows,

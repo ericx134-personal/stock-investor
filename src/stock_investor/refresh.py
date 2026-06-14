@@ -353,6 +353,7 @@ def run_refresh(
         "price_source": price_health["source"],
         "symbols_with_missing_sessions": price_health["symbols_with_missing_sessions"],
         "symbols_with_suspicious_ohlcv": price_health["symbols_with_suspicious_ohlcv"],
+        "symbols_with_suspicious_close_gaps": price_health["symbols_with_suspicious_close_gaps"],
         "action_counts": dict(sorted(actions.items())),
         "actionable_rate": diagnostic["actionable_rate"],
         "data_review_rate": diagnostic["data_review_rate"],

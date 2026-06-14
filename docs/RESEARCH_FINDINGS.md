@@ -708,3 +708,8 @@ The first OHLCV plausibility audit found no hard-invalid bars, but flagged one
 greater-than-50% intraday range for each of `BBBY`, `NVTS`, `OPEN`, and `STEM`.
 These observations remain in the dataset pending corporate-action and
 cross-provider review; they do not automatically alter forecasts.
+
+The first close-gap audit flagged `FSLY`, `NVTS`, `OPEN`, and `STEM` for one or
+more greater-than-40% close-to-close moves. Every current event classified as
+an extreme-move candidate; none met the heuristic for a possible corporate
+action. The classification is not confirmation and does not rewrite prices.

@@ -28,7 +28,8 @@ class DiagnosticTests(unittest.TestCase):
             {
                 "A": [
                     Price(date(2026, 1, 7), 9, 8, 10, 7, 90),
-                    Price(date(2026, 1, 9), 10, 9, 16, 8, 100),
+                    Price(date(2026, 1, 9), 15, 14, 25, 14, 100),
+                    Price(date(2026, 1, 10), 30, 29, 31, 29, 110),
                 ]
             },
             {"A", "B"},
@@ -38,6 +39,7 @@ class DiagnosticTests(unittest.TestCase):
                 date(2026, 1, 7),
                 date(2026, 1, 8),
                 date(2026, 1, 9),
+                date(2026, 1, 10),
             },
             expected_session_source="SPY",
         )
@@ -50,6 +52,11 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(report["symbols_with_missing_sessions"], ["A"])
         self.assertEqual(report["symbols_with_suspicious_ohlcv"], ["A"])
         self.assertEqual(report["symbols"][0]["suspicious_intraday_range_count"], 1)
+        self.assertEqual(report["symbols_with_suspicious_close_gaps"], ["A"])
+        self.assertEqual(
+            report["symbols"][0]["suspicious_close_gaps"][-1]["classification"],
+            "POSSIBLE_CORPORATE_ACTION",
+        )
         self.assertEqual(
             infer_price_source("prices.csv", "licensed-provider")["confidence"],
             "DECLARED",
