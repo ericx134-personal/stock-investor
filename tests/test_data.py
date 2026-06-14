@@ -59,3 +59,19 @@ class DataTests(unittest.TestCase):
             )
             history = load_prices(path)["ABC"]
             self.assertEqual([price.close for price in history], [10.0, 12.0])
+
+    def test_load_prices_rejects_invalid_ohlcv_relationships(self):
+        invalid_rows = {
+            "high is below open": "2026-01-01,ABC,10,12,11,9,100\n",
+            "low is above open": "2026-01-01,ABC,10,8,12,9,100\n",
+            "negative volume": "2026-01-01,ABC,10,10,11,9,-1\n",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            for message, row in invalid_rows.items():
+                path = self.write(
+                    directory,
+                    message.replace(" ", "-") + ".csv",
+                    "date,symbol,close,open,high,low,volume\n" + row,
+                )
+                with self.assertRaisesRegex(ValueError, message):
+                    load_prices(path)

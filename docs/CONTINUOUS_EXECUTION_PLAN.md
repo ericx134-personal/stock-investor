@@ -44,7 +44,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 - [x] M011 Add per-symbol price freshness and source provenance.
 - [x] M012 Detect missing expected market sessions.
-- [ ] M013 Detect invalid and implausible OHLCV values.
+- [x] M013 Detect invalid and implausible OHLCV values.
 - [ ] M014 Detect suspicious one-session gaps and classify likely corporate actions.
 - [ ] M015 Track adjusted/unadjusted price semantics per provider.
 - [ ] M016 Detect splits and preserve cost-basis reconciliation warnings.

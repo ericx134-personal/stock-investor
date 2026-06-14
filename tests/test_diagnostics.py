@@ -28,7 +28,7 @@ class DiagnosticTests(unittest.TestCase):
             {
                 "A": [
                     Price(date(2026, 1, 7), 9, 8, 10, 7, 90),
-                    Price(date(2026, 1, 9), 10, 9, 11, 8, 100),
+                    Price(date(2026, 1, 9), 10, 9, 16, 8, 100),
                 ]
             },
             {"A", "B"},
@@ -48,6 +48,8 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(report["symbols"][0]["missing_session_count"], 1)
         self.assertEqual(report["symbols"][0]["missing_session_dates"], ["2026-01-08"])
         self.assertEqual(report["symbols_with_missing_sessions"], ["A"])
+        self.assertEqual(report["symbols_with_suspicious_ohlcv"], ["A"])
+        self.assertEqual(report["symbols"][0]["suspicious_intraday_range_count"], 1)
         self.assertEqual(
             infer_price_source("prices.csv", "licensed-provider")["confidence"],
             "DECLARED",

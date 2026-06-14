@@ -298,6 +298,11 @@ the expected-session calendar. Each held symbol is compared only from its first
 available date through its latest date. If the benchmark calendar is missing,
 the system refuses to claim session completeness.
 
+Hard-invalid OHLCV relationships are rejected during CSV loading: non-positive
+prices, negative volume, high below low/open/close, or low above open/close.
+An intraday high/low range above 50% is retained but marked suspicious for
+review; the diagnostic does not assume the bar is wrong.
+
 ### Model V2 Selectivity Experiment
 
 `decision-support-v2` is an experimental candidate, not the promoted default.

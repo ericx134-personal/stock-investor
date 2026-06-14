@@ -703,3 +703,8 @@ next milestone.
 Using the latest 252 observed SPY sessions as the expected market calendar, the
 current 27 held symbols have no missing expected sessions. This does not test
 for suspicious price gaps or invalid bars; those remain separate diagnostics.
+
+The first OHLCV plausibility audit found no hard-invalid bars, but flagged one
+greater-than-50% intraday range for each of `BBBY`, `NVTS`, `OPEN`, and `STEM`.
+These observations remain in the dataset pending corporate-action and
+cross-provider review; they do not automatically alter forecasts.

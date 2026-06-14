@@ -46,6 +46,14 @@ def build_price_health_report(
             and item.volume is not None
             for item in history
         )
+        suspicious_range_dates = [
+            item.date.isoformat()
+            for item in history
+            if item.high is not None
+            and item.low is not None
+            and item.low > 0
+            and item.high / item.low - 1 > 0.5
+        ]
         status = (
             "MISSING"
             if latest is None
@@ -66,6 +74,8 @@ def build_price_health_report(
                 "age_calendar_days": age_days,
                 "history_rows": len(history),
                 "ohlcv_coverage_rate": ohlcv_rows / len(history) if history else 0.0,
+                "suspicious_intraday_range_count": len(suspicious_range_dates),
+                "suspicious_intraday_range_dates": suspicious_range_dates[-10:],
                 "expected_session_count": len(relevant_expected),
                 "missing_session_count": len(missing_sessions),
                 "missing_session_dates": [item.isoformat() for item in missing_sessions[-10:]],
@@ -90,6 +100,9 @@ def build_price_health_report(
         "status_counts": dict(sorted(counts.items())),
         "symbols_with_missing_sessions": [
             row["symbol"] for row in rows if row["missing_session_count"] > 0
+        ],
+        "symbols_with_suspicious_ohlcv": [
+            row["symbol"] for row in rows if row["suspicious_intraday_range_count"] > 0
         ],
         "all_held_symbols_fresh": bool(rows) and all(row["status"] == "FRESH" for row in rows),
         "symbols": rows,

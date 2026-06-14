@@ -635,12 +635,13 @@ def build_dashboard(
         <td>{_percent(row.get("session_coverage_rate")) if row.get("session_coverage_rate") is not None else "pending"}</td>
         <td>{html.escape(str(row.get("missing_session_count", 0)))}</td>
         <td>{_percent(row.get("ohlcv_coverage_rate"))}</td>
+        <td>{html.escape(str(row.get("suspicious_intraday_range_count", 0)))}</td>
         <td>{html.escape(str(row.get("source", "")))} · {html.escape(str(row.get("source_confidence", "")).lower())}</td></tr>"""
         for row in (price_health or {}).get("symbols", [])
     )
     price_health_panel = (
         f"""<section class="panel"><h2>Per-Symbol Price Freshness</h2>
-        <table><thead><tr><th>Symbol</th><th>Status</th><th>Latest</th><th>Age days</th><th>Session coverage</th><th>Missing</th><th>OHLCV coverage</th><th>Source</th></tr></thead>
+        <table><thead><tr><th>Symbol</th><th>Status</th><th>Latest</th><th>Age days</th><th>Session coverage</th><th>Missing</th><th>OHLCV coverage</th><th>Extreme ranges</th><th>Source</th></tr></thead>
         <tbody>{price_health_rows}</tbody></table>
         <p class="note">Expected sessions use the latest 252 observed {html.escape(str(price_health.get("expected_session_source") or "benchmark"))} market dates, avoiding an invented holiday calendar. Source confidence distinguishes declared provenance from conservative filename inference.</p></section>"""
         if price_health

@@ -116,10 +116,26 @@ def load_prices(path: str | Path) -> dict[str, list[Price]]:
                 name: _parse_optional_float(row.get(name))
                 for name in ("open", "high", "low", "volume")
             }
+            for name in ("open", "high", "low"):
+                if optional[name] is not None and optional[name] <= 0:
+                    raise ValueError(f"{symbol} has non-positive {name}")
+            if optional["volume"] is not None and optional["volume"] < 0:
+                raise ValueError(f"{symbol} has negative volume")
+            if (
+                optional["high"] is not None
+                and optional["low"] is not None
+                and optional["high"] < optional["low"]
+            ):
+                raise ValueError(f"{symbol} high is below low")
             if optional["high"] is not None and optional["high"] < close:
                 raise ValueError(f"{symbol} high is below close")
             if optional["low"] is not None and optional["low"] > close:
                 raise ValueError(f"{symbol} low is above close")
+            if optional["open"] is not None:
+                if optional["high"] is not None and optional["high"] < optional["open"]:
+                    raise ValueError(f"{symbol} high is below open")
+                if optional["low"] is not None and optional["low"] > optional["open"]:
+                    raise ValueError(f"{symbol} low is above open")
             prices.setdefault(symbol, []).append(
                 Price(date.fromisoformat(row["date"]), close, **optional)
             )
