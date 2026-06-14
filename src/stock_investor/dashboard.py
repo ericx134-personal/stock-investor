@@ -353,6 +353,69 @@ def _board_signal(historical: dict | None) -> tuple[str, str, str, str]:
     return "WAIT", "wait", "--", "direction not proven"
 
 
+def _price_plan(signal_label: str, wave: dict, current_price: object) -> dict | None:
+    """Return a structural review zone without inventing an exact execution price."""
+    if signal_label == "BUY":
+        label, low_key, high_key = (
+            "Buy zone",
+            "support_zone_low",
+            "support_zone_high",
+        )
+        source = "confirmed structural support"
+    elif signal_label == "SELL":
+        label, low_key, high_key = (
+            "Sell zone",
+            "resistance_zone_low",
+            "resistance_zone_high",
+        )
+        source = "confirmed structural resistance"
+    else:
+        return None
+    if wave.get(low_key) is None or wave.get(high_key) is None:
+        return None
+    low, high = sorted((float(wave[low_key]), float(wave[high_key])))
+    if low <= 0 or high <= 0:
+        return None
+    midpoint = (low + high) / 2
+    current = float(current_price or wave.get("latest_close") or 0)
+    if current <= 0:
+        proximity = "Current-price distance unavailable."
+    elif low <= current <= high:
+        proximity = "Current price is inside this review zone."
+    elif current < low:
+        proximity = (
+            f"Zone is {low / current - 1:.1%} to {high / current - 1:.1%} "
+            "above the current price."
+        )
+    else:
+        proximity = (
+            f"Zone is {1 - high / current:.1%} to {1 - low / current:.1%} "
+            "below the current price."
+        )
+    return {
+        "label": label,
+        "low": low,
+        "high": high,
+        "midpoint": midpoint,
+        "source": source,
+        "proximity": proximity,
+    }
+
+
+def _price_plan_card(plan: dict | None, signal_class: str) -> str:
+    if not plan:
+        return """<section class="price-plan unavailable">
+          <div><small>PRICE PLAN</small><h3>Structural price zone unavailable</h3></div>
+          <p>The system refuses to invent a buy or sell price without a confirmed structural zone.</p>
+        </section>"""
+    return f"""<section class="price-plan {signal_class}">
+      <div><small>{html.escape(plan["label"])}</small>
+      <h3>{_optional_money(plan["low"])}–{_optional_money(plan["high"])}</h3></div>
+      <div class="price-plan-mid"><small>Reference midpoint</small><b>{_optional_money(plan["midpoint"])}</b></div>
+      <p>{html.escape(plan["proximity"])} Based on {html.escape(plan["source"])}; treat this as a review area, not an automatic order.</p>
+    </section>"""
+
+
 def _historical_stance(row: dict) -> str:
     classification = row.get("evidence_classification")
     if classification not in {"FAVORABLE", "CAUTION", "INCONCLUSIVE"}:
@@ -547,6 +610,20 @@ def build_dashboard(
                 else None
             )
         )
+        price_plan = _price_plan(
+            signal_label,
+            wave,
+            record.get("latest_close") or wave.get("latest_close"),
+        )
+        price_plan_label = (
+            f'{price_plan["label"]} {_optional_money(price_plan["low"])}–{_optional_money(price_plan["high"])}'
+            if price_plan
+            else (
+                "Structural price zone unavailable"
+                if signal_label in {"BUY", "SELL"}
+                else ""
+            )
+        )
         evidence_graphics = _evidence_graphics(
             historical_wave, wave, signal_label, signal_class
         )
@@ -640,6 +717,7 @@ def build_dashboard(
                 <span class="decision-signal {signal_class}">
                   <strong>{signal_label}</strong><b>{signal_percent}</b>
                   <small>{signal_evidence}</small>
+                  {f'<small class="price-target">{html.escape(price_plan_label)}</small>' if price_plan_label else ''}
                 </span>
                 <span class="board-basics">
                   <span><small>Close</small><b>${float(record.get("latest_close") or 0):,.2f}</b></span>
@@ -657,6 +735,7 @@ def build_dashboard(
                 <span class="board-action">{html.escape(action.replace("_", " "))}</span>
               </div>
                 {evidence_graphics}
+                {_price_plan_card(price_plan, signal_class) if signal_label in {"BUY", "SELL"} else ""}
                 {kline_chart}
                 <details class="advanced-details">
                   <summary>Advanced details</summary>
@@ -938,6 +1017,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .decision-signal small {{ grid-column:1 / -1; opacity:.72 }} .decision-signal.buy {{ background:var(--green-dim); border-color:#007a26; color:var(--green) }}
 .decision-signal.sell {{ background:#321214; border-color:#702a2e; color:var(--red) }} .decision-signal.hold {{ background:#202020; border-color:#3b3b3b; color:#c8c8c8 }}
 .decision-signal.wait {{ background:#2b240f; border-color:#65551e; color:var(--amber) }}
+.decision-signal .price-target {{ border-top:1px solid currentColor; font-weight:750; margin-top:5px; opacity:1; padding-top:5px }}
 .outlook,.board-action {{ border-radius:999px; display:inline-block; font-size:11px; font-weight:800; letter-spacing:.5px; padding:6px 9px; text-align:center }}
 .outlook.positive,.outlook.favorable {{ background:var(--green-dim); color:var(--green) }} .outlook.caution {{ background:#321214; color:var(--red) }}
 .outlook.watch {{ background:#2b240f; color:var(--amber) }} .outlook.unknown {{ background:#202020; color:#c8c8c8 }}
@@ -957,6 +1037,11 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .evidence-bar span,.evidence-bar small {{ color:var(--muted); font-size:11px }} .evidence-bar b {{ color:var(--text); font-size:12px }}
 .bar-track {{ background:#242424; border-radius:999px; height:7px; margin:4px 0; overflow:hidden }} .bar-track i {{ background:var(--tone); border-radius:999px; display:block; height:100% }}
 .evidence-bar.relative .bar-track i {{ background:#aaa }} .evidence-bar.relative b {{ color:#ddd }}
+.price-plan {{ align-items:center; background:#0b0b0b; border:1px solid var(--line); border-left:4px solid var(--amber); border-radius:10px; display:grid; gap:8px 16px; grid-template-columns:1fr auto; margin:0 0 12px; padding:15px }}
+.price-plan.buy {{ border-left-color:var(--green) }} .price-plan.sell {{ border-left-color:var(--red) }}
+.price-plan small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.5px; text-transform:uppercase }}
+.price-plan h3 {{ font-size:25px; margin:2px 0 0 }} .price-plan-mid {{ text-align:right }} .price-plan-mid b {{ display:block; font-size:18px }}
+.price-plan p {{ color:var(--muted); font-size:11px; grid-column:1 / -1; margin:0 }} .price-plan.unavailable {{ display:block }}
 .kline-chart-card {{ background:#0b0b0b; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; padding:13px }}
 .chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ font-size:17px; margin:1px 0 0 }}
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}

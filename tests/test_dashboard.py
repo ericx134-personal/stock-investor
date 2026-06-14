@@ -4,10 +4,25 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 
-from stock_investor.dashboard import build_dashboard
+from stock_investor.dashboard import _price_plan, build_dashboard
 
 
 class DashboardTests(unittest.TestCase):
+    def test_price_plan_uses_structural_zone_and_refuses_wait(self):
+        wave = {
+            "support_zone_low": 90,
+            "support_zone_high": 94,
+            "resistance_zone_low": 108,
+            "resistance_zone_high": 112,
+        }
+        buy = _price_plan("BUY", wave, 100)
+        sell = _price_plan("SELL", wave, 100)
+        self.assertEqual((buy["low"], buy["high"], buy["midpoint"]), (90, 94, 92))
+        self.assertEqual((sell["low"], sell["high"], sell["midpoint"]), (108, 112, 110))
+        self.assertIn("below the current price", buy["proximity"])
+        self.assertIn("above the current price", sell["proximity"])
+        self.assertIsNone(_price_plan("WAIT", wave, 100))
+
     def test_dashboard_prioritizes_and_escapes_alerts(self):
         with tempfile.TemporaryDirectory() as directory:
             alerts = Path(directory) / "alerts.jsonl"
@@ -366,6 +381,9 @@ class DashboardTests(unittest.TestCase):
                 prices_path=prices,
             )
         self.assertIn("<strong>BUY</strong><b>83%</b>", page)
+        self.assertIn("Buy zone $106.00–$112.00", page)
+        self.assertIn("<h3>$106.00–$112.00</h3>", page)
+        self.assertIn("Reference midpoint", page)
         self.assertIn("Conditional age/magnitude evidence used", page)
         self.assertIn("direction gate <b>BUY</b>", page)
         self.assertIn('class="kline-chart"', page)

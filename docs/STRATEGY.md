@@ -222,6 +222,11 @@ resistance zones, the current confirmed-pivot wave, volume, and the direction
 label are overlaid directly on the chart; dense text remains collapsed under
 advanced details.
 
+For a robust BUY or SELL direction, the dashboard derives a review price range
+from the same confirmed structure: BUY maps to the support zone and SELL maps
+to the resistance zone. It displays the midpoint only as a reference and
+refuses to invent a price if the matching structural zone is unavailable.
+
 The historical wave experiment is a separate exploratory surface. It replays
 only information available at each historical signal date, uses non-overlapping
 windows within each symbol and horizon, and reports return versus SPY plus
