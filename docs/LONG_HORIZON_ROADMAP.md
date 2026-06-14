@@ -9,16 +9,16 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## A. Prediction Accountability
 
-- [~] A001 Persist every displayed BUY/SELL/WAIT directional forecast.
-- [ ] A002 Evaluate directional forecasts after 21, 63, and 126 sessions.
-- [ ] A003 Build forecast scorecards by direction and horizon.
+- [x] A001 Persist every displayed BUY/SELL/WAIT directional forecast.
+- [x] A002 Evaluate directional forecasts after 21, 63, and 126 sessions.
+- [x] A003 Build forecast scorecards by direction and horizon.
 - [ ] A004 Track forecast calibration by displayed probability bucket.
 - [ ] A005 Track coverage: share of holdings receiving BUY/SELL versus WAIT.
 - [ ] A006 Track false-positive BUY and SELL rates.
-- [ ] A007 Track maximum favorable and adverse excursion per forecast.
-- [ ] A008 Separate absolute-direction success from SPY-relative success.
-- [ ] A009 Add forecast episode de-duplication to avoid repeated-signal inflation.
-- [ ] A010 Display matured, pending, and invalid forecast counts.
+- [x] A007 Track maximum favorable and adverse excursion per forecast.
+- [x] A008 Separate absolute-direction success from SPY-relative success.
+- [x] A009 Add forecast episode de-duplication to avoid repeated-signal inflation.
+- [~] A010 Display matured, pending, and invalid forecast counts.
 
 ## B. Data Integrity
 
@@ -127,7 +127,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 ## J. Validation And Statistical Safety
 
 - [ ] J001 Add probability calibration curves.
-- [ ] J002 Add Brier score for directional forecasts.
+- [x] J002 Add Brier score for directional forecasts.
 - [ ] J003 Add precision, recall, and coverage for BUY and SELL separately.
 - [ ] J004 Add bootstrap uncertainty for return statistics.
 - [ ] J005 Add multiple-testing ledger for every research experiment.

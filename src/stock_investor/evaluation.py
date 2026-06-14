@@ -363,6 +363,11 @@ def build_directional_forecast_scorecard(outcomes: list[dict]) -> list[dict]:
             if item.get("probability") is not None
             and item["directional_returns"][horizon] is not None
         ]
+        displayed_probabilities = [
+            float(item["probability"])
+            for item in group
+            if item.get("probability") is not None
+        ]
         rows.append(
             {
                 "forecast_version": version,
@@ -372,8 +377,8 @@ def build_directional_forecast_scorecard(outcomes: list[dict]) -> list[dict]:
                 "observations": len(matured),
                 "pending": len(group) - len(matured),
                 "mean_probability": (
-                    sum(pair[0] for pair in probability_pairs) / len(probability_pairs)
-                    if probability_pairs
+                    sum(displayed_probabilities) / len(displayed_probabilities)
+                    if displayed_probabilities
                     else None
                 ),
                 "directional_success_rate": (
@@ -382,7 +387,10 @@ def build_directional_forecast_scorecard(outcomes: list[dict]) -> list[dict]:
                     else None
                 ),
                 "brier_score": (
-                    sum((probability - float(success)) ** 2 for probability, success in probability_pairs)
+                    sum(
+                        (probability - float(success)) ** 2
+                        for probability, success in probability_pairs
+                    )
                     / len(probability_pairs)
                     if probability_pairs
                     else None

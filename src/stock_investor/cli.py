@@ -658,6 +658,7 @@ def _dashboard(
     wave_scorecard_path: str | None,
     wave_experiment_scorecard_path: str | None,
     wave_conditional_scorecard_path: str | None,
+    direction_forecast_scorecard_path: str | None,
     prices_path: str | None,
 ) -> int:
     write_dashboard(
@@ -673,6 +674,7 @@ def _dashboard(
             wave_scorecard_path=wave_scorecard_path,
             wave_experiment_scorecard_path=wave_experiment_scorecard_path,
             wave_conditional_scorecard_path=wave_conditional_scorecard_path,
+            direction_forecast_scorecard_path=direction_forecast_scorecard_path,
             prices_path=prices_path,
         ),
         output_path,
@@ -935,6 +937,7 @@ def main() -> int:
     dashboard_parser.add_argument("--wave-scorecard")
     dashboard_parser.add_argument("--wave-experiment-scorecard")
     dashboard_parser.add_argument("--wave-conditional-scorecard")
+    dashboard_parser.add_argument("--direction-forecast-scorecard")
     dashboard_parser.add_argument("--prices")
 
     refresh_parser = subparsers.add_parser(
@@ -1092,6 +1095,7 @@ def main() -> int:
             args.wave_scorecard,
             args.wave_experiment_scorecard,
             args.wave_conditional_scorecard,
+            args.direction_forecast_scorecard,
             args.prices,
         )
     if args.command == "refresh":

@@ -6,7 +6,9 @@ from pathlib import Path
 
 from stock_investor.data import Price
 from stock_investor.wave import (
+    append_directional_forecast_history,
     append_wave_history,
+    build_directional_forecasts,
     build_wave_conditional_scorecard,
     build_wave_scorecard,
     build_wave_walk_forward_outcomes,
@@ -16,6 +18,7 @@ from stock_investor.wave import (
     classify_wave_walk_forward_evidence,
     evaluate_wave_history,
     load_wave_history,
+    load_directional_forecast_history,
     wave_age_bucket,
     wave_magnitude_bucket,
 )
@@ -214,6 +217,62 @@ class WaveTests(unittest.TestCase):
             ),
             "WAIT",
         )
+
+    def test_directional_forecast_uses_robust_conditional_evidence(self):
+        signal = calculate_wave("ABC", wave_history())
+        age = wave_age_bucket(signal.wave_age_sessions)
+        magnitude = wave_magnitude_bucket(
+            signal.active_wave_return, signal.reversal_threshold
+        )[1]
+        broad = [{"regime": signal.regime, "horizon": "21d", "observations": 20}]
+        conditional = [
+            {
+                "regime": signal.regime,
+                "horizon": "21d",
+                "wave_age_bucket": age,
+                "wave_magnitude_bucket": magnitude,
+                "observations": 18,
+                "directional_symbols": 14,
+                "positive_rate": 0.83,
+                "positive_rate_ci_low": 0.60,
+                "positive_rate_ci_high": 0.95,
+                "symbol_positive_return_ci_low": 0.52,
+                "symbol_positive_return_ci_high": 0.92,
+                "top_symbol_return_observation_share": 0.12,
+            }
+        ]
+        forecast = build_directional_forecasts(
+            {"ABC": signal}, {"ABC"}, broad, conditional
+        )[0]
+        self.assertEqual(forecast["direction"], "BUY")
+        self.assertEqual(forecast["evidence_source"], "CONDITIONAL")
+        self.assertEqual(forecast["probability"], 0.83)
+
+    def test_directional_forecast_history_is_idempotent(self):
+        forecast = {
+            "forecast_id": "wave-direction-v1|ABC|2026-01-01",
+            "forecast_version": "wave-direction-v1",
+            "symbol": "ABC",
+            "signal_date": "2026-01-01",
+            "entry_close": 100,
+            "direction": "WAIT",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecasts.jsonl"
+            self.assertEqual(append_directional_forecast_history([forecast], path), 1)
+            self.assertEqual(append_directional_forecast_history([forecast], path), 0)
+            records = load_directional_forecast_history(path)
+        self.assertEqual(len(records), 1)
+        self.assertIn("observed_at", records[0])
+
+    def test_directional_forecast_records_wait_when_wave_is_unavailable(self):
+        history = wave_history()[:20]
+        forecast = build_directional_forecasts(
+            {}, {"ABC"}, [], [], {"ABC": history}
+        )[0]
+        self.assertEqual(forecast["direction"], "WAIT")
+        self.assertEqual(forecast["evidence_source"], "NONE")
+        self.assertEqual(forecast["signal_date"], history[-1].date.isoformat())
 
 
 if __name__ == "__main__":

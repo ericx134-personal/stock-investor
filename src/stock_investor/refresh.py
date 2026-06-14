@@ -14,9 +14,11 @@ from .diagnostics import (
     compare_monitor_files,
 )
 from .evaluation import (
+    build_directional_forecast_scorecard,
     build_scorecard,
     evaluate_alerts,
     evaluate_decisions,
+    evaluate_directional_forecasts,
     load_alert_records,
     write_outcomes,
     write_scorecard,
@@ -39,7 +41,9 @@ from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk
 from .robinhood import load_robinhood_cash
 from .thesis import load_theses
 from .wave import (
+    append_directional_forecast_history,
     append_wave_history,
+    build_directional_forecasts,
     build_wave_conditional_scorecard,
     build_wave_scorecard,
     build_wave_walk_forward_outcomes,
@@ -47,6 +51,7 @@ from .wave import (
     calculate_waves,
     evaluate_wave_history,
     load_wave_history,
+    load_directional_forecast_history,
     write_wave_snapshot,
 )
 
@@ -79,6 +84,9 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "wave_experiment_outcomes": output_dir / "wave-experiment-outcomes.json",
         "wave_experiment_scorecard": output_dir / "wave-experiment-scorecard.json",
         "wave_conditional_scorecard": output_dir / "wave-conditional-scorecard.json",
+        "direction_forecasts": output_dir / "wave-direction-forecasts.jsonl",
+        "direction_forecast_outcomes": output_dir / "wave-direction-forecast-outcomes.json",
+        "direction_forecast_scorecard": output_dir / "wave-direction-forecast-scorecard.json",
         "comparison": output_dir / f"model-v1-{slug.removeprefix('model-')}-comparison.json",
         "dashboard": output_dir / f"dashboard-{slug.removeprefix('model-')}.html",
         "manifest": output_dir / "refresh-manifest.json",
@@ -180,6 +188,31 @@ def run_refresh(
     _write_json(wave_experiment_outcomes, paths["wave_experiment_outcomes"])
     _write_json(wave_experiment_scorecard, paths["wave_experiment_scorecard"])
     _write_json(wave_conditional_scorecard, paths["wave_conditional_scorecard"])
+    direction_forecasts = build_directional_forecasts(
+        waves,
+        held_symbols,
+        wave_experiment_scorecard,
+        wave_conditional_scorecard,
+        prices,
+    )
+    append_directional_forecast_history(
+        direction_forecasts, paths["direction_forecasts"]
+    )
+    direction_forecast_records = load_directional_forecast_history(
+        paths["direction_forecasts"]
+    )
+    direction_forecast_outcomes = evaluate_directional_forecasts(
+        direction_forecast_records, prices, benchmark_symbol, episode_sessions
+    )
+    direction_forecast_scorecard = build_directional_forecast_scorecard(
+        direction_forecast_outcomes
+    )
+    _write_json(
+        direction_forecast_outcomes, paths["direction_forecast_outcomes"]
+    )
+    _write_json(
+        direction_forecast_scorecard, paths["direction_forecast_scorecard"]
+    )
 
     alert_records = load_alert_records(paths["alerts"])
     outcomes = evaluate_alerts(
@@ -231,6 +264,7 @@ def run_refresh(
             wave_scorecard_path=paths["wave_scorecard"],
             wave_experiment_scorecard_path=paths["wave_experiment_scorecard"],
             wave_conditional_scorecard_path=paths["wave_conditional_scorecard"],
+            direction_forecast_scorecard_path=paths["direction_forecast_scorecard"],
             prices_path=prices_path,
         ),
         paths["dashboard"],
@@ -293,6 +327,14 @@ def run_refresh(
         "historical_wave_observations": len(wave_experiment_outcomes),
         "historical_wave_scorecard_rows": len(wave_experiment_scorecard),
         "conditional_wave_scorecard_rows": len(wave_conditional_scorecard),
+        "direction_forecast_records": len(direction_forecast_records),
+        "direction_forecast_episode_count": len(direction_forecast_outcomes),
+        "current_direction_forecast_counts": dict(
+            sorted(Counter(row["direction"] for row in direction_forecasts).items())
+        ),
+        "matured_direction_forecast_observations": sum(
+            row["observations"] for row in direction_forecast_scorecard
+        ),
         "historical_wave_evidence_counts": dict(
             sorted(
                 Counter(

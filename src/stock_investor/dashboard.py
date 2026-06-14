@@ -60,6 +60,10 @@ def _optional_ratio(value: object) -> str:
     return "pending" if value is None else f"{float(value):.2f}×"
 
 
+def _optional_number(value: object) -> str:
+    return "pending" if value is None else f"{float(value):.3f}"
+
+
 def _optional_money(value: object) -> str:
     return "pending" if value is None else f"${float(value):,.2f}"
 
@@ -394,6 +398,7 @@ def build_dashboard(
     wave_scorecard_path: str | Path | None = None,
     wave_experiment_scorecard_path: str | Path | None = None,
     wave_conditional_scorecard_path: str | Path | None = None,
+    direction_forecast_scorecard_path: str | Path | None = None,
     prices_path: str | Path | None = None,
 ) -> str:
     records = _latest_by_symbol(_load_jsonl(alerts_path))
@@ -464,6 +469,12 @@ def build_dashboard(
         json.loads(Path(wave_conditional_scorecard_path).read_text())
         if wave_conditional_scorecard_path
         and Path(wave_conditional_scorecard_path).exists()
+        else []
+    )
+    direction_forecast_scorecard = (
+        json.loads(Path(direction_forecast_scorecard_path).read_text())
+        if direction_forecast_scorecard_path
+        and Path(direction_forecast_scorecard_path).exists()
         else []
     )
     conditional_wave_evidence = {
@@ -865,6 +876,17 @@ def build_dashboard(
             ),
         )
     ) or '<tr><td colspan="9">No conditional wave evidence available.</td></tr>'
+    direction_validation_rows = "".join(
+        f"<tr><td>{html.escape(row['direction'])}</td>"
+        f"<td>{html.escape(row['horizon'])}</td>"
+        f"<td>{int(row['forecast_episodes'])}</td>"
+        f"<td>{int(row['observations'])}</td>"
+        f"<td>{int(row['pending'])}</td>"
+        f"<td>{_optional_percent(row.get('mean_probability'))}</td>"
+        f"<td>{_optional_percent(row.get('directional_success_rate'))}</td>"
+        f"<td>{_optional_number(row.get('brier_score'))}</td></tr>"
+        for row in direction_forecast_scorecard
+    ) or '<tr><td colspan="8">Displayed forecasts are now recorded; no scorecard rows yet.</td></tr>'
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -981,6 +1003,10 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <section class="portfolio-board">{prioritized_board}</section>
 </section>
 <section id="tab-research" class="tab-view" role="tabpanel" hidden>
+<section class="panel"><h2>Displayed Direction Forecast Validation</h2>
+<table><thead><tr><th>Direction</th><th>Horizon</th><th>Episodes</th><th>Matured</th><th>Pending</th><th>Displayed rate</th><th>Directional success</th><th>Brier score</th></tr></thead>
+<tbody>{direction_validation_rows}</tbody></table>
+<p class="note">Every displayed BUY, SELL, and WAIT is retained in an immutable ledger. Daily repeats are de-duplicated into episodes. WAIT is audited for coverage but has no invented directional success or Brier score.</p></section>
 <section class="panel"><h2>All-Decision Forward Evidence</h2>
 <table><thead><tr><th>Decision</th><th>Horizon</th><th>Matured sample</th><th>Positive return</th><th>Mean excess return</th><th>Directional success</th></tr></thead>
 <tbody>{decision_evidence_rows}</tbody></table>

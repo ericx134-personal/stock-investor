@@ -28,10 +28,17 @@ class DashboardTests(unittest.TestCase):
                 '"observations":3,"positive_rate":0.67,"mean_excess_return":0.04,'
                 '"directional_success_rate":0.67}]'
             )
+            direction_scorecard = Path(directory) / "direction-scorecard.json"
+            direction_scorecard.write_text(
+                '[{"direction":"BUY","horizon":"21d","forecast_episodes":3,'
+                '"observations":1,"pending":2,"mean_probability":0.8,'
+                '"directional_success_rate":1.0,"brier_score":0.04}]'
+            )
             page = build_dashboard(
                 alerts,
                 scorecard_path=scorecard,
                 decision_scorecard_path=decision_scorecard,
+                direction_forecast_scorecard_path=direction_scorecard,
             )
         self.assertIn("ABC", page)
         self.assertIn("TRIM REVIEW", page)
@@ -48,6 +55,9 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn('<details class="signal-column wait-column" open>', page)
         self.assertIn("WAIT is folded by default", page)
         self.assertIn("All-Decision Forward Evidence", page)
+        self.assertIn("Displayed Direction Forecast Validation", page)
+        self.assertIn("<td>3</td><td>1</td><td>2</td>", page)
+        self.assertIn("Brier score", page)
         self.assertIn("Includes HOLD and ordinary REVIEW decisions", page)
         self.assertIn('class="holding-row trim_review signal-wait"', page)
         self.assertIn('data-detail-target="holding-detail-0"', page)

@@ -135,7 +135,7 @@ engagement rather than decision quality.
 | `wave-v1` | Observational | Causal confirmed-pivot structural waves |
 | `wave-walk-forward-v1` | Exploratory replay | Historical non-overlapping wave outcomes |
 | `wave-conditional-v1` | Exploratory audit | Predeclared wave-age and magnitude conditions |
-| `wave-direction-v1` | In development | Immutable displayed BUY/SELL/WAIT forecast ledger |
+| `wave-direction-v1` | Active observational ledger | Immutable displayed BUY/SELL/WAIT forecasts and forward scorecard |
 
 None is promoted as a proven predictive model.
 
@@ -605,11 +605,12 @@ should use synthetic, licensed, or personally authorized data.
 
 ### Immediate: prediction accountability
 
-1. Finish `wave-direction-v1` so every displayed BUY/SELL/WAIT is immutable.
-2. Evaluate each forecast after 21, 63, and 126 sessions.
-3. Report matured, pending, and invalid forecasts separately.
-4. Add displayed-rate calibration and Brier score.
-5. Measure false-positive BUY and SELL rates.
+1. Accumulate mature `wave-direction-v1` outcomes without changing its frozen
+   forecast definition.
+2. Report invalid forecasts separately from matured and pending forecasts.
+3. Add displayed-rate calibration curves and probability buckets.
+4. Measure false-positive BUY and SELL rates.
+5. Test whether Brier score and directional success remain stable over time.
 
 ### Validation expansion
 

@@ -653,11 +653,37 @@ def build_directional_forecasts(
     held_symbols: set[str],
     broad_scorecard: list[dict],
     conditional_scorecard: list[dict],
+    prices: dict[str, list[Price]] | None = None,
 ) -> list[dict]:
     forecasts = []
     for symbol in sorted(held_symbols):
         wave = waves.get(symbol)
         if not wave:
+            history = (prices or {}).get(symbol, [])
+            if not history:
+                continue
+            latest = history[-1]
+            forecasts.append(
+                {
+                    "forecast_id": (
+                        f"{WAVE_DIRECTION_FORECAST_VERSION}|{symbol}|"
+                        f"{latest.date.isoformat()}"
+                    ),
+                    "forecast_version": WAVE_DIRECTION_FORECAST_VERSION,
+                    "symbol": symbol,
+                    "signal_date": latest.date.isoformat(),
+                    "entry_close": latest.close,
+                    "direction": "WAIT",
+                    "probability": None,
+                    "horizon": None,
+                    "regime": "Wave evidence unavailable",
+                    "evidence_source": "NONE",
+                    "observations": 0,
+                    "directional_symbols": 0,
+                    "wave_age_bucket": None,
+                    "wave_magnitude_bucket": None,
+                }
+            )
             continue
         evidence, evidence_source = select_live_wave_evidence(
             wave, broad_scorecard, conditional_scorecard
@@ -721,7 +747,12 @@ def append_directional_forecast_history(
         for forecast in forecasts:
             if forecast["forecast_id"] in existing:
                 continue
-            handle.write(json.dumps({**forecast, "observed_at": observed_at}, sort_keys=True) + "\n")
+            handle.write(
+                json.dumps(
+                    {**forecast, "observed_at": observed_at}, sort_keys=True
+                )
+                + "\n"
+            )
             existing.add(forecast["forecast_id"])
             written += 1
     return written
@@ -731,4 +762,8 @@ def load_directional_forecast_history(path: str | Path) -> list[dict]:
     source = Path(path)
     if not source.exists():
         return []
-    return [json.loads(line) for line in source.read_text().splitlines() if line.strip()]
+    return [
+        json.loads(line)
+        for line in source.read_text().splitlines()
+        if line.strip()
+    ]

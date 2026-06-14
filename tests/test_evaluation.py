@@ -6,9 +6,11 @@ from pathlib import Path
 
 from stock_investor.data import Price
 from stock_investor.evaluation import (
+    build_directional_forecast_scorecard,
     build_scorecard,
     evaluate_alerts,
     evaluate_decisions,
+    evaluate_directional_forecasts,
     write_outcomes,
     write_scorecard,
 )
@@ -39,6 +41,18 @@ def decision(action, symbol="ABC", signal_date="2025-01-10", entry_close=100):
     record = alert(action, symbol, signal_date, entry_close)
     record["decision_id"] = record.pop("alert_id")
     return record
+
+
+def forecast(direction, symbol="ABC", signal_date="2025-01-10", entry_close=100):
+    return {
+        "forecast_id": f"{symbol}-{direction}-{signal_date}",
+        "forecast_version": "wave-direction-v1",
+        "symbol": symbol,
+        "signal_date": signal_date,
+        "entry_close": entry_close,
+        "direction": direction,
+        "probability": 0.8 if direction != "WAIT" else None,
+    }
 
 
 class EvaluationTests(unittest.TestCase):
@@ -179,6 +193,56 @@ class EvaluationTests(unittest.TestCase):
             write_scorecard(build_scorecard(outcomes), path)
             payload = json.loads(path.read_text())
         self.assertEqual(payload[0]["model_version"], "test-v1")
+
+    def test_directional_forecasts_score_buy_sell_and_wait_honestly(self):
+        up_symbol, up = prices("UP", 0.01)
+        down_symbol, down = prices("DOWN", -0.01)
+        wait_symbol, wait = prices("WAIT", 0.001)
+        outcomes = evaluate_directional_forecasts(
+            [
+                forecast("BUY", up_symbol, entry_close=up[9].close),
+                forecast("SELL", down_symbol, entry_close=down[9].close),
+                forecast("WAIT", wait_symbol, entry_close=wait[9].close),
+            ],
+            {up_symbol: up, down_symbol: down, wait_symbol: wait},
+        )
+        by_direction = {item["direction"]: item for item in outcomes}
+        self.assertGreater(by_direction["BUY"]["directional_returns"]["21d"], 0)
+        self.assertGreater(by_direction["SELL"]["directional_returns"]["21d"], 0)
+        self.assertIsNone(by_direction["WAIT"]["directional_returns"]["21d"])
+        rows = build_directional_forecast_scorecard(outcomes)
+        buy = next(
+            row
+            for row in rows
+            if row["direction"] == "BUY" and row["horizon"] == "21d"
+        )
+        self.assertEqual(buy["directional_success_rate"], 1.0)
+        self.assertAlmostEqual(buy["brier_score"], 0.04)
+
+    def test_overlapping_directional_forecasts_are_one_episode(self):
+        symbol, history = prices("ABC", 0.001)
+        outcomes = evaluate_directional_forecasts(
+            [
+                forecast("BUY", signal_date="2025-01-10", entry_close=history[9].close),
+                forecast("BUY", signal_date="2025-01-11", entry_close=history[10].close),
+            ],
+            {symbol: history},
+        )
+        self.assertEqual(len(outcomes), 1)
+
+    def test_pending_forecast_scorecard_retains_displayed_probability(self):
+        symbol, history = prices("ABC", 0.001, count=20)
+        outcomes = evaluate_directional_forecasts(
+            [forecast("BUY", entry_close=history[9].close)], {symbol: history}
+        )
+        row = next(
+            item
+            for item in build_directional_forecast_scorecard(outcomes)
+            if item["horizon"] == "21d"
+        )
+        self.assertEqual(row["observations"], 0)
+        self.assertEqual(row["pending"], 1)
+        self.assertEqual(row["mean_probability"], 0.8)
 
 
 if __name__ == "__main__":

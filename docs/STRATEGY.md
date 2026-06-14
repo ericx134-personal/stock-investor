@@ -249,6 +249,19 @@ cross-stock, and concentration gates for either absolute direction or relative
 performance. Thin cells remain visible but are explicitly refused as extra
 precision. Direction and SPY-relative evidence keep separate classifications.
 
+Every direction displayed on the portfolio board is now recorded in a separate
+append-only `wave-direction-v1` ledger. BUY and SELL forecasts retain their
+displayed historical analog rate, selected broad or conditional evidence
+source, horizon, and entry close. WAIT is also retained so coverage and
+selectivity cannot be hidden. Repeated same-direction displays for one symbol
+inside 21 sessions count as one episode.
+
+The direction scorecard evaluates 21-, 63-, and 126-session raw,
+benchmark-relative, and direction-aware returns, plus favorable and adverse
+excursions. It reports forecast episodes, matured observations, pending
+observations, directional success, and Brier score. WAIT has no invented
+directional success or Brier score.
+
 Alert burden is a model-health diagnostic. A model that asks for action review
 on most holdings is likely too noisy even when its individual reasons are
 valid. Future model versions should prove that they improve selectivity and
