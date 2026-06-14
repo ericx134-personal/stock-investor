@@ -11,6 +11,12 @@
 
 ## Development Workflow
 
+Never treat completing a milestone, commit, push, or progress report as a
+stopping condition. Continue immediately with the next highest-value unblocked
+milestone while the work window remains available. Stop only for an explicit
+user request, an external execution limit, or a genuine blocker that cannot be
+resolved locally.
+
 1. Choose the highest-value unblocked milestone from
    `docs/CONTINUOUS_EXECUTION_PLAN.md`, using
    `docs/LONG_HORIZON_ROADMAP.md` for detailed backlog context.

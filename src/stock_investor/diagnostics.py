@@ -12,15 +12,42 @@ from .fundamentals import FundamentalSnapshot
 ACTIONABLE_ACTIONS = {"BUY_CANDIDATE", "ADD_CANDIDATE", "REVIEW", "TRIM_REVIEW"}
 
 
-def infer_price_source(path: str | Path, declared_source: str | None = None) -> dict:
+def infer_price_source(
+    path: str | Path,
+    declared_source: str | None = None,
+    adjustment_type: str | None = None,
+) -> dict:
+    adjustment = (adjustment_type or "unknown").strip().lower()
+    if adjustment not in {"unknown", "none", "split", "all"}:
+        raise ValueError("price adjustment type must be unknown, none, split, or all")
     if declared_source:
-        return {"name": declared_source, "confidence": "DECLARED"}
+        return {
+            "name": declared_source,
+            "confidence": "DECLARED",
+            "adjustment_type": adjustment,
+            "adjustment_confidence": "DECLARED" if adjustment_type else "UNKNOWN",
+        }
     name = Path(path).name.lower()
     if "robinhood" in name:
-        return {"name": "Robinhood MCP export", "confidence": "INFERRED"}
+        return {
+            "name": "Robinhood MCP export",
+            "confidence": "INFERRED",
+            "adjustment_type": adjustment,
+            "adjustment_confidence": "DECLARED" if adjustment_type else "UNKNOWN",
+        }
     if "alpaca" in name:
-        return {"name": "Alpaca Market Data export", "confidence": "INFERRED"}
-    return {"name": "CSV import", "confidence": "UNKNOWN"}
+        return {
+            "name": "Alpaca Market Data export",
+            "confidence": "INFERRED",
+            "adjustment_type": adjustment,
+            "adjustment_confidence": "DECLARED" if adjustment_type else "UNKNOWN",
+        }
+    return {
+        "name": "CSV import",
+        "confidence": "UNKNOWN",
+        "adjustment_type": adjustment,
+        "adjustment_confidence": "DECLARED" if adjustment_type else "UNKNOWN",
+    }
 
 
 def build_price_health_report(
@@ -109,6 +136,8 @@ def build_price_health_report(
                 ),
                 "source": source["name"],
                 "source_confidence": source["confidence"],
+                "adjustment_type": source["adjustment_type"],
+                "adjustment_confidence": source["adjustment_confidence"],
             }
         )
     counts = Counter(row["status"] for row in rows)

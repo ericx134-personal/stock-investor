@@ -303,7 +303,8 @@ PYTHONPATH=src python3 -m stock_investor.cli refresh \
   --account-summary portfolio/robinhood-summary.json \
   --baseline-snapshot data/private/model-v1-snapshot.json \
   --benchmark SPY \
-  --price-source "Robinhood MCP read-only export"
+  --price-source "Robinhood MCP read-only export" \
+  --price-adjustment unknown
 ```
 
 This writes the monitor snapshot, append-only alerts and all-decision ledger,

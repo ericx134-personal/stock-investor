@@ -12,6 +12,12 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## Operating Rules
 
+- Never stop merely because a milestone, commit, push, report, or user-facing
+  reply is complete. In every available work window, immediately continue to
+  the next highest-value unblocked milestone until an external limit,
+  irrecoverable blocker, or explicit user stop instruction is reached.
+- A status update is not a stopping point. After reporting progress, resume
+  implementation in the same turn whenever tool access and budget remain.
 - Complete milestones in dependency order, choosing the highest-value unblocked
   item at each continuation.
 - Treat milestone count as an implementation aid, not a target. Add, merge,
@@ -46,7 +52,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M012 Detect missing expected market sessions.
 - [x] M013 Detect invalid and implausible OHLCV values.
 - [x] M014 Detect suspicious one-session gaps and classify likely corporate actions.
-- [ ] M015 Track adjusted/unadjusted price semantics per provider.
+- [x] M015 Track adjusted/unadjusted price semantics per provider.
 - [ ] M016 Detect splits and preserve cost-basis reconciliation warnings.
 - [ ] M017 Detect symbol changes, mergers, and delistings.
 - [ ] M018 Add deterministic hashes for every input data batch.

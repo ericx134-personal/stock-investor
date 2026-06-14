@@ -702,6 +702,7 @@ def _refresh(
     benchmark_symbol: str | None,
     episode_sessions: int,
     price_source: str | None,
+    price_adjustment: str | None,
 ) -> int:
     manifest = run_refresh(
         positions_path,
@@ -718,6 +719,7 @@ def _refresh(
         benchmark_symbol=benchmark_symbol,
         episode_sessions=episode_sessions,
         price_source=price_source,
+        price_adjustment=price_adjustment,
     )
     print(
         f"Refresh {manifest['status']}: {manifest['position_count']} positions; "
@@ -970,6 +972,10 @@ def main() -> int:
     refresh_parser.add_argument("--benchmark", default="SPY")
     refresh_parser.add_argument("--episode-sessions", type=int, default=21)
     refresh_parser.add_argument("--price-source")
+    refresh_parser.add_argument(
+        "--price-adjustment",
+        choices=("unknown", "none", "split", "all"),
+    )
 
     args = parser.parse_args()
     if args.command == "score":
@@ -1125,6 +1131,7 @@ def main() -> int:
             args.benchmark,
             args.episode_sessions,
             args.price_source,
+            args.price_adjustment,
         )
     return 2
 

@@ -713,3 +713,7 @@ The first close-gap audit flagged `FSLY`, `NVTS`, `OPEN`, and `STEM` for one or
 more greater-than-40% close-to-close moves. Every current event classified as
 an extreme-move candidate; none met the heuristic for a possible corporate
 action. The classification is not confirmation and does not rewrite prices.
+
+The current Robinhood CSV's adjustment semantics are not auditable from the
+file itself. The live baseline is therefore explicitly recorded as `unknown`,
+not assumed to be split- or dividend-adjusted.

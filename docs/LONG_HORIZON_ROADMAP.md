@@ -28,7 +28,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] B001 Add per-symbol latest-price freshness status.
 - [x] B002 Detect missing sessions and suspicious price gaps.
 - [x] B003 Detect stale or implausible OHLCV fields.
-- [ ] B004 Track adjusted versus unadjusted price provenance.
+- [x] B004 Track adjusted versus unadjusted price provenance.
 - [ ] B005 Detect splits and reconcile position cost bases.
 - [ ] B006 Detect symbol changes and delistings.
 - [~] B007 Preserve provider and retrieval timestamps per data batch.

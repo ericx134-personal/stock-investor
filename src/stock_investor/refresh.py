@@ -114,6 +114,7 @@ def run_refresh(
     benchmark_symbol: str | None = "SPY",
     episode_sessions: int = 21,
     price_source: str | None = None,
+    price_adjustment: str | None = None,
 ) -> dict:
     """Refresh all read-only decision-support artifacts, writing the manifest last."""
     started_at = datetime.now(timezone.utc)
@@ -258,7 +259,7 @@ def run_refresh(
         prices,
         held_symbols,
         as_of=date.today(),
-        source=infer_price_source(prices_path, price_source),
+        source=infer_price_source(prices_path, price_source, price_adjustment),
         expected_sessions={
             item.date for item in prices.get(benchmark_symbol or "", [])
         },

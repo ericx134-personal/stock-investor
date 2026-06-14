@@ -308,6 +308,11 @@ move with a normal intraday range is classified as a possible corporate-action
 candidate; otherwise it is classified as an extreme-move candidate. These are
 review labels only, not automatic corrections.
 
+Price provenance separately records adjustment semantics as `none`, `split`,
+`all`, or `unknown`. The current Robinhood CSV is explicitly marked unknown
+because the exported file does not retain an auditable adjustment declaration.
+No downstream component may silently assume a stronger adjustment guarantee.
+
 ### Model V2 Selectivity Experiment
 
 `decision-support-v2` is an experimental candidate, not the promoted default.

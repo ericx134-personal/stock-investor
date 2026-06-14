@@ -61,6 +61,11 @@ class DiagnosticTests(unittest.TestCase):
             infer_price_source("prices.csv", "licensed-provider")["confidence"],
             "DECLARED",
         )
+        self.assertEqual(report["source"]["adjustment_type"], "unknown")
+        self.assertEqual(report["source"]["adjustment_confidence"], "UNKNOWN")
+        declared_adjustment = infer_price_source("prices.csv", adjustment_type="all")
+        self.assertEqual(declared_adjustment["adjustment_type"], "all")
+        self.assertEqual(declared_adjustment["adjustment_confidence"], "DECLARED")
 
     def test_model_health_separates_failures_from_pending_evidence(self):
         summary = build_model_health_summary(
