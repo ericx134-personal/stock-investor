@@ -318,6 +318,10 @@ normal intraday range, are marked `POSSIBLE_SPLIT`. The system emits a
 cost-basis reconciliation warning but never changes position quantity or
 average cost automatically.
 
+Every complete refresh fingerprints the exact positions and prices inputs with
+SHA-256 and byte counts in `input-integrity.json`. This supports deterministic
+reproduction and prevents a reused filename from obscuring changed inputs.
+
 ### Model V2 Selectivity Experiment
 
 `decision-support-v2` is an experimental candidate, not the promoted default.

@@ -64,7 +64,14 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("direction_forecast_scorecard", manifest["artifacts"])
         self.assertIn("model_health", manifest["artifacts"])
         self.assertIn("price_health", manifest["artifacts"])
+        self.assertIn("input_integrity", manifest["artifacts"])
         self.assertEqual(manifest["model_health"]["schema_version"], "model-health-v1")
+        self.assertEqual(manifest["input_integrity"]["schema_version"], "input-integrity-v1")
+        self.assertEqual(len(manifest["input_integrity"]["prices"]["sha256"]), 64)
+        self.assertEqual(
+            first["input_integrity"]["prices"]["sha256"],
+            second["input_integrity"]["prices"]["sha256"],
+        )
         self.assertEqual(manifest["price_source"]["confidence"], "UNKNOWN")
         self.assertEqual(sum(manifest["price_health_status_counts"].values()), 1)
         self.assertIn(manifest["status"], {"BLOCKED", "DEGRADED", "PENDING", "READY"})

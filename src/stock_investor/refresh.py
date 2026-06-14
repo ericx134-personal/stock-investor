@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections import Counter
 from dataclasses import asdict
 from datetime import date, datetime, timezone
@@ -64,6 +65,16 @@ def _write_json(payload: object, path: Path) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def _file_fingerprint(path: str | Path) -> dict:
+    source = Path(path)
+    content = source.read_bytes()
+    return {
+        "path": str(source),
+        "bytes": len(content),
+        "sha256": hashlib.sha256(content).hexdigest(),
+    }
+
+
 def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
     slug = model_version.replace("decision-support-", "model-")
     return {
@@ -78,6 +89,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "diagnostic": output_dir / f"{slug}-diagnostic.json",
         "model_health": output_dir / "model-health.json",
         "price_health": output_dir / "price-health.json",
+        "input_integrity": output_dir / "input-integrity.json",
         "coverage": output_dir / "fundamental-coverage.json",
         "kline_history": output_dir / "kline-history.jsonl",
         "kline_outcomes": output_dir / "kline-outcomes.json",
@@ -123,6 +135,12 @@ def run_refresh(
     positions = load_positions(positions_path)
     held_symbols = {position.symbol for position in positions if position.shares > 0}
     prices = load_prices(prices_path)
+    input_integrity = {
+        "schema_version": "input-integrity-v1",
+        "positions": _file_fingerprint(positions_path),
+        "prices": _file_fingerprint(prices_path),
+    }
+    _write_json(input_integrity, paths["input_integrity"])
     fundamentals = (
         load_fundamentals(fundamentals_path)
         if fundamentals_path and Path(fundamentals_path).exists()
@@ -352,6 +370,7 @@ def run_refresh(
         "missing_price_symbols": missing_prices,
         "price_health_status_counts": price_health["status_counts"],
         "price_source": price_health["source"],
+        "input_integrity": input_integrity,
         "symbols_with_missing_sessions": price_health["symbols_with_missing_sessions"],
         "symbols_with_suspicious_ohlcv": price_health["symbols_with_suspicious_ohlcv"],
         "symbols_with_suspicious_close_gaps": price_health["symbols_with_suspicious_close_gaps"],

@@ -311,7 +311,8 @@ This writes the monitor snapshot, append-only alerts and all-decision ledger,
 K-line and structural-wave observations, portfolio-risk history, forward
 outcomes, scorecards, diagnostics, the machine-readable `model-health.json`
 gate summary, per-symbol `price-health.json` freshness/provenance report,
-comparison, dashboard, and finally
+deterministic `input-integrity.json` SHA-256 fingerprints, comparison,
+dashboard, and finally
 `refresh-manifest.json`. The manifest is written last so an interrupted run
 cannot appear current.
 

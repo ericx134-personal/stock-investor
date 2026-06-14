@@ -32,7 +32,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] B005 Detect splits and reconcile position cost bases.
 - [ ] B006 Detect symbol changes and delistings.
 - [~] B007 Preserve provider and retrieval timestamps per data batch.
-- [ ] B008 Add deterministic price-file content hashes.
+- [x] B008 Add deterministic price-file content hashes.
 - [ ] B009 Add data-quality scorecards by symbol.
 - [ ] B010 Block graphical conclusions when required chart data is invalid.
 
