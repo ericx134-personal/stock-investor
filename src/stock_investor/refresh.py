@@ -259,6 +259,10 @@ def run_refresh(
         held_symbols,
         as_of=date.today(),
         source=infer_price_source(prices_path, price_source),
+        expected_sessions={
+            item.date for item in prices.get(benchmark_symbol or "", [])
+        },
+        expected_session_source=benchmark_symbol,
     )
     _write_json(price_health, paths["price_health"])
     kline_ready = sum(
@@ -347,6 +351,7 @@ def run_refresh(
         "missing_price_symbols": missing_prices,
         "price_health_status_counts": price_health["status_counts"],
         "price_source": price_health["source"],
+        "symbols_with_missing_sessions": price_health["symbols_with_missing_sessions"],
         "action_counts": dict(sorted(actions.items())),
         "actionable_rate": diagnostic["actionable_rate"],
         "data_review_rate": diagnostic["data_review_rate"],

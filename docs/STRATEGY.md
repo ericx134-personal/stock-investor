@@ -293,6 +293,11 @@ history length, OHLCV completeness, and price-source provenance. Explicit
 marked inferred or unknown. Fresh prices and complete K-line data remain
 separate concepts.
 
+Missing-session diagnostics use the latest 252 observed SPY trading dates as
+the expected-session calendar. Each held symbol is compared only from its first
+available date through its latest date. If the benchmark calendar is missing,
+the system refuses to claim session completeness.
+
 ### Model V2 Selectivity Experiment
 
 `decision-support-v2` is an experimental candidate, not the promoted default.

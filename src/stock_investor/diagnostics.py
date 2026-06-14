@@ -29,8 +29,11 @@ def build_price_health_report(
     *,
     as_of: date,
     source: dict,
+    expected_sessions: set[date] | None = None,
+    expected_session_source: str | None = None,
     fresh_days: int = 7,
 ) -> dict:
+    recent_expected = set(sorted(expected_sessions or ())[-252:])
     rows = []
     for symbol in sorted(symbols):
         history = prices.get(symbol, [])
@@ -48,6 +51,13 @@ def build_price_health_report(
             if latest is None
             else "FRESH" if age_days is not None and age_days <= fresh_days else "STALE"
         )
+        observed_dates = {item.date for item in history}
+        relevant_expected = {
+            session
+            for session in recent_expected
+            if latest is not None and history[0].date <= session <= latest.date
+        }
+        missing_sessions = sorted(relevant_expected - observed_dates)
         rows.append(
             {
                 "symbol": symbol,
@@ -56,6 +66,14 @@ def build_price_health_report(
                 "age_calendar_days": age_days,
                 "history_rows": len(history),
                 "ohlcv_coverage_rate": ohlcv_rows / len(history) if history else 0.0,
+                "expected_session_count": len(relevant_expected),
+                "missing_session_count": len(missing_sessions),
+                "missing_session_dates": [item.isoformat() for item in missing_sessions[-10:]],
+                "session_coverage_rate": (
+                    1 - len(missing_sessions) / len(relevant_expected)
+                    if relevant_expected
+                    else None
+                ),
                 "source": source["name"],
                 "source_confidence": source["confidence"],
             }
@@ -66,7 +84,13 @@ def build_price_health_report(
         "as_of": as_of.isoformat(),
         "freshness_threshold_calendar_days": fresh_days,
         "source": source,
+        "expected_session_source": expected_session_source,
+        "expected_session_count": len(recent_expected),
+        "expected_session_analysis_available": bool(recent_expected),
         "status_counts": dict(sorted(counts.items())),
+        "symbols_with_missing_sessions": [
+            row["symbol"] for row in rows if row["missing_session_count"] > 0
+        ],
         "all_held_symbols_fresh": bool(rows) and all(row["status"] == "FRESH" for row in rows),
         "symbols": rows,
     }

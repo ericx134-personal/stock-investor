@@ -25,15 +25,29 @@ def record(symbol, action, reasons):
 class DiagnosticTests(unittest.TestCase):
     def test_price_health_reports_each_symbol_and_honest_source_confidence(self):
         report = build_price_health_report(
-            {"A": [Price(date(2026, 1, 9), 10, 9, 11, 8, 100)]},
+            {
+                "A": [
+                    Price(date(2026, 1, 7), 9, 8, 10, 7, 90),
+                    Price(date(2026, 1, 9), 10, 9, 11, 8, 100),
+                ]
+            },
             {"A", "B"},
             as_of=date(2026, 1, 10),
             source=infer_price_source("robinhood-prices.csv"),
+            expected_sessions={
+                date(2026, 1, 7),
+                date(2026, 1, 8),
+                date(2026, 1, 9),
+            },
+            expected_session_source="SPY",
         )
         self.assertEqual(report["status_counts"], {"FRESH": 1, "MISSING": 1})
         self.assertFalse(report["all_held_symbols_fresh"])
         self.assertEqual(report["symbols"][0]["ohlcv_coverage_rate"], 1)
         self.assertEqual(report["source"]["confidence"], "INFERRED")
+        self.assertEqual(report["symbols"][0]["missing_session_count"], 1)
+        self.assertEqual(report["symbols"][0]["missing_session_dates"], ["2026-01-08"])
+        self.assertEqual(report["symbols_with_missing_sessions"], ["A"])
         self.assertEqual(
             infer_price_source("prices.csv", "licensed-provider")["confidence"],
             "DECLARED",

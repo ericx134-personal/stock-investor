@@ -699,3 +699,7 @@ Freshness does not imply complete chart data. `SPCX` is fresh but has 0% full
 OHLCV coverage in the current file, so downstream K-line conclusions remain
 unavailable for it. Expected-market-session gap detection remains a separate
 next milestone.
+
+Using the latest 252 observed SPY sessions as the expected market calendar, the
+current 27 held symbols have no missing expected sessions. This does not test
+for suspicious price gaps or invalid bars; those remain separate diagnostics.

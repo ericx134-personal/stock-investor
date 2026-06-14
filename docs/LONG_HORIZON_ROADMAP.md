@@ -26,7 +26,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 ## B. Data Integrity
 
 - [x] B001 Add per-symbol latest-price freshness status.
-- [ ] B002 Detect missing sessions and suspicious price gaps.
+- [~] B002 Detect missing sessions and suspicious price gaps.
 - [ ] B003 Detect stale or implausible OHLCV fields.
 - [ ] B004 Track adjusted versus unadjusted price provenance.
 - [ ] B005 Detect splits and reconcile position cost bases.
