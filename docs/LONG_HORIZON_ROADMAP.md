@@ -133,7 +133,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [ ] J005 Add multiple-testing ledger for every research experiment.
 - [ ] J006 Add false-discovery warnings after repeated experiments.
 - [ ] J007 Add walk-forward train/development/test partitions.
-- [ ] J008 Add symbol-level leave-one-out robustness checks.
+- [x] J008 Add symbol-level leave-one-out robustness checks.
 - [ ] J009 Add time-period stability checks.
 - [ ] J010 Define formal promotion and retirement gates for models.
 

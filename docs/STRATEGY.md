@@ -207,8 +207,9 @@ It leads with a large color-coded BUY/SELL/WAIT badge and the matching
 historical-wave directional rate, then close, gain/loss, and weight. BUY or
 SELL requires the pooled 95% absolute-direction interval and per-symbol
 positive-mean-return breadth interval to agree, at least 10 observations across
-eight symbols, and no symbol above 25% of the sample. Otherwise the board
-shows WAIT. The percentage is an exploratory analog rate, not a calibrated
+eight symbols, no symbol above 25% of the sample, and the same direction after
+removing every contributing symbol one at a time. Otherwise the board shows
+WAIT. The percentage is an exploratory analog rate, not a calibrated
 probability.
 Holding evidence opens in a side panel; research tables and model-health
 diagnostics remain behind separate tabs so the main portfolio view stays
@@ -249,8 +250,14 @@ cross-stock, and concentration gates for either absolute direction or relative
 performance. Thin cells remain visible but are explicitly refused as extra
 precision. Direction and SPY-relative evidence keep separate classifications.
 
+The v2 direction gate adds a leave-one-symbol-out requirement. It removes each
+contributing symbol and recomputes the full pooled, breadth, and concentration
+classification. A BUY or SELL survives only when every removal retains the
+same direction. The prior `wave-direction-v1` ledger remains immutable;
+forecasts under this stricter rule use `wave-direction-v2`.
+
 Every direction displayed on the portfolio board is now recorded in a separate
-append-only `wave-direction-v1` ledger. BUY and SELL forecasts retain their
+append-only, versioned direction ledger. BUY and SELL forecasts retain their
 displayed historical analog rate, selected broad or conditional evidence
 source, horizon, and entry close. WAIT is also retained so coverage and
 selectivity cannot be hidden. Repeated same-direction displays for one symbol

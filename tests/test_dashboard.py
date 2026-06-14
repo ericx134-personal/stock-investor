@@ -30,7 +30,8 @@ class DashboardTests(unittest.TestCase):
             )
             direction_scorecard = Path(directory) / "direction-scorecard.json"
             direction_scorecard.write_text(
-                '[{"direction":"BUY","horizon":"21d","forecast_episodes":3,'
+                '[{"forecast_version":"wave-direction-v1","direction":"BUY",'
+                '"horizon":"21d","forecast_episodes":3,'
                 '"observations":1,"pending":2,"mean_probability":0.8,'
                 '"directional_success_rate":1.0,"brier_score":0.04}]'
             )
@@ -56,6 +57,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("WAIT is folded by default", page)
         self.assertIn("All-Decision Forward Evidence", page)
         self.assertIn("Displayed Direction Forecast Validation", page)
+        self.assertIn("wave-direction-v1", page)
         self.assertIn("<td>3</td><td>1</td><td>2</td>", page)
         self.assertIn("Brier score", page)
         self.assertIn("Includes HOLD and ordinary REVIEW decisions", page)
@@ -235,6 +237,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('id="holding-detail-0" class="holding-detail" hidden', page)
         self.assertIn("not a promoted prediction model", page)
         self.assertIn("Conditional Wave Precision Audit", page)
+        self.assertIn("Leave-one-symbol-out", page)
         self.assertIn("Conditional precision refused", page)
         self.assertIn("<strong>BUY</strong><b>70%</b>", page)
         self.assertIn("robust direction evidence", page)

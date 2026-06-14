@@ -12,8 +12,8 @@ from .data import Price
 
 WAVE_FEATURE_VERSION = "wave-v1"
 WAVE_EXPERIMENT_VERSION = "wave-walk-forward-v1"
-WAVE_CONDITIONAL_VERSION = "wave-conditional-v1"
-WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v1"
+WAVE_CONDITIONAL_VERSION = "wave-conditional-v2"
+WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v2"
 WAVE_OUTCOME_WINDOWS = (21, 63, 126)
 MIN_WAVE_HISTORY = 126
 MIN_REVERSAL = 0.08
@@ -73,6 +73,7 @@ def classify_wave_walk_forward_evidence(row: dict) -> str:
         < MIN_ROBUST_SYMBOLS
         or float(row.get("top_symbol_observation_share") or 1)
         > MAX_ROBUST_SYMBOL_SHARE
+        or row.get("relative_leave_one_out_stable") is False
     ):
         return "INCONCLUSIVE"
     pooled_low = row.get("beat_benchmark_ci_low")
@@ -104,6 +105,7 @@ def classify_wave_directional_evidence(row: dict) -> str:
         < MIN_ROBUST_SYMBOLS
         or float(row.get("top_symbol_return_observation_share") or 1)
         > MAX_ROBUST_SYMBOL_SHARE
+        or row.get("directional_leave_one_out_stable") is False
     ):
         return "WAIT"
     pooled_low = row.get("positive_rate_ci_low")
@@ -455,7 +457,9 @@ def build_wave_walk_forward_outcomes(
     return outcomes
 
 
-def _walk_forward_scorecard_row(values: list[dict], dimensions: dict) -> dict:
+def _walk_forward_scorecard_row(
+    values: list[dict], dimensions: dict, include_leave_one_out: bool = True
+) -> dict:
     returns = [float(item["forward_return"]) for item in values]
     excess = [
         float(item["excess_return"])
@@ -544,6 +548,63 @@ def _walk_forward_scorecard_row(values: list[dict], dimensions: dict) -> dict:
     }
     row["evidence_classification"] = classify_wave_walk_forward_evidence(row)
     row["directional_evidence_classification"] = classify_wave_directional_evidence(row)
+    if include_leave_one_out:
+        directional_classification = row["directional_evidence_classification"]
+        relative_classification = row["evidence_classification"]
+        leave_one_out_rows = []
+        for symbol in sorted({item["symbol"] for item in values}):
+            remaining = [item for item in values if item["symbol"] != symbol]
+            leave_one_out_rows.append(
+                _walk_forward_scorecard_row(remaining, dimensions, False)
+                if remaining
+                else {
+                    "directional_evidence_classification": "WAIT",
+                    "evidence_classification": "INCONCLUSIVE",
+                }
+            )
+        directional_matches = sum(
+            item["directional_evidence_classification"] == directional_classification
+            for item in leave_one_out_rows
+        )
+        relative_matches = sum(
+            item["evidence_classification"] == relative_classification
+            for item in leave_one_out_rows
+        )
+        row.update(
+            {
+                "directional_pre_leave_one_out_classification": (
+                    directional_classification
+                ),
+                "relative_pre_leave_one_out_classification": relative_classification,
+                "leave_one_out_symbols": len(leave_one_out_rows),
+                "directional_leave_one_out_matches": directional_matches,
+                "directional_leave_one_out_rate": (
+                    directional_matches / len(leave_one_out_rows)
+                    if leave_one_out_rows
+                    else None
+                ),
+                "directional_leave_one_out_stable": (
+                    directional_matches == len(leave_one_out_rows)
+                    if leave_one_out_rows
+                    else False
+                ),
+                "relative_leave_one_out_matches": relative_matches,
+                "relative_leave_one_out_rate": (
+                    relative_matches / len(leave_one_out_rows)
+                    if leave_one_out_rows
+                    else None
+                ),
+                "relative_leave_one_out_stable": (
+                    relative_matches == len(leave_one_out_rows)
+                    if leave_one_out_rows
+                    else False
+                ),
+            }
+        )
+        row["evidence_classification"] = classify_wave_walk_forward_evidence(row)
+        row["directional_evidence_classification"] = (
+            classify_wave_directional_evidence(row)
+        )
     return row
 
 

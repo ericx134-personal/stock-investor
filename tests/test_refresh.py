@@ -74,6 +74,8 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("INCONCLUSIVE", manifest["conditional_wave_evidence_counts"])
         self.assertIn("WAIT", manifest["historical_wave_directional_counts"])
         self.assertIn("WAIT", manifest["conditional_wave_directional_counts"])
+        self.assertIn("historical_directional_leave_one_out_downgrades", manifest)
+        self.assertIn("conditional_directional_leave_one_out_downgrades", manifest)
         self.assertIn("No SEC fundamental snapshots", " ".join(manifest["warnings"]))
 
     def test_refresh_writes_model_comparison_when_baseline_exists(self):

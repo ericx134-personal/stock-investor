@@ -222,11 +222,12 @@ The dashboard opens as a compact all-holdings portfolio board led by a large
 green `BUY`, red `SELL`, or amber `WAIT` badge. BUY/SELL appears only when the
 pooled 95% directional interval and cross-stock absolute-return breadth agree,
 with at least 10 observations across eight symbols and no symbol above 25% of
-the sample. The percentage is the matching historical wave's directional rate,
-not a guaranteed probability.
+the sample. The direction must also survive removing each contributing symbol
+and recomputing the evidence. The percentage is the matching historical wave's
+directional rate, not a guaranteed probability.
 
-Every displayed BUY, SELL, and WAIT is also written to an append-only
-`wave-direction-v1` ledger by the complete refresh. The direction scorecard
+Every displayed BUY, SELL, and WAIT is also written to an append-only,
+versioned direction ledger by the complete refresh. The direction scorecard
 evaluates de-duplicated episodes after 21, 63, and 126 sessions and reports
 matured versus pending observations, directional success, excursions, and
 Brier score. WAIT is retained for coverage auditing without inventing a

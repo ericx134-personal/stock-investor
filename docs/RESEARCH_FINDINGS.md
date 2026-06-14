@@ -134,8 +134,9 @@ engagement rather than decision quality.
 | `kline-v1` | Observational | Append-only OHLCV and chart-state features |
 | `wave-v1` | Observational | Causal confirmed-pivot structural waves |
 | `wave-walk-forward-v1` | Exploratory replay | Historical non-overlapping wave outcomes |
-| `wave-conditional-v1` | Exploratory audit | Predeclared wave-age and magnitude conditions |
-| `wave-direction-v1` | Active observational ledger | Immutable displayed BUY/SELL/WAIT forecasts and forward scorecard |
+| `wave-conditional-v2` | Current exploratory audit | Predeclared conditions plus leave-one-symbol-out gate |
+| `wave-direction-v1` | Frozen observational ledger | Original displayed forecasts preserved for forward evaluation |
+| `wave-direction-v2` | Current observational ledger | Displayed forecasts requiring leave-one-symbol-out stability |
 
 None is promoted as a proven predictive model.
 
@@ -326,7 +327,7 @@ Interpretation:
 It must be replicated on a broader point-in-time universe and on future live
 signals before promotion.
 
-### Conditional wave finding
+### Conditional wave finding and subsequent rejection
 
 The conditional audit uses buckets defined before outcome review:
 
@@ -335,7 +336,8 @@ The conditional audit uses buckets defined before outcome review:
 | Wave age | Early: <=10 sessions; Mature: 11-25; Extended: >25 |
 | Wave magnitude | Developing: <1.5x reversal threshold; Established: 1.5-3x; Extended: >3x |
 
-One of 64 conditional cells passed the strict absolute BUY gate:
+Under the original v1 gate, one of 64 conditional cells passed the strict
+absolute BUY gate:
 
 | Field | Aggregate result |
 | --- | --- |
@@ -359,6 +361,16 @@ Interpretation:
 - Conditional evidence can reveal useful distinctions hidden by a broad
   regime, but only when the same strict gates pass.
 
+The later leave-one-symbol-out audit rejected this BUY. Removing each
+contributing symbol in turn retained BUY status in only 3 of 14 runs, a 21.4%
+stability rate. The original pooled and cross-symbol intervals were real, but
+the cell sat too close to the minimum breadth and confidence thresholds to
+survive modest universe changes.
+
+The original `wave-direction-v1` BUY forecasts remain immutable for honest
+forward evaluation. The current v2 gate downgrades the pattern to WAIT and
+requires 100% leave-one-symbol-out classification stability.
+
 ### Negative wave findings
 
 The negative results are more important than the two passing cells:
@@ -373,10 +385,14 @@ The negative results are more important than the two passing cells:
 
 This shows why ranking by raw win rate alone would be misleading.
 
+After leave-one-symbol-out gating, all conditional cells are WAIT. The broad
+near-resistance SELL remains supported after removing each of its 16
+contributing symbols.
+
 ### Current live-board mapping
 
 When the exploratory wave evidence was mapped back to the 27 current holdings,
-the board produced:
+the original v1 board produced:
 
 | Direction | Holdings |
 | --- | ---: |
@@ -387,6 +403,10 @@ the board produced:
 The four directional labels inherit the exploratory cells above. They are not
 independent forecasts, and they are not yet validated by future live outcomes.
 The 23 WAIT results are evidence that the gate is behaving conservatively.
+
+After the leave-one-symbol-out v2 gate, the current board becomes 0 BUY,
+1 SELL, and 26 WAIT. This is a deliberate loss of apparent opportunity in
+exchange for evidence that is less dependent on the selected symbol universe.
 
 ## Fundamental Research Findings
 
@@ -575,15 +595,15 @@ These refusals are part of the research output, not limitations to hide.
 
 | Claim | Current status | Reason |
 | --- | --- | --- |
-| Near-resistance advancing waves tend to fall over 21 sessions | Exploratory support | Passed strict aggregate gate in one private-universe cell |
-| Mature, developing advancing waves tend to rise over 21 sessions | Exploratory support | Passed strict conditional aggregate gate |
+| Near-resistance advancing waves tend to fall over 21 sessions | Exploratory support | Passed aggregate and 16-of-16 leave-one-symbol-out gates |
+| Mature, developing advancing waves tend to rise over 21 sessions | Rejected as fragile | Only 3 of 14 leave-one-symbol-out runs retained BUY |
 | Conditional BUY cell beats SPY | Inconclusive | Relative evidence gate did not pass |
 | K-line regimes predict forward returns | Unproven | No mature live outcomes |
 | v3 improves investment outcomes over v1 | Unproven | No mature forward comparison |
 | v3 reduces unsupported actionability | Supported operationally | More uncertain states become DATA_REVIEW |
 | Current base model is selective enough | Refuted operationally | 100% attention rate and 0% HOLD rate |
 | Current fundamental pipeline supports live BUY/ADD | Refuted by coverage | 0% accepted live coverage |
-| Strict gates make WAIT the dominant output | Supported operationally | 23 of 27 live mappings are WAIT |
+| Strict gates make WAIT the dominant output | Supported operationally | v2 maps 26 of 27 current holdings to WAIT |
 
 ## Reproducible Public Workflow
 
@@ -605,8 +625,8 @@ should use synthetic, licensed, or personally authorized data.
 
 ### Immediate: prediction accountability
 
-1. Accumulate mature `wave-direction-v1` outcomes without changing its frozen
-   forecast definition.
+1. Accumulate mature versioned direction outcomes without rewriting frozen
+   forecast definitions.
 2. Report invalid forecasts separately from matured and pending forecasts.
 3. Add displayed-rate calibration curves and probability buckets.
 4. Measure false-positive BUY and SELL rates.
@@ -615,11 +635,10 @@ should use synthetic, licensed, or personally authorized data.
 ### Validation expansion
 
 1. Replay the frozen wave rules on a broader point-in-time universe.
-2. Run leave-one-symbol-out checks to find dependence on individual names.
-3. Test stability across bull, bear, sideways, and high-volatility periods.
-4. Compare wave rules against simpler moving-average baselines.
-5. Create a multiple-testing register before adding more conditions.
-6. Freeze a wave-v2 candidate and evaluate it on an untouched holdout.
+2. Test stability across bull, bear, sideways, and high-volatility periods.
+3. Compare wave rules against simpler moving-average baselines.
+4. Create a multiple-testing register before adding more conditions.
+5. Freeze a wave-v2 candidate and evaluate it on an untouched holdout.
 
 ### Data quality and fundamentals
 

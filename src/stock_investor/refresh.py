@@ -327,6 +327,16 @@ def run_refresh(
         "historical_wave_observations": len(wave_experiment_outcomes),
         "historical_wave_scorecard_rows": len(wave_experiment_scorecard),
         "conditional_wave_scorecard_rows": len(wave_conditional_scorecard),
+        "historical_directional_leave_one_out_downgrades": sum(
+            row.get("directional_pre_leave_one_out_classification")
+            != row.get("directional_evidence_classification")
+            for row in wave_experiment_scorecard
+        ),
+        "conditional_directional_leave_one_out_downgrades": sum(
+            row.get("directional_pre_leave_one_out_classification")
+            != row.get("directional_evidence_classification")
+            for row in wave_conditional_scorecard
+        ),
         "direction_forecast_records": len(direction_forecast_records),
         "direction_forecast_episode_count": len(direction_forecast_outcomes),
         "current_direction_forecast_counts": dict(

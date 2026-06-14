@@ -727,6 +727,7 @@ def build_dashboard(
         f"<td>{_rate_interval(historical.get('symbol_positive_excess_rate'), historical.get('symbol_positive_excess_ci_low'), historical.get('symbol_positive_excess_ci_high'))}</td>"
         f"<td>{_percent(historical.get('median_return'))}</td>"
         f"<td>{_percent(historical.get('mean_max_gain'))} / {_percent(historical.get('mean_max_loss'))}</td>"
+        f"<td>{_optional_percent(historical.get('directional_leave_one_out_rate'))}</td>"
         f"<td>{int(historical.get('benchmark_symbols', 0))} symbols · {int(historical['observations'])} observations</td></tr>"
         for record, wave, historical in sorted(
             current_analogs,
@@ -736,7 +737,7 @@ def build_dashboard(
                 item[0].get("symbol", ""),
             ),
         )
-    ) or '<tr><td colspan="10">No current holdings have historical wave analog evidence.</td></tr>'
+    ) or '<tr><td colspan="11">No current holdings have historical wave analog evidence.</td></tr>'
 
     risk_items = "".join(
         f"<li><b>{html.escape(record.get('severity', ''))}</b> "
@@ -841,6 +842,7 @@ def build_dashboard(
         f"<td>{_percent(row['median_return'])}</td>"
         f"<td>{_percent(row['mean_max_gain'])}</td>"
         f"<td>{_percent(row['mean_max_loss'])}</td>"
+        f"<td>{_optional_percent(row.get('directional_leave_one_out_rate'))}</td>"
         f"<td>{int(row.get('benchmark_symbols', 0))} symbols · {int(row['observations'])} observations · top share {_optional_percent(row.get('top_symbol_observation_share'))}</td></tr>"
         for row in sorted(
             wave_experiment_scorecard,
@@ -854,7 +856,7 @@ def build_dashboard(
                 -float(row["positive_rate"]),
             ),
         )
-    ) or '<tr><td colspan="11">No historical wave experiment outcomes available.</td></tr>'
+    ) or '<tr><td colspan="12">No historical wave experiment outcomes available.</td></tr>'
     conditional_wave_rows = "".join(
         f"<tr><td>{html.escape(_historical_stance(row))}</td>"
         f"<td>{html.escape(_directional_stance(row))}</td>"
@@ -864,6 +866,7 @@ def build_dashboard(
         f"<td>{html.escape(row['wave_magnitude_bucket'])}</td>"
         f"<td>{_rate_interval(row.get('beat_benchmark_rate'), row.get('beat_benchmark_ci_low'), row.get('beat_benchmark_ci_high'))}</td>"
         f"<td>{_rate_interval(row.get('symbol_positive_excess_rate'), row.get('symbol_positive_excess_ci_low'), row.get('symbol_positive_excess_ci_high'))}</td>"
+        f"<td>{_optional_percent(row.get('directional_leave_one_out_rate'))}</td>"
         f"<td>{int(row.get('benchmark_symbols', 0))} symbols · {int(row['observations'])} observations</td></tr>"
         for row in sorted(
             wave_conditional_scorecard,
@@ -875,9 +878,10 @@ def build_dashboard(
                 row.get("regime", ""),
             ),
         )
-    ) or '<tr><td colspan="9">No conditional wave evidence available.</td></tr>'
+    ) or '<tr><td colspan="10">No conditional wave evidence available.</td></tr>'
     direction_validation_rows = "".join(
-        f"<tr><td>{html.escape(row['direction'])}</td>"
+        f"<tr><td>{html.escape(row['forecast_version'])}</td>"
+        f"<td>{html.escape(row['direction'])}</td>"
         f"<td>{html.escape(row['horizon'])}</td>"
         f"<td>{int(row['forecast_episodes'])}</td>"
         f"<td>{int(row['observations'])}</td>"
@@ -886,7 +890,7 @@ def build_dashboard(
         f"<td>{_optional_percent(row.get('directional_success_rate'))}</td>"
         f"<td>{_optional_number(row.get('brier_score'))}</td></tr>"
         for row in direction_forecast_scorecard
-    ) or '<tr><td colspan="8">Displayed forecasts are now recorded; no scorecard rows yet.</td></tr>'
+    ) or '<tr><td colspan="9">Displayed forecasts are now recorded; no scorecard rows yet.</td></tr>'
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1004,7 +1008,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 </section>
 <section id="tab-research" class="tab-view" role="tabpanel" hidden>
 <section class="panel"><h2>Displayed Direction Forecast Validation</h2>
-<table><thead><tr><th>Direction</th><th>Horizon</th><th>Episodes</th><th>Matured</th><th>Pending</th><th>Displayed rate</th><th>Directional success</th><th>Brier score</th></tr></thead>
+<table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Episodes</th><th>Matured</th><th>Pending</th><th>Displayed rate</th><th>Directional success</th><th>Brier score</th></tr></thead>
 <tbody>{direction_validation_rows}</tbody></table>
 <p class="note">Every displayed BUY, SELL, and WAIT is retained in an immutable ledger. Daily repeats are de-duplicated into episodes. WAIT is audited for coverage but has no invented directional success or Brier score.</p></section>
 <section class="panel"><h2>All-Decision Forward Evidence</h2>
@@ -1012,15 +1016,15 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <tbody>{decision_evidence_rows}</tbody></table>
 <p class="note">Includes HOLD and ordinary REVIEW decisions from the append-only daily ledger. HOLD is evaluated as remaining long; REVIEW preserves raw and excess outcomes without inventing directional success; DATA REVIEW is excluded from investment-performance claims.</p></section>
 <section class="panel"><h2>Current Wave Analog Ranking</h2>
-<table><thead><tr><th>Symbol</th><th>Direction gate</th><th>Relative evidence</th><th>Current wave</th><th>Horizon</th><th>Beat SPY (95% CI)</th><th>Cross-stock breadth (95% CI)</th><th>Median return</th><th>Mean upside / downside</th><th>Evidence · sample</th></tr></thead>
+<table><thead><tr><th>Symbol</th><th>Direction gate</th><th>Relative evidence</th><th>Current wave</th><th>Horizon</th><th>Beat SPY (95% CI)</th><th>Cross-stock breadth (95% CI)</th><th>Median return</th><th>Mean upside / downside</th><th>Leave-one-symbol-out</th><th>Evidence · sample</th></tr></thead>
 <tbody>{current_wave_rows}</tbody></table>
 <p class="note">Ranks current holdings by the conservative lower bound of the best-supported historical wave analog. “Favorable” or “caution” requires pooled and per-symbol breadth intervals to agree, at least 10 observations across eight symbols, and no symbol above 25% of the sample. This is a research-priority view, not a buy/sell instruction.</p></section>
 <section class="panel"><h2>Historical Wave Experiment</h2>
-<table><thead><tr><th>Wave regime</th><th>Horizon</th><th>Direction gate</th><th>Positive</th><th>Absolute breadth (95% CI)</th><th>Beat SPY (95% CI)</th><th>Relative breadth (95% CI)</th><th>Median return</th><th>Mean max upside</th><th>Mean max downside</th><th>Evidence · sample</th></tr></thead>
+<table><thead><tr><th>Wave regime</th><th>Horizon</th><th>Direction gate</th><th>Positive</th><th>Absolute breadth (95% CI)</th><th>Beat SPY (95% CI)</th><th>Relative breadth (95% CI)</th><th>Median return</th><th>Mean max upside</th><th>Mean max downside</th><th>Leave-one-symbol-out</th><th>Evidence · sample</th></tr></thead>
 <tbody>{wave_experiment_rows}</tbody></table>
 <p class="note">Cross-stock breadth is the share of contributing symbols with positive mean excess return. Each symbol uses causal snapshots and non-overlapping windows within each horizon. Small samples remain visible. This is exploratory in-sample evidence, not a promoted prediction model.</p></section>
 <section class="panel"><h2>Conditional Wave Precision Audit</h2>
-<table><thead><tr><th>Relative evidence</th><th>Direction gate</th><th>Wave regime</th><th>Horizon</th><th>Wave age</th><th>Move magnitude</th><th>Beat SPY (95% CI)</th><th>Cross-stock breadth (95% CI)</th><th>Evidence · sample</th></tr></thead>
+<table><thead><tr><th>Relative evidence</th><th>Direction gate</th><th>Wave regime</th><th>Horizon</th><th>Wave age</th><th>Move magnitude</th><th>Beat SPY (95% CI)</th><th>Cross-stock breadth (95% CI)</th><th>Leave-one-symbol-out</th><th>Evidence · sample</th></tr></thead>
 <tbody>{conditional_wave_rows}</tbody></table>
 <p class="note">Age buckets are predeclared as early (≤10 sessions), mature (11–25), and extended (&gt;25). Move magnitude is normalized by each signal's reversal threshold: developing (&lt;1.5×), established (1.5–3×), and extended (&gt;3×). A conditional view can replace its broad regime analog only when the same strict pooled, cross-stock, and concentration gates pass; otherwise the dashboard explicitly refuses the extra precision.</p></section>
 <section class="panel"><h2>Live Structural Wave Evidence</h2>

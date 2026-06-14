@@ -120,6 +120,8 @@ class WaveTests(unittest.TestCase):
         self.assertIn("symbol_positive_return_ci_low", scorecard[0])
         self.assertIn("symbol_positive_return_ci_high", scorecard[0])
         self.assertIn("directional_evidence_classification", scorecard[0])
+        self.assertIn("directional_leave_one_out_rate", scorecard[0])
+        self.assertIn("relative_leave_one_out_rate", scorecard[0])
         self.assertGreater(scorecard[0]["benchmark_symbols"], 0)
         self.assertLessEqual(
             scorecard[0]["beat_benchmark_ci_low"],
@@ -217,6 +219,41 @@ class WaveTests(unittest.TestCase):
             ),
             "WAIT",
         )
+        self.assertEqual(
+            classify_wave_directional_evidence(
+                {**robust_sell, "directional_leave_one_out_stable": False}
+            ),
+            "WAIT",
+        )
+
+    def test_leave_one_symbol_out_downgrades_fragile_direction(self):
+        outcomes = [
+            {
+                "symbol": f"S{index}",
+                "regime": "Advancing wave",
+                "horizon": "21d",
+                "forward_return": 0.1,
+                "excess_return": 0.05,
+                "max_gain": 0.15,
+                "max_loss": -0.02,
+            }
+            for index in range(8)
+        ]
+        outcomes.extend(
+            {
+                "symbol": f"S{index}",
+                "regime": "Advancing wave",
+                "horizon": "21d",
+                "forward_return": 0.08,
+                "excess_return": 0.04,
+                "max_gain": 0.12,
+                "max_loss": -0.01,
+            }
+            for index in range(8)
+        )
+        row = build_wave_walk_forward_scorecard(outcomes)[0]
+        self.assertFalse(row["directional_leave_one_out_stable"])
+        self.assertEqual(row["directional_evidence_classification"], "WAIT")
 
     def test_directional_forecast_uses_robust_conditional_evidence(self):
         signal = calculate_wave("ABC", wave_history())
