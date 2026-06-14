@@ -5,10 +5,32 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
-from stock_investor.refresh import run_refresh
+from stock_investor.refresh import run_refresh, validate_production_refresh
 
 
 class RefreshTests(unittest.TestCase):
+    def test_production_refresh_requires_private_declared_inputs(self):
+        with self.assertRaisesRegex(ValueError, "private directory"):
+            validate_production_refresh(
+                "data/public",
+                account_summary_path="summary.json",
+                price_source="provider",
+                price_adjustment="unknown",
+            )
+        with self.assertRaisesRegex(ValueError, "declared price source"):
+            validate_production_refresh(
+                "data/private",
+                account_summary_path="summary.json",
+                price_source=None,
+                price_adjustment="unknown",
+            )
+        validate_production_refresh(
+            "data/private",
+            account_summary_path="summary.json",
+            price_source="provider",
+            price_adjustment="unknown",
+        )
+
     def test_refresh_writes_manifest_last_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

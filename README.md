@@ -304,7 +304,8 @@ PYTHONPATH=src python3 -m stock_investor.cli refresh \
   --baseline-snapshot data/private/model-v1-snapshot.json \
   --benchmark SPY \
   --price-source "Robinhood MCP read-only export" \
-  --price-adjustment unknown
+  --price-adjustment unknown \
+  --production-safe
 ```
 
 This writes the monitor snapshot, append-only alerts and all-decision ledger,
@@ -315,6 +316,10 @@ deterministic `input-integrity.json` SHA-256 fingerprints, comparison,
 dashboard, and finally
 `refresh-manifest.json`. The manifest is written last so an interrupted run
 cannot appear current.
+
+`--production-safe` refuses to run unless the output is under a private
+directory and account summary, price source, and adjustment semantics are
+explicitly supplied.
 
 Record your judgment and response without changing the original alert:
 

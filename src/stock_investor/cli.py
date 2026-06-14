@@ -45,7 +45,7 @@ from .monitor import run_monitor, write_alert_history, write_monitor_snapshot
 from .providers.alpaca import fetch_daily_bars, write_prices_csv
 from .providers.robinhood import extract_historicals_from_session, load_historical_response
 from .providers.sec import fetch_company_facts, fetch_submissions, fetch_ticker_ciks
-from .refresh import run_refresh
+from .refresh import run_refresh, validate_production_refresh
 from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk_history
 from .robinhood import (
     import_robinhood_snapshot,
@@ -703,7 +703,17 @@ def _refresh(
     episode_sessions: int,
     price_source: str | None,
     price_adjustment: str | None,
+    production_safe: bool,
 ) -> int:
+    if cash_balance and account_summary_path:
+        raise SystemExit("use either --cash or --account-summary, not both")
+    if production_safe:
+        validate_production_refresh(
+            output_dir,
+            account_summary_path=account_summary_path,
+            price_source=price_source,
+            price_adjustment=price_adjustment,
+        )
     manifest = run_refresh(
         positions_path,
         prices_path,
@@ -976,6 +986,7 @@ def main() -> int:
         "--price-adjustment",
         choices=("unknown", "none", "split", "all"),
     )
+    refresh_parser.add_argument("--production-safe", action="store_true")
 
     args = parser.parse_args()
     if args.command == "score":
@@ -1121,8 +1132,8 @@ def main() -> int:
             args.prices,
             args.output_dir,
             args.model_version,
-            _cash_balance(args.cash, args.account_summary),
-            None,
+            args.cash,
+            args.account_summary,
             args.fundamentals,
             args.risk_policy,
             args.theses,
@@ -1132,6 +1143,7 @@ def main() -> int:
             args.episode_sessions,
             args.price_source,
             args.price_adjustment,
+            args.production_safe,
         )
     return 2
 

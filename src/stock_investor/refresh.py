@@ -75,6 +75,24 @@ def _file_fingerprint(path: str | Path) -> dict:
     }
 
 
+def validate_production_refresh(
+    output_dir: str | Path,
+    *,
+    account_summary_path: str | Path | None,
+    price_source: str | None,
+    price_adjustment: str | None,
+) -> None:
+    output = Path(output_dir)
+    if "private" not in {part.lower() for part in output.parts}:
+        raise ValueError("production-safe refresh output must be under a private directory")
+    if not account_summary_path:
+        raise ValueError("production-safe refresh requires an account summary")
+    if not price_source:
+        raise ValueError("production-safe refresh requires a declared price source")
+    if not price_adjustment:
+        raise ValueError("production-safe refresh requires declared adjustment semantics")
+
+
 def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
     slug = model_version.replace("decision-support-", "model-")
     return {
