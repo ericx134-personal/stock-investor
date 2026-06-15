@@ -306,6 +306,11 @@ Directional success, precision, recall, and false-positive rates carry 95%
 Wilson intervals. The intervals are descriptive uncertainty bounds for matured
 samples; they are not promotion gates by themselves.
 
+Mean return, excess return, direction-aware return, and favorable/adverse
+excursion estimates carry deterministic bootstrap intervals when at least two
+matured observations exist. Single-observation rows intentionally keep those
+intervals empty.
+
 Alert burden is a model-health diagnostic. A model that asks for action review
 on most holdings is likely too noisy even when its individual reasons are
 valid. Future model versions should prove that they improve selectivity and

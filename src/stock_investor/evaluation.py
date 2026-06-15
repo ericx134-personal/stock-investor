@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -26,6 +27,7 @@ MAX_CALIBRATION_GAP = 0.10
 MIN_CLASSIFICATION_OBSERVATIONS = 20
 MIN_CLASSIFICATION_SYMBOLS = 5
 WILSON_Z_95 = 1.959963984540054
+BOOTSTRAP_SAMPLES = 1000
 
 
 @dataclass(frozen=True)
@@ -94,6 +96,20 @@ def wilson_interval(successes: int, observations: int) -> tuple[float | None, fl
         / denominator
     )
     return max(0.0, center - margin), min(1.0, center + margin)
+
+
+def bootstrap_mean_interval(
+    values: list[float], *, samples: int = BOOTSTRAP_SAMPLES, seed: int = 0
+) -> tuple[float | None, float | None]:
+    if len(values) < 2:
+        return None, None
+    generator = random.Random(seed)
+    size = len(values)
+    means = sorted(
+        sum(values[generator.randrange(size)] for _ in range(size)) / size
+        for _ in range(samples)
+    )
+    return means[int(0.025 * (samples - 1))], means[int(0.975 * (samples - 1))]
 
 
 def evaluate_alert_record(
@@ -387,9 +403,30 @@ def build_directional_forecast_scorecard(outcomes: list[dict]) -> list[dict]:
             for item in matured
             if item["directional_returns"][horizon] is not None
         ]
+        favorable_excursions = [
+            float(item["max_favorable_excursion"])
+            for item in matured
+            if item.get("max_favorable_excursion") is not None
+        ]
+        adverse_excursions = [
+            float(item["max_adverse_excursion"])
+            for item in matured
+            if item.get("max_adverse_excursion") is not None
+        ]
         directional_successes = sum(value > 0 for value in directional)
         directional_ci_low, directional_ci_high = wilson_interval(
             directional_successes, len(directional)
+        )
+        mean_return_ci_low, mean_return_ci_high = bootstrap_mean_interval(returns)
+        mean_excess_ci_low, mean_excess_ci_high = bootstrap_mean_interval(excess)
+        mean_directional_ci_low, mean_directional_ci_high = bootstrap_mean_interval(
+            directional
+        )
+        mean_favorable_ci_low, mean_favorable_ci_high = bootstrap_mean_interval(
+            favorable_excursions
+        )
+        mean_adverse_ci_low, mean_adverse_ci_high = bootstrap_mean_interval(
+            adverse_excursions
         )
         probability_pairs = [
             (float(item["probability"]), item["directional_returns"][horizon] > 0)
@@ -432,15 +469,35 @@ def build_directional_forecast_scorecard(outcomes: list[dict]) -> list[dict]:
                     else None
                 ),
                 "mean_return": sum(returns) / len(returns) if returns else None,
+                "mean_return_ci_low": mean_return_ci_low,
+                "mean_return_ci_high": mean_return_ci_high,
                 "positive_rate": (
                     sum(value > 0 for value in returns) / len(returns)
                     if returns
                     else None
                 ),
                 "mean_excess_return": sum(excess) / len(excess) if excess else None,
+                "mean_excess_return_ci_low": mean_excess_ci_low,
+                "mean_excess_return_ci_high": mean_excess_ci_high,
                 "mean_directional_return": (
                     sum(directional) / len(directional) if directional else None
                 ),
+                "mean_directional_return_ci_low": mean_directional_ci_low,
+                "mean_directional_return_ci_high": mean_directional_ci_high,
+                "mean_max_favorable_excursion": (
+                    sum(favorable_excursions) / len(favorable_excursions)
+                    if favorable_excursions
+                    else None
+                ),
+                "mean_max_favorable_excursion_ci_low": mean_favorable_ci_low,
+                "mean_max_favorable_excursion_ci_high": mean_favorable_ci_high,
+                "mean_max_adverse_excursion": (
+                    sum(adverse_excursions) / len(adverse_excursions)
+                    if adverse_excursions
+                    else None
+                ),
+                "mean_max_adverse_excursion_ci_low": mean_adverse_ci_low,
+                "mean_max_adverse_excursion_ci_high": mean_adverse_ci_high,
             }
         )
     return rows

@@ -10,6 +10,7 @@ from stock_investor.evaluation import (
     build_directional_classification_metrics,
     build_forecast_calibration_scorecard,
     build_forecast_calibration_curves,
+    bootstrap_mean_interval,
     build_scorecard,
     evaluate_alerts,
     evaluate_decisions,
@@ -340,6 +341,13 @@ class EvaluationTests(unittest.TestCase):
         self.assertLess(low, 0.8)
         self.assertGreater(high, 0.8)
         self.assertEqual(wilson_interval(0, 0), (None, None))
+
+    def test_bootstrap_mean_interval_is_deterministic_and_requires_two_values(self):
+        self.assertEqual(bootstrap_mean_interval([1.0]), (None, None))
+        self.assertEqual(
+            bootstrap_mean_interval([1.0, 3.0], samples=20, seed=7),
+            bootstrap_mean_interval([1.0, 3.0], samples=20, seed=7),
+        )
 
 
 if __name__ == "__main__":

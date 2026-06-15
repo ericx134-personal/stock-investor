@@ -79,7 +79,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M032 Add calibration curves by BUY and SELL direction.
 - [x] M033 Add precision, recall, false-positive rate, and coverage by direction.
 - [x] M034 Add confidence intervals for all directional success metrics.
-- [ ] M035 Add bootstrap uncertainty for return and excursion metrics.
+- [x] M035 Add bootstrap uncertainty for return and excursion metrics.
 - [ ] M036 Add error cohorts for the largest false BUY and false SELL episodes.
 - [ ] M037 Add probability shrinkage for small samples.
 - [ ] M038 Compare raw, Wilson-lower-bound, and shrunk displayed rates.
