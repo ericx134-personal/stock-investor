@@ -4,6 +4,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .io import atomic_write_text
+
 from .feedback import load_latest_feedback
 
 
@@ -160,6 +162,4 @@ def build_brief(
 
 
 def write_brief(content: str, path: str | Path) -> None:
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(content)
+    atomic_write_text(content, path)

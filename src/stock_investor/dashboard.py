@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .data import Price, load_prices
 from .diagnostics import analyze_alert_burden, load_monitor_records
+from .io import atomic_write_text
 from .kline import classify_kline
 from .wave import (
     classify_wave_directional_evidence,
@@ -1289,6 +1290,4 @@ document.addEventListener("keydown", (event) => {{
 
 
 def write_dashboard(content: str, path: str | Path) -> None:
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(content)
+    atomic_write_text(content, path)

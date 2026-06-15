@@ -42,6 +42,7 @@ from .fundamentals import (
     write_fundamentals,
 )
 from .filings import append_filing_alerts, extract_recent_filings, update_filing_state
+from .io import atomic_write_text
 from .model import MODEL_POLICIES, MODEL_VERSION
 from .monitor import run_monitor, write_alert_history, write_monitor_snapshot
 from .providers.alpaca import fetch_daily_bars, write_prices_csv
@@ -579,9 +580,7 @@ def _import_robinhood(
 def _sanitize_robinhood(input_path: str, output_path: str) -> int:
     payload = json.loads(Path(input_path).read_text())
     sanitized = sanitize_robinhood_snapshot(payload)
-    output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(sanitized, indent=2, sort_keys=True) + "\n")
+    atomic_write_text(json.dumps(sanitized, indent=2, sort_keys=True) + "\n", output_path)
     print(f"Wrote privacy-safe Robinhood snapshot to {output_path}")
     return 0
 
@@ -610,9 +609,7 @@ def _diagnose_alerts(alerts_path: str, output_path: str | None) -> int:
     report = diagnose_alert_file(alerts_path)
     content = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if output_path:
-        output = Path(output_path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(content)
+        atomic_write_text(content, output_path)
         print(f"Wrote alert-burden diagnostic to {output_path}")
     print(content, end="")
     return 0
@@ -630,9 +627,7 @@ def _compare_models(
     report = compare_monitor_files(baseline_path, candidate_path)
     content = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if output_path:
-        output = Path(output_path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(content)
+        atomic_write_text(content, output_path)
         print(f"Wrote model-selectivity comparison to {output_path}")
     print(content, end="")
     return 0
@@ -645,9 +640,7 @@ def _diagnose_fundamentals(
     report = analyze_fundamental_coverage(load_positions(positions_path), fundamentals)
     content = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if output_path:
-        output = Path(output_path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(content)
+        atomic_write_text(content, output_path)
         print(f"Wrote fundamental-coverage diagnostic to {output_path}")
     print(content, end="")
     return 0

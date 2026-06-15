@@ -328,6 +328,11 @@ Every completed refresh appends `refresh-history.jsonl` with duration, status,
 input hashes, and per-artifact byte sizes. The current manifest remains the
 last-written current-state artifact.
 
+All current-state JSON, CSV, text, and dashboard artifacts use same-directory
+temporary files followed by an atomic replace. An interrupted writer therefore
+preserves the previous complete artifact. Append-only forecast, decision,
+risk, feedback, and refresh histories remain append-only.
+
 Check freshness without running analysis:
 
 ```bash

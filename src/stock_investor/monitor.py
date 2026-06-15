@@ -9,6 +9,7 @@ from pathlib import Path
 from .data import Position, Price
 from .fundamentals import FundamentalSnapshot
 from .indicators import TechnicalSignals, calculate_technicals
+from .io import atomic_write_text
 from .model import MODEL_VERSION, get_model_policy
 from .risk import PortfolioRiskReport, PositionRisk, analyze_portfolio_risk
 from .scoring import Alert, SignalSnapshot, evaluate
@@ -308,11 +309,9 @@ def write_monitor_snapshot(
     model_version: str = MODEL_VERSION,
 ) -> None:
     """Persist the full current monitor state, including HOLD results."""
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "model_version": model_version,
         "observed_at": datetime.now(timezone.utc).isoformat(),
         "results": [asdict(result) for result in results],
     }
-    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    atomic_write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", path)

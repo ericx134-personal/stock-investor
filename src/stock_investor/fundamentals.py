@@ -4,6 +4,8 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .io import atomic_write_text
+
 
 @dataclass(frozen=True)
 class FundamentalSnapshot:
@@ -291,15 +293,14 @@ def calculate_fundamentals(
 def write_fundamentals(
     snapshots: dict[str, FundamentalSnapshot], path: str | Path
 ) -> None:
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
+    atomic_write_text(
         json.dumps(
             {symbol: asdict(snapshot) for symbol, snapshot in snapshots.items()},
             indent=2,
             sort_keys=True,
         )
-        + "\n"
+        + "\n",
+        path,
     )
 
 

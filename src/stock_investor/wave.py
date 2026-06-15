@@ -8,6 +8,7 @@ from pathlib import Path
 from statistics import median
 
 from .data import Price
+from .io import atomic_write_text
 
 
 WAVE_FEATURE_VERSION = "wave-v1"
@@ -288,9 +289,7 @@ def calculate_waves(prices: dict[str, list[Price]]) -> dict[str, WaveSignals]:
 
 
 def write_wave_snapshot(waves: dict[str, WaveSignals], path: str | Path) -> None:
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
+    atomic_write_text(
         json.dumps(
             {
                 "feature_version": WAVE_FEATURE_VERSION,
@@ -300,7 +299,8 @@ def write_wave_snapshot(waves: dict[str, WaveSignals], path: str | Path) -> None
             indent=2,
             sort_keys=True,
         )
-        + "\n"
+        + "\n",
+        path,
     )
 
 

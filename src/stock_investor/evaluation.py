@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .data import Price
 from .feedback import AlertFeedback
+from .io import atomic_write_text
 
 
 OUTCOME_WINDOWS = (21, 63, 126)
@@ -492,17 +493,15 @@ def build_scorecard(outcomes: list[AlertOutcome]) -> list[ScorecardRow]:
 
 
 def write_outcomes(outcomes: list[AlertOutcome], path: str | Path) -> None:
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
+    atomic_write_text(
         json.dumps([asdict(outcome) for outcome in outcomes], indent=2, sort_keys=True)
-        + "\n"
+        + "\n",
+        path,
     )
 
 
 def write_scorecard(rows: list[ScorecardRow], path: str | Path) -> None:
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps([asdict(row) for row in rows], indent=2, sort_keys=True) + "\n"
+    atomic_write_text(
+        json.dumps([asdict(row) for row in rows], indent=2, sort_keys=True) + "\n",
+        path,
     )

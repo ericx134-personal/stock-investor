@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .data import Price
 from .indicators import MIN_HISTORY, calculate_technicals
+from .io import atomic_write_text
 from .model import MODEL_VERSION
 
 
@@ -190,4 +191,4 @@ def write_oos_report(
         "transaction_cost_bps": transaction_cost_bps,
         "results": [asdict(result) for result in results],
     }
-    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    atomic_write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", output)

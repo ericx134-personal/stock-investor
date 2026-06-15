@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from ..data import Price
+from ..io import atomic_text_writer
 
 
 BASE_URL = "https://data.alpaca.markets/v2/stocks/bars"
@@ -73,8 +74,7 @@ def fetch_daily_bars(
 
 def write_prices_csv(prices: dict[str, list[Price]], path: str | Path) -> None:
     output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("w", newline="") as handle:
+    with atomic_text_writer(output, newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(("date", "symbol", "close", "open", "high", "low", "volume"))
         for symbol in sorted(prices):

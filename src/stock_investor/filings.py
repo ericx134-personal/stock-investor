@@ -4,6 +4,8 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .io import atomic_write_text
+
 
 MONITORED_FORMS = {"10-K", "10-K/A", "10-Q", "10-Q/A", "8-K", "8-K/A"}
 
@@ -145,9 +147,9 @@ def update_filing_state(
         existing = set(json.loads(output.read_text()).get("seen_accessions", ()))
     unseen = [event for event in events if event.accession_number not in existing]
     existing.update(event.accession_number for event in events)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps({"seen_accessions": sorted(existing)}, indent=2) + "\n"
+    atomic_write_text(
+        json.dumps({"seen_accessions": sorted(existing)}, indent=2) + "\n",
+        output,
     )
     return unseen if initialized else []
 

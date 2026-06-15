@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .data import Position, load_positions
+from .io import atomic_text_writer, atomic_write_text
 
 
 POSITION_FIELDS = (
@@ -186,8 +187,7 @@ def write_robinhood_import(
     summary_path: str | Path,
 ) -> None:
     position_output = Path(positions_path)
-    position_output.parent.mkdir(parents=True, exist_ok=True)
-    with position_output.open("w", newline="") as handle:
+    with atomic_text_writer(position_output, newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=POSITION_FIELDS)
         writer.writeheader()
         for position in positions:
@@ -199,9 +199,9 @@ def write_robinhood_import(
                     for field in POSITION_FIELDS
                 }
             )
-    summary_output = Path(summary_path)
-    summary_output.parent.mkdir(parents=True, exist_ok=True)
-    summary_output.write_text(json.dumps(asdict(summary), indent=2, sort_keys=True) + "\n")
+    atomic_write_text(
+        json.dumps(asdict(summary), indent=2, sort_keys=True) + "\n", summary_path
+    )
 
 
 def write_robinhood_baseline(

@@ -37,6 +37,7 @@ from .kline import (
     evaluate_kline_history,
     load_kline_history,
 )
+from .io import atomic_write_text
 from .monitor import (
     run_monitor,
     write_alert_history,
@@ -63,8 +64,7 @@ from .wave import (
 
 
 def _write_json(payload: object, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    atomic_write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", path)
 
 
 def _file_fingerprint(path: str | Path) -> dict:
