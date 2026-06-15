@@ -14,6 +14,7 @@ from stock_investor.evaluation import (
     evaluate_alerts,
     evaluate_decisions,
     evaluate_directional_forecasts,
+    wilson_interval,
     write_outcomes,
     write_scorecard,
 )
@@ -220,6 +221,8 @@ class EvaluationTests(unittest.TestCase):
             if row["direction"] == "BUY" and row["horizon"] == "21d"
         )
         self.assertEqual(buy["directional_success_rate"], 1.0)
+        self.assertIsNotNone(buy["directional_success_ci_low"])
+        self.assertIsNotNone(buy["directional_success_ci_high"])
         self.assertAlmostEqual(buy["brier_score"], 0.04)
 
     def test_overlapping_directional_forecasts_are_one_episode(self):
@@ -329,6 +332,14 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(sell["false_positive"], 1)
         self.assertEqual(sell["actual"], 0)
         self.assertEqual(buy["status"], "PENDING")
+        self.assertIsNotNone(buy["precision_ci_low"])
+        self.assertIsNotNone(buy["recall_ci_high"])
+
+    def test_wilson_interval_bounds_rates(self):
+        low, high = wilson_interval(8, 10)
+        self.assertLess(low, 0.8)
+        self.assertGreater(high, 0.8)
+        self.assertEqual(wilson_interval(0, 0), (None, None))
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ MIN_CALIBRATION_SYMBOLS = 5
 MAX_CALIBRATION_GAP = 0.10
 MIN_CLASSIFICATION_OBSERVATIONS = 20
 MIN_CLASSIFICATION_SYMBOLS = 5
+WILSON_Z_95 = 1.959963984540054
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,22 @@ def _forward_return(entry_close: float, future: list[Price], sessions: int) -> f
     if len(future) < sessions:
         return None
     return future[sessions - 1].close / entry_close - 1
+
+
+def wilson_interval(successes: int, observations: int) -> tuple[float | None, float | None]:
+    if observations <= 0:
+        return None, None
+    z2 = WILSON_Z_95 * WILSON_Z_95
+    proportion = successes / observations
+    denominator = 1 + z2 / observations
+    center = (proportion + z2 / (2 * observations)) / denominator
+    margin = (
+        WILSON_Z_95
+        * ((proportion * (1 - proportion) + z2 / (4 * observations)) / observations)
+        ** 0.5
+        / denominator
+    )
+    return max(0.0, center - margin), min(1.0, center + margin)
 
 
 def evaluate_alert_record(
@@ -370,6 +387,10 @@ def build_directional_forecast_scorecard(outcomes: list[dict]) -> list[dict]:
             for item in matured
             if item["directional_returns"][horizon] is not None
         ]
+        directional_successes = sum(value > 0 for value in directional)
+        directional_ci_low, directional_ci_high = wilson_interval(
+            directional_successes, len(directional)
+        )
         probability_pairs = [
             (float(item["probability"]), item["directional_returns"][horizon] > 0)
             for item in matured
@@ -395,10 +416,12 @@ def build_directional_forecast_scorecard(outcomes: list[dict]) -> list[dict]:
                     else None
                 ),
                 "directional_success_rate": (
-                    sum(value > 0 for value in directional) / len(directional)
+                    directional_successes / len(directional)
                     if directional
                     else None
                 ),
+                "directional_success_ci_low": directional_ci_low,
+                "directional_success_ci_high": directional_ci_high,
                 "brier_score": (
                     sum(
                         (probability - float(success)) ** 2
@@ -590,16 +613,34 @@ def build_directional_classification_metrics(outcomes: list[dict]) -> list[dict]
                         if precision_denominator
                         else None
                     ),
+                    "precision_ci_low": wilson_interval(
+                        true_positive, precision_denominator
+                    )[0],
+                    "precision_ci_high": wilson_interval(
+                        true_positive, precision_denominator
+                    )[1],
                     "recall": (
                         true_positive / recall_denominator
                         if recall_denominator
                         else None
                     ),
+                    "recall_ci_low": wilson_interval(
+                        true_positive, recall_denominator
+                    )[0],
+                    "recall_ci_high": wilson_interval(
+                        true_positive, recall_denominator
+                    )[1],
                     "false_positive_rate": (
                         false_positive / false_positive_denominator
                         if false_positive_denominator
                         else None
                     ),
+                    "false_positive_rate_ci_low": wilson_interval(
+                        false_positive, false_positive_denominator
+                    )[0],
+                    "false_positive_rate_ci_high": wilson_interval(
+                        false_positive, false_positive_denominator
+                    )[1],
                     "coverage": len(predicted) / len(population) if population else None,
                     "status": "READY" if enough_evidence else "PENDING",
                 }

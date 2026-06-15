@@ -1067,7 +1067,7 @@ def build_dashboard(
         f"<td>{int(row['observations'])}</td>"
         f"<td>{int(row['pending'])}</td>"
         f"<td>{_optional_percent(row.get('mean_probability'))}</td>"
-        f"<td>{_optional_percent(row.get('directional_success_rate'))}</td>"
+        f"<td>{_rate_interval(row.get('directional_success_rate'), row.get('directional_success_ci_low'), row.get('directional_success_ci_high'))}</td>"
         f"<td>{_optional_number(row.get('brier_score'))}</td></tr>"
         for row in direction_forecast_scorecard
     ) or '<tr><td colspan="9">Displayed forecasts are now recorded; no scorecard rows yet.</td></tr>'
@@ -1091,9 +1091,9 @@ def build_dashboard(
         f"<td>{int(row['population'])}</td>"
         f"<td>{int(row['predicted'])}</td>"
         f"<td>{int(row['actual'])}</td>"
-        f"<td>{_optional_percent(row.get('precision'))}</td>"
-        f"<td>{_optional_percent(row.get('recall'))}</td>"
-        f"<td>{_optional_percent(row.get('false_positive_rate'))}</td>"
+        f"<td>{_rate_interval(row.get('precision'), row.get('precision_ci_low'), row.get('precision_ci_high'))}</td>"
+        f"<td>{_rate_interval(row.get('recall'), row.get('recall_ci_low'), row.get('recall_ci_high'))}</td>"
+        f"<td>{_rate_interval(row.get('false_positive_rate'), row.get('false_positive_rate_ci_low'), row.get('false_positive_rate_ci_high'))}</td>"
         f"<td>{_optional_percent(row.get('coverage'))}</td>"
         f"<td>{html.escape(row.get('status', 'PENDING'))}</td></tr>"
         for row in direction_classification_metrics

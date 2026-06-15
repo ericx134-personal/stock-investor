@@ -302,6 +302,10 @@ recall, so the system cannot hide missed waves by labeling everything WAIT.
 Rows remain `PENDING` until at least 20 matured episodes across five symbols
 exist.
 
+Directional success, precision, recall, and false-positive rates carry 95%
+Wilson intervals. The intervals are descriptive uncertainty bounds for matured
+samples; they are not promotion gates by themselves.
+
 Alert burden is a model-health diagnostic. A model that asks for action review
 on most holdings is likely too noisy even when its individual reasons are
 valid. Future model versions should prove that they improve selectivity and
