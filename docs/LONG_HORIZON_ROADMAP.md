@@ -164,7 +164,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] L007 Add artifact retention and archival policy.
 - [x] L008 Add sanitized backup and recovery verification.
 - [x] L009 Add dependency and security update checks.
-- [ ] L010 Add an explicit permanent no-trade integration test.
+- [x] L010 Add an explicit permanent no-trade integration test.
 
 ## M. Research Expansion
 

@@ -34,7 +34,7 @@ resolved locally.
 ## Pull Request Checklist
 
 - [ ] No private account or portfolio data is included.
-- [ ] No Robinhood write or trade action is introduced.
+- [x] No Robinhood write or trade action is introduced; CI enforces the read-only contract.
 - [ ] The hypothesis and intended horizon are documented.
 - [ ] Point-in-time and look-ahead behavior is tested.
 - [ ] Missing-data behavior is explicit.

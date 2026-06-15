@@ -388,7 +388,9 @@ while the machine is shut down or asleep.
 GitHub runs CodeQL's extended Python security queries on pushes, pull requests,
 and weekly schedules. Pull requests also fail when dependency review detects a
 new moderate-or-higher vulnerability. Dependabot checks Python and GitHub
-Actions dependencies weekly.
+Actions dependencies weekly. A permanent integration test fails if runtime
+code introduces a brokerage order, cancellation, watchlist write, or HTTP
+POST/PUT/PATCH/DELETE request.
 
 Record your judgment and response without changing the original alert:
 
