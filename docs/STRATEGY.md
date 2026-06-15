@@ -289,6 +289,11 @@ symbols. It passes only when actual directional success is within 10 percentage
 points of the mean displayed rate; these gates were fixed before outcome
 inspection.
 
+The same fixed buckets are grouped into BUY and SELL calibration-curve
+artifacts by horizon. The dashboard shows each curve point's displayed rate,
+actual directional success, matured sample, symbol breadth, and status. Empty
+or thin curve points remain pending rather than being drawn as evidence.
+
 Alert burden is a model-health diagnostic. A model that asks for action review
 on most holdings is likely too noisy even when its individual reasons are
 valid. Future model versions should prove that they improve selectivity and

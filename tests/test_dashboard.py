@@ -119,6 +119,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("wave-direction-v1", page)
         self.assertIn("<td>3</td><td>1</td><td>2</td>", page)
         self.assertIn("Brier score", page)
+        self.assertIn("BUY/SELL Calibration Curves", page)
         self.assertIn("Includes HOLD and ordinary REVIEW decisions", page)
         self.assertIn('class="holding-row trim_review signal-wait"', page)
         self.assertIn('data-detail-target="holding-detail-0"', page)

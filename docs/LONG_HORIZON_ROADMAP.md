@@ -129,7 +129,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## J. Validation And Statistical Safety
 
-- [ ] J001 Add probability calibration curves.
+- [x] J001 Add probability calibration curves.
 - [x] J002 Add Brier score for directional forecasts.
 - [ ] J003 Add precision, recall, and coverage for BUY and SELL separately.
 - [ ] J004 Add bootstrap uncertainty for return statistics.

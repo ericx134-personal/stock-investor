@@ -672,6 +672,7 @@ def _dashboard(
     wave_experiment_scorecard_path: str | None,
     wave_conditional_scorecard_path: str | None,
     direction_forecast_scorecard_path: str | None,
+    forecast_calibration_curves_path: str | None,
     model_health_path: str | None,
     price_health_path: str | None,
     prices_path: str | None,
@@ -690,6 +691,7 @@ def _dashboard(
             wave_experiment_scorecard_path=wave_experiment_scorecard_path,
             wave_conditional_scorecard_path=wave_conditional_scorecard_path,
             direction_forecast_scorecard_path=direction_forecast_scorecard_path,
+            forecast_calibration_curves_path=forecast_calibration_curves_path,
             model_health_path=model_health_path,
             price_health_path=price_health_path,
             prices_path=prices_path,
@@ -991,6 +993,7 @@ def main() -> int:
     dashboard_parser.add_argument("--wave-experiment-scorecard")
     dashboard_parser.add_argument("--wave-conditional-scorecard")
     dashboard_parser.add_argument("--direction-forecast-scorecard")
+    dashboard_parser.add_argument("--forecast-calibration-curves")
     dashboard_parser.add_argument("--model-health")
     dashboard_parser.add_argument("--price-health")
     dashboard_parser.add_argument("--prices")
@@ -1163,6 +1166,7 @@ def main() -> int:
             args.wave_experiment_scorecard,
             args.wave_conditional_scorecard,
             args.direction_forecast_scorecard,
+            args.forecast_calibration_curves,
             args.model_health,
             args.price_health,
             args.prices,

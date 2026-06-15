@@ -489,6 +489,51 @@ def build_forecast_calibration_scorecard(outcomes: list[dict]) -> list[dict]:
     return rows
 
 
+def build_forecast_calibration_curves(scorecard: list[dict]) -> list[dict]:
+    curves = []
+    groups: dict[tuple[str, str, str], list[dict]] = {}
+    for row in scorecard:
+        groups.setdefault(
+            (row["forecast_version"], row["direction"], row["horizon"]), []
+        ).append(row)
+    for (version, direction, horizon), rows in sorted(groups.items()):
+        points = [
+            {
+                "probability_bucket": row["probability_bucket"],
+                "mean_probability": row["mean_probability"],
+                "directional_success_rate": row["directional_success_rate"],
+                "observations": row["observations"],
+                "symbols": row["symbols"],
+                "status": row["status"],
+            }
+            for row in sorted(
+                rows,
+                key=lambda item: next(
+                    index
+                    for index, (_, _, label) in enumerate(CALIBRATION_BUCKETS)
+                    if label == item["probability_bucket"]
+                ),
+            )
+        ]
+        statuses = {point["status"] for point in points}
+        curves.append(
+            {
+                "forecast_version": version,
+                "direction": direction,
+                "horizon": horizon,
+                "points": points,
+                "status": (
+                    "FAIL"
+                    if "FAIL" in statuses
+                    else "PASS"
+                    if statuses == {"PASS"}
+                    else "PENDING"
+                ),
+            }
+        )
+    return curves
+
+
 def _median(values: list[float]) -> float:
     ordered = sorted(values)
     midpoint = len(ordered) // 2

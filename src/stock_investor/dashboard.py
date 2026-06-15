@@ -497,6 +497,7 @@ def build_dashboard(
     wave_experiment_scorecard_path: str | Path | None = None,
     wave_conditional_scorecard_path: str | Path | None = None,
     direction_forecast_scorecard_path: str | Path | None = None,
+    forecast_calibration_curves_path: str | Path | None = None,
     model_health_path: str | Path | None = None,
     price_health_path: str | Path | None = None,
     prices_path: str | Path | None = None,
@@ -575,6 +576,12 @@ def build_dashboard(
         json.loads(Path(direction_forecast_scorecard_path).read_text())
         if direction_forecast_scorecard_path
         and Path(direction_forecast_scorecard_path).exists()
+        else []
+    )
+    forecast_calibration_curves = (
+        json.loads(Path(forecast_calibration_curves_path).read_text())
+        if forecast_calibration_curves_path
+        and Path(forecast_calibration_curves_path).exists()
         else []
     )
     model_health = (
@@ -1057,6 +1064,19 @@ def build_dashboard(
         f"<td>{_optional_number(row.get('brier_score'))}</td></tr>"
         for row in direction_forecast_scorecard
     ) or '<tr><td colspan="9">Displayed forecasts are now recorded; no scorecard rows yet.</td></tr>'
+    calibration_curve_rows = "".join(
+        f"<tr><td>{html.escape(curve['forecast_version'])}</td>"
+        f"<td>{html.escape(curve['direction'])}</td>"
+        f"<td>{html.escape(curve['horizon'])}</td>"
+        f"<td>{html.escape(point['probability_bucket'])}</td>"
+        f"<td>{_optional_percent(point.get('mean_probability'))}</td>"
+        f"<td>{_optional_percent(point.get('directional_success_rate'))}</td>"
+        f"<td>{int(point.get('observations', 0))}</td>"
+        f"<td>{int(point.get('symbols', 0))}</td>"
+        f"<td>{html.escape(point.get('status', curve.get('status', 'PENDING')))}</td></tr>"
+        for curve in forecast_calibration_curves
+        for point in curve.get("points", [])
+    ) or '<tr><td colspan="9">Calibration curve points are pending forecast observations.</td></tr>'
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1192,6 +1212,10 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Episodes</th><th>Matured</th><th>Pending</th><th>Displayed rate</th><th>Directional success</th><th>Brier score</th></tr></thead>
 <tbody>{direction_validation_rows}</tbody></table>
 <p class="note">Every displayed BUY, SELL, and WAIT is retained in an immutable ledger. Daily repeats are de-duplicated into episodes. WAIT is audited for coverage but has no invented directional success or Brier score.</p></section>
+<section class="panel"><h2>BUY/SELL Calibration Curves</h2>
+<table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Bucket</th><th>Displayed</th><th>Actual success</th><th>Matured</th><th>Symbols</th><th>Status</th></tr></thead>
+<tbody>{calibration_curve_rows}</tbody></table>
+<p class="note">Curve buckets are fixed before outcome review. A point stays PENDING until it has at least 20 matured episodes across five symbols, then passes only if actual directional success is within 10 percentage points of the displayed rate.</p></section>
 <section class="panel"><h2>All-Decision Forward Evidence</h2>
 <table><thead><tr><th>Decision</th><th>Horizon</th><th>Matured sample</th><th>Positive return</th><th>Mean excess return</th><th>Directional success</th></tr></thead>
 <tbody>{decision_evidence_rows}</tbody></table>

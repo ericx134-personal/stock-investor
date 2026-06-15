@@ -8,6 +8,7 @@ from stock_investor.data import Price
 from stock_investor.evaluation import (
     build_directional_forecast_scorecard,
     build_forecast_calibration_scorecard,
+    build_forecast_calibration_curves,
     build_scorecard,
     evaluate_alerts,
     evaluate_decisions,
@@ -267,6 +268,38 @@ class EvaluationTests(unittest.TestCase):
         row = build_forecast_calibration_scorecard(outcomes)[0]
         self.assertEqual(row["status"], "PASS")
         self.assertEqual(row["symbols"], 5)
+
+    def test_calibration_curves_group_points_by_direction_and_horizon(self):
+        scorecard = [
+            {
+                "forecast_version": "v",
+                "direction": "BUY",
+                "horizon": "21d",
+                "probability_bucket": "80-89%",
+                "mean_probability": 0.8,
+                "directional_success_rate": 0.75,
+                "observations": 25,
+                "symbols": 6,
+                "status": "PASS",
+            },
+            {
+                "forecast_version": "v",
+                "direction": "SELL",
+                "horizon": "21d",
+                "probability_bucket": "70-79%",
+                "mean_probability": 0.7,
+                "directional_success_rate": None,
+                "observations": 0,
+                "symbols": 0,
+                "status": "PENDING",
+            },
+        ]
+        curves = build_forecast_calibration_curves(scorecard)
+        buy = next(item for item in curves if item["direction"] == "BUY")
+        sell = next(item for item in curves if item["direction"] == "SELL")
+        self.assertEqual(buy["status"], "PASS")
+        self.assertEqual(sell["status"], "PENDING")
+        self.assertEqual(buy["points"][0]["probability_bucket"], "80-89%")
 
 
 if __name__ == "__main__":

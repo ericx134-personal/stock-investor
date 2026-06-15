@@ -98,6 +98,7 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("direction_forecast_outcomes", manifest["artifacts"])
         self.assertIn("direction_forecast_scorecard", manifest["artifacts"])
         self.assertIn("forecast_calibration_scorecard", manifest["artifacts"])
+        self.assertIn("forecast_calibration_curves", manifest["artifacts"])
         self.assertIn("model_health", manifest["artifacts"])
         self.assertIn("price_health", manifest["artifacts"])
         self.assertIn("input_integrity", manifest["artifacts"])
