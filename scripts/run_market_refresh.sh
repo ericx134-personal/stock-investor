@@ -50,5 +50,7 @@ PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli refresh \
 
 PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli archive-private \
   data/private --keep-days "${ARCHIVE_KEEP_DAYS:-30}"
+PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli verify-private-archive \
+  "data/private/archives/stock-investor-private-$(date +%F).tar.gz"
 
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] scheduled market refresh complete"

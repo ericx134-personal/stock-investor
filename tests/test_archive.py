@@ -4,7 +4,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from stock_investor.archive import archive_private_artifacts
+from stock_investor.archive import archive_private_artifacts, verify_private_archive
 
 
 class ArchiveTests(unittest.TestCase):
@@ -49,6 +49,36 @@ class ArchiveTests(unittest.TestCase):
     def test_archive_refuses_non_private_source(self):
         with self.assertRaisesRegex(ValueError, "private directory"):
             archive_private_artifacts("/tmp/public")
+
+    def test_verify_archive_restores_and_validates_declared_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            private = Path(directory) / "private"
+            private.mkdir()
+            (private / "dashboard-v3.html").write_text("<html></html>")
+            (private / "wave-direction-forecasts.jsonl").write_text('{"direction":"WAIT"}\n')
+            (private / "snapshot.json").write_text("{}\n")
+            (private / "refresh-manifest.json").write_text(
+                '{"artifacts":{"snapshot":"data/private/snapshot.json"}}\n'
+            )
+            archive = archive_private_artifacts(private, as_of=date(2026, 6, 15))[
+                "archive"
+            ]
+
+            report = verify_private_archive(archive)
+
+            self.assertEqual(report["status"], "VERIFIED")
+            self.assertEqual(report["jsonl_records"], 1)
+
+    def test_verify_archive_rejects_path_traversal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "unsafe.tar.gz"
+            payload = Path(directory) / "payload"
+            payload.write_text("secret")
+            with tarfile.open(archive, "w:gz") as bundle:
+                bundle.add(payload, arcname="../secret")
+
+            with self.assertRaisesRegex(ValueError, "unsafe"):
+                verify_private_archive(archive)
 
 
 if __name__ == "__main__":

@@ -377,7 +377,10 @@ the production-safe evidence refresh. It also creates one credential-free
 private archive per day under `data/private/archives/` and retains 30 daily
 archives by default. It never deletes source ledgers or rewrites forecasts;
 only expired archive bundles are pruned. Set `ARCHIVE_KEEP_DAYS` in
-`service.env` to change the archive retention period. Without credentials, it keeps the
+`service.env` to change the archive retention period. Every scheduled run
+safely restores the daily bundle into an isolated temporary directory, rejects
+unsafe paths, links, credentials, and logs, parses every JSON/JSONL artifact,
+and confirms that all manifest-declared artifacts are present. Without credentials, it keeps the
 website online and safely recomputes from the last Robinhood MCP export.
 Service logs are under `data/private/logs/`. macOS cannot serve or refresh
 while the machine is shut down or asleep.

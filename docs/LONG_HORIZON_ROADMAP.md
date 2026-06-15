@@ -162,7 +162,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] L005 Add alerting for stale refreshes.
 - [ ] L006 Add scheduled weekly and monthly briefs.
 - [x] L007 Add artifact retention and archival policy.
-- [ ] L008 Add sanitized backup and recovery verification.
+- [x] L008 Add sanitized backup and recovery verification.
 - [ ] L009 Add dependency and security update checks.
 - [ ] L010 Add an explicit permanent no-trade integration test.
 

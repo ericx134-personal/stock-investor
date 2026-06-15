@@ -14,7 +14,7 @@ from .backtest import (
     backtest_trend_momentum_oos,
     write_oos_report,
 )
-from .archive import archive_private_artifacts
+from .archive import archive_private_artifacts, verify_private_archive
 from .brief import build_brief, write_brief
 from .data import load_positions, load_prices
 from .dashboard import build_dashboard, write_dashboard
@@ -628,6 +628,11 @@ def _archive_private(source_dir: str, archive_dir: str | None, keep_days: int) -
     return 0
 
 
+def _verify_private_archive(path: str) -> int:
+    print(json.dumps(verify_private_archive(path), indent=2, sort_keys=True))
+    return 0
+
+
 def _compare_models(
     baseline_path: str, candidate_path: str, output_path: str | None
 ) -> int:
@@ -964,6 +969,12 @@ def main() -> int:
     archive_parser.add_argument("--archive-dir")
     archive_parser.add_argument("--keep-days", type=int, default=30)
 
+    verify_archive_parser = subparsers.add_parser(
+        "verify-private-archive",
+        help="safely restore and validate a private artifact archive",
+    )
+    verify_archive_parser.add_argument("archive")
+
     dashboard_parser = subparsers.add_parser(
         "dashboard", help="generate a local read-only portfolio dashboard"
     )
@@ -1135,6 +1146,8 @@ def main() -> int:
         return _check_refresh(args.manifest, args.max_age_hours)
     if args.command == "archive-private":
         return _archive_private(args.source_dir, args.archive_dir, args.keep_days)
+    if args.command == "verify-private-archive":
+        return _verify_private_archive(args.archive)
     if args.command == "dashboard":
         return _dashboard(
             args.alerts,
