@@ -674,6 +674,7 @@ def _dashboard(
     direction_forecast_scorecard_path: str | None,
     forecast_calibration_curves_path: str | None,
     direction_classification_metrics_path: str | None,
+    direction_error_cohorts_path: str | None,
     model_health_path: str | None,
     price_health_path: str | None,
     prices_path: str | None,
@@ -694,6 +695,7 @@ def _dashboard(
             direction_forecast_scorecard_path=direction_forecast_scorecard_path,
             forecast_calibration_curves_path=forecast_calibration_curves_path,
             direction_classification_metrics_path=direction_classification_metrics_path,
+            direction_error_cohorts_path=direction_error_cohorts_path,
             model_health_path=model_health_path,
             price_health_path=price_health_path,
             prices_path=prices_path,
@@ -997,6 +999,7 @@ def main() -> int:
     dashboard_parser.add_argument("--direction-forecast-scorecard")
     dashboard_parser.add_argument("--forecast-calibration-curves")
     dashboard_parser.add_argument("--direction-classification-metrics")
+    dashboard_parser.add_argument("--direction-error-cohorts")
     dashboard_parser.add_argument("--model-health")
     dashboard_parser.add_argument("--price-health")
     dashboard_parser.add_argument("--prices")
@@ -1171,6 +1174,7 @@ def main() -> int:
             args.direction_forecast_scorecard,
             args.forecast_calibration_curves,
             args.direction_classification_metrics,
+            args.direction_error_cohorts,
             args.model_health,
             args.price_health,
             args.prices,

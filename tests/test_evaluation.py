@@ -8,6 +8,7 @@ from stock_investor.data import Price
 from stock_investor.evaluation import (
     build_directional_forecast_scorecard,
     build_directional_classification_metrics,
+    build_directional_error_cohorts,
     build_forecast_calibration_scorecard,
     build_forecast_calibration_curves,
     bootstrap_mean_interval,
@@ -348,6 +349,38 @@ class EvaluationTests(unittest.TestCase):
             bootstrap_mean_interval([1.0, 3.0], samples=20, seed=7),
             bootstrap_mean_interval([1.0, 3.0], samples=20, seed=7),
         )
+
+    def test_directional_error_cohorts_rank_worst_false_forecasts(self):
+        outcomes = [
+            {
+                **forecast("BUY", "A"),
+                "returns": {"21d": -0.2},
+                "excess_returns": {"21d": -0.3},
+                "directional_returns": {"21d": -0.2},
+                "max_adverse_excursion": -0.25,
+                "max_favorable_excursion": 0.02,
+            },
+            {
+                **forecast("BUY", "B"),
+                "returns": {"21d": -0.05},
+                "excess_returns": {"21d": -0.06},
+                "directional_returns": {"21d": -0.05},
+                "max_adverse_excursion": -0.08,
+                "max_favorable_excursion": 0.01,
+            },
+            {
+                **forecast("SELL", "C"),
+                "returns": {"21d": -0.1},
+                "excess_returns": {"21d": -0.1},
+                "directional_returns": {"21d": 0.1},
+                "max_adverse_excursion": -0.12,
+                "max_favorable_excursion": 0.0,
+            },
+        ]
+        rows = build_directional_error_cohorts(outcomes, limit_per_group=1)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["symbol"], "A")
+        self.assertEqual(rows[0]["rank"], 1)
 
 
 if __name__ == "__main__":

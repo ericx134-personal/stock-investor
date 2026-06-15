@@ -499,6 +499,7 @@ def build_dashboard(
     direction_forecast_scorecard_path: str | Path | None = None,
     forecast_calibration_curves_path: str | Path | None = None,
     direction_classification_metrics_path: str | Path | None = None,
+    direction_error_cohorts_path: str | Path | None = None,
     model_health_path: str | Path | None = None,
     price_health_path: str | Path | None = None,
     prices_path: str | Path | None = None,
@@ -589,6 +590,12 @@ def build_dashboard(
         json.loads(Path(direction_classification_metrics_path).read_text())
         if direction_classification_metrics_path
         and Path(direction_classification_metrics_path).exists()
+        else []
+    )
+    direction_error_cohorts = (
+        json.loads(Path(direction_error_cohorts_path).read_text())
+        if direction_error_cohorts_path
+        and Path(direction_error_cohorts_path).exists()
         else []
     )
     model_health = (
@@ -1098,6 +1105,19 @@ def build_dashboard(
         f"<td>{html.escape(row.get('status', 'PENDING'))}</td></tr>"
         for row in direction_classification_metrics
     ) or '<tr><td colspan="11">Directional classification metrics are pending matured forecasts.</td></tr>'
+    error_cohort_rows = "".join(
+        f"<tr><td>{html.escape(row['forecast_version'])}</td>"
+        f"<td>{html.escape(row['direction'])}</td>"
+        f"<td>{html.escape(row['horizon'])}</td>"
+        f"<td>{int(row['rank'])}</td>"
+        f"<td>{html.escape(row['symbol'])}</td>"
+        f"<td>{html.escape(row['signal_date'])}</td>"
+        f"<td>{_optional_percent(row.get('probability'))}</td>"
+        f"<td>{_optional_percent(row.get('directional_return'))}</td>"
+        f"<td>{_optional_percent(row.get('max_adverse_excursion'))}</td>"
+        f"<td>{html.escape(str(row.get('evidence_source') or ''))}</td></tr>"
+        for row in direction_error_cohorts
+    ) or '<tr><td colspan="10">No matured false BUY or SELL episodes yet.</td></tr>'
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1241,6 +1261,10 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Matured universe</th><th>Predicted</th><th>Actual</th><th>Precision</th><th>Recall</th><th>False-positive rate</th><th>Coverage</th><th>Status</th></tr></thead>
 <tbody>{classification_metric_rows}</tbody></table>
 <p class="note">BUY actuals are positive forward returns; SELL actuals are negative forward returns. WAIT forecasts remain in the recall universe so missed waves are visible. Rows stay PENDING until at least 20 matured episodes across five symbols exist.</p></section>
+<section class="panel"><h2>Largest False Direction Episodes</h2>
+<table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Rank</th><th>Symbol</th><th>Date</th><th>Displayed</th><th>Directional return</th><th>Max adverse</th><th>Evidence</th></tr></thead>
+<tbody>{error_cohort_rows}</tbody></table>
+<p class="note">False BUY means the forward return was flat or negative; false SELL means the stock was flat or up. Rows are ranked by worst direction-aware return and preserve the original forecast version.</p></section>
 <section class="panel"><h2>All-Decision Forward Evidence</h2>
 <table><thead><tr><th>Decision</th><th>Horizon</th><th>Matured sample</th><th>Positive return</th><th>Mean excess return</th><th>Directional success</th></tr></thead>
 <tbody>{decision_evidence_rows}</tbody></table>

@@ -311,6 +311,11 @@ excursion estimates carry deterministic bootstrap intervals when at least two
 matured observations exist. Single-observation rows intentionally keep those
 intervals empty.
 
+False-direction cohorts preserve the worst matured BUY and SELL episodes by
+direction-aware return. They are error-analysis queues, not model changes:
+false BUY means the forward return was flat or negative, while false SELL means
+the stock was flat or up.
+
 Alert burden is a model-health diagnostic. A model that asks for action review
 on most holdings is likely too noisy even when its individual reasons are
 valid. Future model versions should prove that they improve selectivity and

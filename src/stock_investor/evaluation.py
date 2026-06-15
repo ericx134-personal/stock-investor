@@ -705,6 +705,58 @@ def build_directional_classification_metrics(outcomes: list[dict]) -> list[dict]
     return rows
 
 
+def build_directional_error_cohorts(
+    outcomes: list[dict], *, limit_per_group: int = 10
+) -> list[dict]:
+    """Rank the worst matured BUY and SELL forecast errors by direction-aware return."""
+    groups: dict[tuple[str, str, str], list[dict]] = {}
+    for outcome in outcomes:
+        direction = outcome.get("direction")
+        if direction not in {"BUY", "SELL"}:
+            continue
+        for horizon, directional_return in outcome.get("directional_returns", {}).items():
+            if directional_return is not None and float(directional_return) <= 0:
+                groups.setdefault(
+                    (outcome["forecast_version"], direction, horizon), []
+                ).append(outcome)
+
+    rows = []
+    for (version, direction, horizon), group in sorted(groups.items()):
+        ranked = sorted(
+            group,
+            key=lambda item: (
+                float(item["directional_returns"][horizon]),
+                float(item.get("max_adverse_excursion") or 0),
+            ),
+        )[:limit_per_group]
+        for rank, item in enumerate(ranked, start=1):
+            rows.append(
+                {
+                    "forecast_version": version,
+                    "direction": direction,
+                    "horizon": horizon,
+                    "rank": rank,
+                    "forecast_id": item.get("forecast_id"),
+                    "symbol": item["symbol"],
+                    "signal_date": item["signal_date"],
+                    "entry_close": item["entry_close"],
+                    "probability": item.get("probability"),
+                    "directional_return": item["directional_returns"][horizon],
+                    "raw_return": item["returns"][horizon],
+                    "excess_return": item["excess_returns"].get(horizon),
+                    "max_adverse_excursion": item.get("max_adverse_excursion"),
+                    "max_favorable_excursion": item.get("max_favorable_excursion"),
+                    "evidence_source": item.get("evidence_source"),
+                    "observations": item.get("observations"),
+                    "directional_symbols": item.get("directional_symbols"),
+                    "regime": item.get("regime"),
+                    "wave_age_bucket": item.get("wave_age_bucket"),
+                    "wave_magnitude_bucket": item.get("wave_magnitude_bucket"),
+                }
+            )
+    return rows
+
+
 def _median(values: list[float]) -> float:
     ordered = sorted(values)
     midpoint = len(ordered) // 2
