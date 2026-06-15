@@ -385,6 +385,11 @@ website online and safely recomputes from the last Robinhood MCP export.
 Service logs are under `data/private/logs/`. macOS cannot serve or refresh
 while the machine is shut down or asleep.
 
+GitHub runs CodeQL's extended Python security queries on pushes, pull requests,
+and weekly schedules. Pull requests also fail when dependency review detects a
+new moderate-or-higher vulnerability. Dependabot checks Python and GitHub
+Actions dependencies weekly.
+
 Record your judgment and response without changing the original alert:
 
 ```bash

@@ -163,7 +163,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [ ] L006 Add scheduled weekly and monthly briefs.
 - [x] L007 Add artifact retention and archival policy.
 - [x] L008 Add sanitized backup and recovery verification.
-- [ ] L009 Add dependency and security update checks.
+- [x] L009 Add dependency and security update checks.
 - [ ] L010 Add an explicit permanent no-trade integration test.
 
 ## M. Research Expansion

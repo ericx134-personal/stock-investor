@@ -70,7 +70,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M026 Add atomic writes for every current-state artifact.
 - [x] M027 Add retention and archival policy for private generated artifacts.
 - [x] M028 Verify sanitized backup and restore.
-- [ ] M029 Add dependency and security checks.
+- [x] M029 Add dependency and security checks.
 - [ ] M030 Add a permanent integration test proving no trade/write action exists.
 
 ## Phase 4: Calibration And Error Analysis
