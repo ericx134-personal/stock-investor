@@ -7,6 +7,7 @@ from pathlib import Path
 from stock_investor.data import Price
 from stock_investor.evaluation import (
     build_directional_forecast_scorecard,
+    build_directional_classification_metrics,
     build_forecast_calibration_scorecard,
     build_forecast_calibration_curves,
     build_scorecard,
@@ -300,6 +301,34 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(buy["status"], "PASS")
         self.assertEqual(sell["status"], "PENDING")
         self.assertEqual(buy["points"][0]["probability_bucket"], "80-89%")
+
+    def test_directional_classification_metrics_include_wait_misses(self):
+        outcomes = [
+            {
+                **forecast("BUY", "A"),
+                "returns": {"21d": 0.1},
+                "directional_returns": {"21d": 0.1},
+            },
+            {
+                **forecast("WAIT", "B"),
+                "returns": {"21d": 0.1},
+                "directional_returns": {"21d": None},
+            },
+            {
+                **forecast("SELL", "C"),
+                "returns": {"21d": 0.1},
+                "directional_returns": {"21d": -0.1},
+            },
+        ]
+        rows = build_directional_classification_metrics(outcomes)
+        buy = next(item for item in rows if item["direction"] == "BUY")
+        sell = next(item for item in rows if item["direction"] == "SELL")
+        self.assertEqual(buy["true_positive"], 1)
+        self.assertEqual(buy["false_negative"], 2)
+        self.assertAlmostEqual(buy["recall"], 1 / 3)
+        self.assertEqual(sell["false_positive"], 1)
+        self.assertEqual(sell["actual"], 0)
+        self.assertEqual(buy["status"], "PENDING")
 
 
 if __name__ == "__main__":

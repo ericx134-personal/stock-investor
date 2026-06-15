@@ -21,6 +21,7 @@ from .diagnostics import (
 )
 from .evaluation import (
     build_directional_forecast_scorecard,
+    build_directional_classification_metrics,
     build_forecast_calibration_scorecard,
     build_forecast_calibration_curves,
     build_scorecard,
@@ -146,6 +147,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "direction_forecast_scorecard": output_dir / "wave-direction-forecast-scorecard.json",
         "forecast_calibration_scorecard": output_dir / "forecast-calibration-scorecard.json",
         "forecast_calibration_curves": output_dir / "forecast-calibration-curves.json",
+        "direction_classification_metrics": output_dir / "direction-classification-metrics.json",
         "comparison": output_dir / f"model-v1-{slug.removeprefix('model-')}-comparison.json",
         "dashboard": output_dir / f"dashboard-{slug.removeprefix('model-')}.html",
         "manifest": output_dir / "refresh-manifest.json",
@@ -297,6 +299,9 @@ def run_refresh(
     forecast_calibration_curves = build_forecast_calibration_curves(
         forecast_calibration_scorecard
     )
+    direction_classification_metrics = build_directional_classification_metrics(
+        direction_forecast_outcomes
+    )
     _write_json(
         direction_forecast_outcomes, paths["direction_forecast_outcomes"]
     )
@@ -308,6 +313,9 @@ def run_refresh(
     )
     _write_json(
         forecast_calibration_curves, paths["forecast_calibration_curves"]
+    )
+    _write_json(
+        direction_classification_metrics, paths["direction_classification_metrics"]
     )
 
     alert_records = load_alert_records(paths["alerts"])
@@ -390,6 +398,7 @@ def run_refresh(
             wave_conditional_scorecard_path=paths["wave_conditional_scorecard"],
             direction_forecast_scorecard_path=paths["direction_forecast_scorecard"],
             forecast_calibration_curves_path=paths["forecast_calibration_curves"],
+            direction_classification_metrics_path=paths["direction_classification_metrics"],
             model_health_path=paths["model_health"],
             price_health_path=paths["price_health"],
             prices_path=prices_path,
@@ -500,6 +509,9 @@ def run_refresh(
         ),
         "forecast_calibration_curve_status_counts": dict(
             sorted(Counter(row["status"] for row in forecast_calibration_curves).items())
+        ),
+        "direction_classification_status_counts": dict(
+            sorted(Counter(row["status"] for row in direction_classification_metrics).items())
         ),
         "historical_wave_evidence_counts": dict(
             sorted(

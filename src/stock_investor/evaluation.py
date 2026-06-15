@@ -23,6 +23,8 @@ CALIBRATION_BUCKETS = (
 MIN_CALIBRATION_OBSERVATIONS = 20
 MIN_CALIBRATION_SYMBOLS = 5
 MAX_CALIBRATION_GAP = 0.10
+MIN_CLASSIFICATION_OBSERVATIONS = 20
+MIN_CLASSIFICATION_SYMBOLS = 5
 
 
 @dataclass(frozen=True)
@@ -532,6 +534,77 @@ def build_forecast_calibration_curves(scorecard: list[dict]) -> list[dict]:
             }
         )
     return curves
+
+
+def build_directional_classification_metrics(outcomes: list[dict]) -> list[dict]:
+    """Treat BUY and SELL as explicit classifiers over matured forecast episodes."""
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for outcome in outcomes:
+        if outcome.get("direction") not in FORECAST_DIRECTIONS:
+            continue
+        for horizon, value in outcome.get("returns", {}).items():
+            if value is not None:
+                groups.setdefault((outcome["forecast_version"], horizon), []).append(
+                    outcome
+                )
+
+    rows = []
+    for (version, horizon), group in sorted(groups.items()):
+        population = [
+            item for item in group if item.get("returns", {}).get(horizon) is not None
+        ]
+        for direction in ("BUY", "SELL"):
+            def is_actual(item: dict) -> bool:
+                value = float(item["returns"][horizon])
+                return value > 0 if direction == "BUY" else value < 0
+
+            predicted = [item for item in population if item["direction"] == direction]
+            actual = [item for item in population if is_actual(item)]
+            true_positive = sum(1 for item in predicted if is_actual(item))
+            false_positive = len(predicted) - true_positive
+            false_negative = len(actual) - true_positive
+            true_negative = len(population) - true_positive - false_positive - false_negative
+            symbols = len({item["symbol"] for item in population})
+            precision_denominator = true_positive + false_positive
+            recall_denominator = true_positive + false_negative
+            false_positive_denominator = false_positive + true_negative
+            enough_evidence = (
+                len(population) >= MIN_CLASSIFICATION_OBSERVATIONS
+                and symbols >= MIN_CLASSIFICATION_SYMBOLS
+            )
+            rows.append(
+                {
+                    "forecast_version": version,
+                    "direction": direction,
+                    "horizon": horizon,
+                    "population": len(population),
+                    "symbols": symbols,
+                    "predicted": len(predicted),
+                    "actual": len(actual),
+                    "true_positive": true_positive,
+                    "false_positive": false_positive,
+                    "false_negative": false_negative,
+                    "true_negative": true_negative,
+                    "precision": (
+                        true_positive / precision_denominator
+                        if precision_denominator
+                        else None
+                    ),
+                    "recall": (
+                        true_positive / recall_denominator
+                        if recall_denominator
+                        else None
+                    ),
+                    "false_positive_rate": (
+                        false_positive / false_positive_denominator
+                        if false_positive_denominator
+                        else None
+                    ),
+                    "coverage": len(predicted) / len(population) if population else None,
+                    "status": "READY" if enough_evidence else "PENDING",
+                }
+            )
+    return rows
 
 
 def _median(values: list[float]) -> float:

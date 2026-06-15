@@ -294,6 +294,14 @@ artifacts by horizon. The dashboard shows each curve point's displayed rate,
 actual directional success, matured sample, symbol breadth, and status. Empty
 or thin curve points remain pending rather than being drawn as evidence.
 
+The direction ledger is also evaluated as a classifier. For each horizon, BUY
+actuals are positive forward returns and SELL actuals are negative forward
+returns. Precision, recall, false-positive rate, and coverage are reported
+separately for BUY and SELL. WAIT forecasts stay in the matured universe for
+recall, so the system cannot hide missed waves by labeling everything WAIT.
+Rows remain `PENDING` until at least 20 matured episodes across five symbols
+exist.
+
 Alert burden is a model-health diagnostic. A model that asks for action review
 on most holdings is likely too noisy even when its individual reasons are
 valid. Future model versions should prove that they improve selectivity and
