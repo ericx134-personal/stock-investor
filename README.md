@@ -337,6 +337,42 @@ PYTHONPATH=src python3 -m stock_investor.cli check-refresh \
 
 The command exits non-zero when the manifest is missing or stale.
 
+## Always-On Mac Dashboard
+
+Install the macOS `launchd` services to keep the private dashboard online on
+this Mac and attempt a complete market-data refresh every 30 minutes:
+
+```bash
+chmod +x scripts/run_market_refresh.sh scripts/install_macos_services.sh
+scripts/install_macos_services.sh
+```
+
+The dashboard is then available at
+`http://127.0.0.1:8765/data/private/dashboard-v3.html`. It is intentionally
+bound to localhost because it contains private portfolio data. `launchd`
+starts it after login and restarts it after a crash.
+
+For unattended latest-market-data updates, create the private runtime file
+`~/Library/Application Support/stock-investor/data/private/service.env`:
+
+```bash
+APCA_API_KEY_ID="..."
+APCA_API_SECRET_KEY="..."
+ALPACA_FEED="iex"
+```
+
+macOS privacy controls prevent background LaunchAgents from reliably reading
+`Documents`, so the installer creates a private operational copy under
+`~/Library/Application Support/stock-investor`. Re-run the installer after
+manually changing portfolio inputs or application code.
+
+The refresh service fetches two years of adjusted daily bars through Alpaca,
+atomically replaces the price input only after a successful fetch, then runs
+the production-safe evidence refresh. Without credentials, it keeps the
+website online and safely recomputes from the last Robinhood MCP export.
+Service logs are under `data/private/logs/`. macOS cannot serve or refresh
+while the machine is shut down or asleep.
+
 Record your judgment and response without changing the original alert:
 
 ```bash
