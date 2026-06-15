@@ -7,6 +7,7 @@ from pathlib import Path
 from stock_investor.data import Price
 from stock_investor.evaluation import (
     build_directional_forecast_scorecard,
+    build_forecast_calibration_scorecard,
     build_scorecard,
     evaluate_alerts,
     evaluate_decisions,
@@ -243,6 +244,29 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(row["observations"], 0)
         self.assertEqual(row["pending"], 1)
         self.assertEqual(row["mean_probability"], 0.8)
+
+    def test_calibration_scorecard_uses_fixed_buckets_and_pending_gate(self):
+        symbol, history = prices("ABC", 0.001)
+        outcomes = evaluate_directional_forecasts(
+            [forecast("BUY", entry_close=history[9].close)], {symbol: history}
+        )
+        rows = build_forecast_calibration_scorecard(outcomes)
+        row = next(item for item in rows if item["horizon"] == "21d")
+        self.assertEqual(row["probability_bucket"], "80-89%")
+        self.assertEqual(row["observations"], 1)
+        self.assertEqual(row["status"], "PENDING")
+
+    def test_calibration_scorecard_passes_only_with_broad_mature_sample(self):
+        outcomes = []
+        for offset in range(20):
+            item = forecast("BUY", symbol=f"S{offset % 5}")
+            item["returns"] = {"21d": 0.1}
+            item["directional_returns"] = {"21d": 0.1}
+            item["probability"] = 0.95
+            outcomes.append(item)
+        row = build_forecast_calibration_scorecard(outcomes)[0]
+        self.assertEqual(row["status"], "PASS")
+        self.assertEqual(row["symbols"], 5)
 
 
 if __name__ == "__main__":

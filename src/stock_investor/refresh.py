@@ -21,6 +21,7 @@ from .diagnostics import (
 )
 from .evaluation import (
     build_directional_forecast_scorecard,
+    build_forecast_calibration_scorecard,
     build_scorecard,
     evaluate_alerts,
     evaluate_decisions,
@@ -142,6 +143,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "direction_forecasts": output_dir / "wave-direction-forecasts.jsonl",
         "direction_forecast_outcomes": output_dir / "wave-direction-forecast-outcomes.json",
         "direction_forecast_scorecard": output_dir / "wave-direction-forecast-scorecard.json",
+        "forecast_calibration_scorecard": output_dir / "forecast-calibration-scorecard.json",
         "comparison": output_dir / f"model-v1-{slug.removeprefix('model-')}-comparison.json",
         "dashboard": output_dir / f"dashboard-{slug.removeprefix('model-')}.html",
         "manifest": output_dir / "refresh-manifest.json",
@@ -287,11 +289,17 @@ def run_refresh(
     direction_forecast_scorecard = build_directional_forecast_scorecard(
         direction_forecast_outcomes
     )
+    forecast_calibration_scorecard = build_forecast_calibration_scorecard(
+        direction_forecast_outcomes
+    )
     _write_json(
         direction_forecast_outcomes, paths["direction_forecast_outcomes"]
     )
     _write_json(
         direction_forecast_scorecard, paths["direction_forecast_scorecard"]
+    )
+    _write_json(
+        forecast_calibration_scorecard, paths["forecast_calibration_scorecard"]
     )
 
     alert_records = load_alert_records(paths["alerts"])
@@ -477,6 +485,9 @@ def run_refresh(
         ),
         "matured_direction_forecast_observations": sum(
             row["observations"] for row in direction_forecast_scorecard
+        ),
+        "forecast_calibration_status_counts": dict(
+            sorted(Counter(row["status"] for row in forecast_calibration_scorecard).items())
         ),
         "historical_wave_evidence_counts": dict(
             sorted(

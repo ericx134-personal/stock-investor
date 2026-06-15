@@ -75,7 +75,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## Phase 4: Calibration And Error Analysis
 
-- [ ] M031 Add forecast calibration buckets by displayed historical rate.
+- [x] M031 Add forecast calibration buckets by displayed historical rate.
 - [ ] M032 Add calibration curves by BUY and SELL direction.
 - [ ] M033 Add precision, recall, false-positive rate, and coverage by direction.
 - [ ] M034 Add confidence intervals for all directional success metrics.

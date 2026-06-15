@@ -13,6 +13,16 @@ OUTCOME_WINDOWS = (21, 63, 126)
 ALERT_ACTIONS = {"BUY_CANDIDATE", "ADD_CANDIDATE", "TRIM_REVIEW"}
 INVESTMENT_DECISION_ACTIONS = ALERT_ACTIONS | {"HOLD", "REVIEW"}
 FORECAST_DIRECTIONS = {"BUY", "SELL", "WAIT"}
+CALIBRATION_BUCKETS = (
+    (0.0, 0.6, "<60%"),
+    (0.6, 0.7, "60-69%"),
+    (0.7, 0.8, "70-79%"),
+    (0.8, 0.9, "80-89%"),
+    (0.9, 1.0000001, "90-100%"),
+)
+MIN_CALIBRATION_OBSERVATIONS = 20
+MIN_CALIBRATION_SYMBOLS = 5
+MAX_CALIBRATION_GAP = 0.10
 
 
 @dataclass(frozen=True)
@@ -405,6 +415,74 @@ def build_directional_forecast_scorecard(outcomes: list[dict]) -> list[dict]:
                 "mean_excess_return": sum(excess) / len(excess) if excess else None,
                 "mean_directional_return": (
                     sum(directional) / len(directional) if directional else None
+                ),
+            }
+        )
+    return rows
+
+
+def build_forecast_calibration_scorecard(outcomes: list[dict]) -> list[dict]:
+    """Measure displayed directional rates in fixed, predeclared buckets."""
+    groups: dict[tuple[str, str, str, str], list[dict]] = {}
+    for outcome in outcomes:
+        probability = outcome.get("probability")
+        if outcome.get("direction") not in {"BUY", "SELL"} or probability is None:
+            continue
+        bucket = next(
+            label
+            for low, high, label in CALIBRATION_BUCKETS
+            if low <= float(probability) < high
+        )
+        for horizon in outcome["returns"]:
+            groups.setdefault(
+                (outcome["forecast_version"], outcome["direction"], horizon, bucket), []
+            ).append(outcome)
+
+    rows = []
+    for (version, direction, horizon, bucket), group in sorted(groups.items()):
+        matured = [
+            item
+            for item in group
+            if item["directional_returns"].get(horizon) is not None
+        ]
+        probabilities = [float(item["probability"]) for item in matured]
+        successes = [
+            float(item["directional_returns"][horizon]) > 0 for item in matured
+        ]
+        mean_probability = (
+            sum(probabilities) / len(probabilities) if probabilities else None
+        )
+        success_rate = sum(successes) / len(successes) if successes else None
+        gap = (
+            success_rate - mean_probability
+            if success_rate is not None and mean_probability is not None
+            else None
+        )
+        symbols = len({item["symbol"] for item in matured})
+        enough_evidence = (
+            len(matured) >= MIN_CALIBRATION_OBSERVATIONS
+            and symbols >= MIN_CALIBRATION_SYMBOLS
+        )
+        rows.append(
+            {
+                "forecast_version": version,
+                "direction": direction,
+                "horizon": horizon,
+                "probability_bucket": bucket,
+                "forecast_episodes": len(group),
+                "observations": len(matured),
+                "pending": len(group) - len(matured),
+                "symbols": symbols,
+                "mean_probability": mean_probability,
+                "directional_success_rate": success_rate,
+                "calibration_gap": gap,
+                "mean_absolute_error": abs(gap) if gap is not None else None,
+                "status": (
+                    "PENDING"
+                    if not enough_evidence
+                    else "PASS"
+                    if abs(gap) <= MAX_CALIBRATION_GAP
+                    else "FAIL"
                 ),
             }
         )

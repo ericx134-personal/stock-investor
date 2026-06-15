@@ -15,7 +15,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] A001 Persist every displayed BUY/SELL/WAIT directional forecast.
 - [x] A002 Evaluate directional forecasts after 21, 63, and 126 sessions.
 - [x] A003 Build forecast scorecards by direction and horizon.
-- [ ] A004 Track forecast calibration by displayed probability bucket.
+- [x] A004 Track forecast calibration by displayed probability bucket.
 - [ ] A005 Track coverage: share of holdings receiving BUY/SELL versus WAIT.
 - [ ] A006 Track false-positive BUY and SELL rates.
 - [x] A007 Track maximum favorable and adverse excursion per forecast.

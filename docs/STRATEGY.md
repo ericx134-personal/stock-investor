@@ -282,6 +282,13 @@ excursions. It reports forecast episodes, matured observations, pending
 observations, directional success, and Brier score. WAIT has no invented
 directional success or Brier score.
 
+Displayed directional rates are also audited in fixed `<60%`, `60-69%`,
+`70-79%`, `80-89%`, and `90-100%` calibration buckets. A bucket remains
+`PENDING` until it has at least 20 matured episodes across at least five
+symbols. It passes only when actual directional success is within 10 percentage
+points of the mean displayed rate; these gates were fixed before outcome
+inspection.
+
 Alert burden is a model-health diagnostic. A model that asks for action review
 on most holdings is likely too noisy even when its individual reasons are
 valid. Future model versions should prove that they improve selectivity and
