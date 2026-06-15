@@ -373,7 +373,11 @@ manually changing portfolio inputs or application code.
 
 The refresh service fetches two years of adjusted daily bars through Alpaca,
 atomically replaces the price input only after a successful fetch, then runs
-the production-safe evidence refresh. Without credentials, it keeps the
+the production-safe evidence refresh. It also creates one credential-free
+private archive per day under `data/private/archives/` and retains 30 daily
+archives by default. It never deletes source ledgers or rewrites forecasts;
+only expired archive bundles are pruned. Set `ARCHIVE_KEEP_DAYS` in
+`service.env` to change the archive retention period. Without credentials, it keeps the
 website online and safely recomputes from the last Robinhood MCP export.
 Service logs are under `data/private/logs/`. macOS cannot serve or refresh
 while the machine is shut down or asleep.

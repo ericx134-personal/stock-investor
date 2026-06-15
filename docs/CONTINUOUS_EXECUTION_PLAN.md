@@ -68,7 +68,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M025 Alert when a scheduled refresh is stale or incomplete.
 - [x] M025A Keep the private Mac dashboard online and schedule market refreshes.
 - [x] M026 Add atomic writes for every current-state artifact.
-- [ ] M027 Add retention and archival policy for private generated artifacts.
+- [x] M027 Add retention and archival policy for private generated artifacts.
 - [ ] M028 Verify sanitized backup and restore.
 - [ ] M029 Add dependency and security checks.
 - [ ] M030 Add a permanent integration test proving no trade/write action exists.

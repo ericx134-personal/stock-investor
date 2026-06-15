@@ -14,6 +14,7 @@ from .backtest import (
     backtest_trend_momentum_oos,
     write_oos_report,
 )
+from .archive import archive_private_artifacts
 from .brief import build_brief, write_brief
 from .data import load_positions, load_prices
 from .dashboard import build_dashboard, write_dashboard
@@ -621,6 +622,12 @@ def _check_refresh(manifest_path: str, max_age_hours: float) -> int:
     return 1 if report["stale"] else 0
 
 
+def _archive_private(source_dir: str, archive_dir: str | None, keep_days: int) -> int:
+    report = archive_private_artifacts(source_dir, archive_dir, keep_days=keep_days)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0
+
+
 def _compare_models(
     baseline_path: str, candidate_path: str, output_path: str | None
 ) -> int:
@@ -949,6 +956,14 @@ def main() -> int:
     check_refresh_parser.add_argument("manifest")
     check_refresh_parser.add_argument("--max-age-hours", type=float, default=36)
 
+    archive_parser = subparsers.add_parser(
+        "archive-private",
+        help="create a credential-free daily archive and prune expired archives",
+    )
+    archive_parser.add_argument("source_dir")
+    archive_parser.add_argument("--archive-dir")
+    archive_parser.add_argument("--keep-days", type=int, default=30)
+
     dashboard_parser = subparsers.add_parser(
         "dashboard", help="generate a local read-only portfolio dashboard"
     )
@@ -1118,6 +1133,8 @@ def main() -> int:
         )
     if args.command == "check-refresh":
         return _check_refresh(args.manifest, args.max_age_hours)
+    if args.command == "archive-private":
+        return _archive_private(args.source_dir, args.archive_dir, args.keep_days)
     if args.command == "dashboard":
         return _dashboard(
             args.alerts,

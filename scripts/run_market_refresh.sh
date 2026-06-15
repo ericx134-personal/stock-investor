@@ -48,4 +48,7 @@ PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli refresh \
   --price-adjustment "$PRICE_ADJUSTMENT" \
   --production-safe
 
+PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli archive-private \
+  data/private --keep-days "${ARCHIVE_KEEP_DAYS:-30}"
+
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] scheduled market refresh complete"
