@@ -61,6 +61,8 @@ from .wave import (
     build_price_zone_replay_scorecard,
     build_wave_conditional_scorecard,
     build_wave_scorecard,
+    build_wave_expanding_window_scorecard,
+    build_wave_expanding_window_validation,
     build_wave_time_decay_scorecard,
     build_wave_walk_forward_outcomes,
     build_wave_walk_forward_scorecard,
@@ -149,6 +151,8 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "wave_experiment_scorecard": output_dir / "wave-experiment-scorecard.json",
         "wave_conditional_scorecard": output_dir / "wave-conditional-scorecard.json",
         "wave_time_decay_scorecard": output_dir / "wave-time-decay-scorecard.json",
+        "wave_expanding_validation": output_dir / "wave-expanding-validation.json",
+        "wave_expanding_validation_scorecard": output_dir / "wave-expanding-validation-scorecard.json",
         "price_zone_replay": output_dir / "price-zone-replay.json",
         "price_zone_replay_scorecard": output_dir / "price-zone-replay-scorecard.json",
         "direction_rate_comparison": output_dir / "direction-rate-comparison.json",
@@ -286,10 +290,21 @@ def run_refresh(
     wave_time_decay_scorecard = build_wave_time_decay_scorecard(
         wave_experiment_outcomes
     )
+    wave_expanding_validation = build_wave_expanding_window_validation(
+        wave_experiment_outcomes
+    )
+    wave_expanding_validation_scorecard = build_wave_expanding_window_scorecard(
+        wave_expanding_validation
+    )
     _write_json(wave_experiment_outcomes, paths["wave_experiment_outcomes"])
     _write_json(wave_experiment_scorecard, paths["wave_experiment_scorecard"])
     _write_json(wave_conditional_scorecard, paths["wave_conditional_scorecard"])
     _write_json(wave_time_decay_scorecard, paths["wave_time_decay_scorecard"])
+    _write_json(wave_expanding_validation, paths["wave_expanding_validation"])
+    _write_json(
+        wave_expanding_validation_scorecard,
+        paths["wave_expanding_validation_scorecard"],
+    )
     direction_rate_comparison = build_direction_rate_comparison_scorecard(
         wave_experiment_scorecard,
         wave_conditional_scorecard,
@@ -383,6 +398,9 @@ def run_refresh(
             "price_zone_replay_scorecard": len(price_zone_replay_scorecard),
             "direction_rate_comparison": len(direction_rate_comparison),
             "wave_time_decay_scorecard": len(wave_time_decay_scorecard),
+            "wave_expanding_validation_scorecard": len(
+                wave_expanding_validation_scorecard
+            ),
         }
     )
     _write_json(multiple_testing_ledger, paths["multiple_testing_ledger"])
@@ -546,6 +564,10 @@ def run_refresh(
         "historical_wave_scorecard_rows": len(wave_experiment_scorecard),
         "conditional_wave_scorecard_rows": len(wave_conditional_scorecard),
         "wave_time_decay_scorecard_rows": len(wave_time_decay_scorecard),
+        "wave_expanding_validation_count": len(wave_expanding_validation),
+        "wave_expanding_validation_scorecard_rows": len(
+            wave_expanding_validation_scorecard
+        ),
         "direction_rate_comparison_rows": len(direction_rate_comparison),
         "historical_directional_leave_one_out_downgrades": sum(
             row.get("directional_pre_leave_one_out_classification")

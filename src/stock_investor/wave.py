@@ -18,6 +18,7 @@ WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v4"
 PRICE_ZONE_REPLAY_VERSION = "price-zone-replay-v1"
 DIRECTION_RATE_COMPARISON_VERSION = "direction-rate-comparison-v1"
 WAVE_TIME_DECAY_VERSION = "wave-time-decay-v1"
+WAVE_EXPANDING_VALIDATION_VERSION = "wave-expanding-validation-v1"
 WAVE_OUTCOME_WINDOWS = (21, 63, 126)
 PRICE_ZONE_REPLAY_HORIZON = 5
 TIME_DECAY_HALF_LIFE_DAYS = 365
@@ -995,6 +996,82 @@ def build_wave_time_decay_scorecard(
                 "weighted_mean_excess_return": _weighted_mean(weighted_excess),
                 "status": "EXPERIMENTAL",
                 "failure_gate": "Do not replace equal-weight evidence until sealed forward outcomes improve calibration.",
+            }
+        )
+    return rows
+
+
+def build_wave_expanding_window_validation(
+    outcomes: list[dict],
+    *,
+    min_train_observations: int = MIN_ROBUST_OBSERVATIONS,
+    buy_threshold: float = 0.55,
+    sell_threshold: float = 0.45,
+) -> list[dict]:
+    """Validate a simple prior-only direction rule with expanding windows."""
+    groups = defaultdict(list)
+    for outcome in outcomes:
+        groups[(outcome["regime"], outcome["horizon"])].append(outcome)
+    records = []
+    for (regime, horizon), values in sorted(groups.items()):
+        ordered = sorted(values, key=lambda item: (item["signal_date"], item["symbol"]))
+        for index, outcome in enumerate(ordered):
+            prior = ordered[:index]
+            if len(prior) < min_train_observations:
+                continue
+            prior_positive_rate = sum(
+                float(item["forward_return"]) > 0 for item in prior
+            ) / len(prior)
+            predicted = (
+                "BUY"
+                if prior_positive_rate >= buy_threshold
+                else "SELL"
+                if prior_positive_rate <= sell_threshold
+                else "WAIT"
+            )
+            actual = "BUY" if float(outcome["forward_return"]) > 0 else "SELL"
+            records.append(
+                {
+                    "validation_version": WAVE_EXPANDING_VALIDATION_VERSION,
+                    "regime": regime,
+                    "horizon": horizon,
+                    "symbol": outcome["symbol"],
+                    "signal_date": outcome["signal_date"],
+                    "training_observations": len(prior),
+                    "prior_positive_rate": prior_positive_rate,
+                    "predicted_direction": predicted,
+                    "actual_direction": actual,
+                    "correct": predicted == actual if predicted != "WAIT" else None,
+                    "forward_return": outcome["forward_return"],
+                }
+            )
+    return records
+
+
+def build_wave_expanding_window_scorecard(records: list[dict]) -> list[dict]:
+    groups = defaultdict(list)
+    for record in records:
+        groups[(record["predicted_direction"], record["horizon"])].append(record)
+    rows = []
+    for (direction, horizon), values in sorted(groups.items()):
+        directional = [item for item in values if item["correct"] is not None]
+        correct = sum(1 for item in directional if item["correct"])
+        rows.append(
+            {
+                "validation_version": WAVE_EXPANDING_VALIDATION_VERSION,
+                "predicted_direction": direction,
+                "horizon": horizon,
+                "observations": len(values),
+                "directional_observations": len(directional),
+                "directional_success_rate": (
+                    correct / len(directional) if directional else None
+                ),
+                "mean_forward_return": (
+                    sum(float(item["forward_return"]) for item in values) / len(values)
+                    if values
+                    else None
+                ),
+                "status": "RESEARCH_ONLY",
             }
         )
     return rows

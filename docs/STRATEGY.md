@@ -307,6 +307,10 @@ through December 31, 2025, development through June 30, 2026, and sealed test
 from July 1, 2026 onward. The sealed period starts after already-inspected
 source data, so it remains a future test rather than a relabeled backtest.
 
+Expanding-window validation tests structural-wave direction using only prior
+outcomes within each regime and horizon. It is a research-only leakage check:
+poor results block promotion, but good results still require sealed evidence.
+
 Every direction displayed on the portfolio board is now recorded in a separate
 append-only, versioned direction ledger. BUY and SELL forecasts retain their
 displayed shrunk confidence, raw historical analog rate, selected broad or
@@ -537,6 +541,7 @@ preserves separately maintained risk metadata.
 - [x] Multiple-testing ledger for active research artifacts
 - [x] False-discovery warnings for repeated hypothesis tests
 - [x] Fixed train, development, and sealed-test evaluation periods
+- [x] Expanding-window structural-wave validation
 - [x] Production schedule connected to the real portfolio with market-data fallback
 
 ### Phase 3A: Real-Portfolio Learning Loop

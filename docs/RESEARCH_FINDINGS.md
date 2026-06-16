@@ -864,3 +864,17 @@ this milestone, June 16, 2026. This means existing June outcomes are not
 retroactively called sealed. Promotion candidates must be frozen before sealed
 outcomes are inspected, and any model changed after June 30, 2026 needs a later
 sealed window.
+
+## Wave Expanding Validation V1
+
+M044 adds `wave-expanding-validation-v1`, a research-only expanding-window
+validator for structural-wave outcomes. For each wave regime and horizon, the
+validator sorts historical outcomes by signal date, uses only prior outcomes to
+estimate the prior positive-return rate, emits BUY above 55%, SELL below 45%,
+and WAIT otherwise. It then scores that pre-outcome direction against the next
+unseen historical outcome.
+
+Decision rule: the artifact is a leakage check and a stability diagnostic, not
+a live signal. Failure gate: weak expanding-window results block promotion of
+any equal-weight wave candidate until the candidate passes sealed forward
+outcomes or a predeclared alternative rule.

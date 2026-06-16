@@ -13,6 +13,8 @@ from stock_investor.wave import (
     build_price_zone_replay,
     build_price_zone_replay_scorecard,
     build_wave_conditional_scorecard,
+    build_wave_expanding_window_scorecard,
+    build_wave_expanding_window_validation,
     build_wave_scorecard,
     build_wave_time_decay_scorecard,
     build_wave_walk_forward_outcomes,
@@ -364,6 +366,31 @@ class WaveTests(unittest.TestCase):
         self.assertAlmostEqual(row["weighted_positive_rate"], 2 / 3, places=2)
         self.assertGreater(row["weighted_mean_return"], 0)
         self.assertEqual(row["status"], "EXPERIMENTAL")
+
+    def test_expanding_window_validation_uses_only_prior_outcomes(self):
+        outcomes = [
+            {
+                "symbol": f"S{index}",
+                "regime": "Advancing wave",
+                "horizon": "21d",
+                "signal_date": f"2026-01-{index + 1:02d}",
+                "forward_return": 0.1 if index < 10 or index == 10 else -0.1,
+            }
+            for index in range(12)
+        ]
+        records = build_wave_expanding_window_validation(
+            outcomes, min_train_observations=10
+        )
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]["validation_version"], "wave-expanding-validation-v1")
+        self.assertEqual(records[0]["training_observations"], 10)
+        self.assertEqual(records[0]["prior_positive_rate"], 1.0)
+        self.assertEqual(records[0]["predicted_direction"], "BUY")
+        self.assertTrue(records[0]["correct"])
+        self.assertFalse(records[1]["correct"])
+        scorecard = build_wave_expanding_window_scorecard(records)
+        self.assertEqual(scorecard[0]["directional_success_rate"], 0.5)
+        self.assertEqual(scorecard[0]["status"], "RESEARCH_ONLY")
 
     def test_blocked_wait_forecast_keeps_probability_schema(self):
         forecast = build_directional_forecasts(
