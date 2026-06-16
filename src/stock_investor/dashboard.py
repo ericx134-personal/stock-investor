@@ -12,6 +12,7 @@ from .kline import classify_kline
 from .wave import (
     classify_wave_directional_evidence,
     classify_wave_walk_forward_evidence,
+    shrink_direction_probability,
     wave_age_bucket,
     wave_magnitude_bucket,
 )
@@ -110,6 +111,41 @@ def _evidence_bar(label: str, rate: float | None, detail: str, css_class: str) -
     </div>"""
 
 
+def _position_summary(record: dict) -> str:
+    shares = record.get("shares")
+    average_cost = record.get("average_cost")
+    cost_basis = record.get("cost_basis")
+    market_value = float(record.get("market_value") or 0)
+    unrealized_return = record.get("unrealized_return")
+    unrealized_dollars = None
+    if cost_basis is not None:
+        unrealized_dollars = market_value - float(cost_basis)
+    elif unrealized_return is not None and float(unrealized_return) != -1:
+        inferred_cost = market_value / (1 + float(unrealized_return))
+        unrealized_dollars = market_value - inferred_cost
+    gain_class = (
+        "positive"
+        if unrealized_dollars is not None and unrealized_dollars >= 0
+        else "negative"
+    )
+    total_gain = "pending"
+    if unrealized_dollars is not None:
+        sign = "+" if unrealized_dollars >= 0 else "-"
+        total_gain = f"{sign}${abs(unrealized_dollars):,.2f}"
+    return f"""<section class="position-hero">
+      <div class="position-main {gain_class}">
+        <small>Your position</small>
+        <b>${market_value:,.2f}</b>
+        <span>{total_gain} · {_optional_percent(unrealized_return)}</span>
+      </div>
+      <div><small>Shares</small><b>{_optional_number(shares)}</b></div>
+      <div><small>Average cost</small><b>{_optional_money(average_cost)}</b></div>
+      <div><small>Cost basis</small><b>{_optional_money(cost_basis)}</b></div>
+      <div><small>Portfolio weight</small><b>{_percent(record.get("portfolio_weight"))}</b></div>
+      <div><small>Latest close</small><b>${float(record.get("latest_close") or 0):,.2f}</b></div>
+    </section>"""
+
+
 def _evidence_graphics(
     historical: dict | None,
     wave: dict,
@@ -120,9 +156,12 @@ def _evidence_graphics(
         return """<section class="evidence-graphics wait">
           <div class="probability-ring" style="--probability:0%"><b>--</b><span>direction</span></div>
           <div class="why-copy"><small>WHY WAIT</small><h3>No comparable wave sample</h3>
-          <p>The system refuses a directional probability until a matching historical sample exists.</p></div>
+          <p>The system refuses directional confidence until a matching historical sample exists.</p></div>
         </section>"""
-    direction_rate = _directional_rate(historical, signal_label, "positive_rate")
+    raw_direction_rate = _directional_rate(historical, signal_label, "positive_rate")
+    direction_rate = shrink_direction_probability(
+        raw_direction_rate, int(historical.get("observations", 0))
+    )
     breadth_rate = _directional_rate(
         historical, signal_label, "symbol_positive_return_rate"
     )
@@ -135,7 +174,7 @@ def _evidence_graphics(
     observations = int(historical.get("observations", 0))
     symbols = int(historical.get("directional_symbols", historical.get("symbols", 0)))
     headline = (
-        f"{direction_rate:.0%} of matching waves {direction_word} over {horizon}"
+        f"{direction_rate:.0%} shrunk confidence; raw analog rate {raw_direction_rate:.0%}"
         if direction_rate is not None and signal_label in {"BUY", "SELL"}
         else "Historical direction is not proven"
     )
@@ -178,9 +217,9 @@ def _kline_chart(
     ]
     if len(candles) < 20:
         return '<div class="chart-unavailable">Daily OHLCV chart unavailable.</div>'
-    width, height = 580, 330
-    left, right, top, price_bottom = 12, 54, 22, 240
-    volume_top, volume_bottom = 260, 302
+    width, height = 860, 430
+    left, right, top, price_bottom = 18, 64, 28, 315
+    volume_top, volume_bottom = 340, 390
     plot_width = width - left - right
     plot_height = price_bottom - top
     price_values = [
@@ -227,17 +266,21 @@ def _kline_chart(
         )
     target_zone = ""
     if price_plan:
+        zone_class = html.escape(str(price_plan.get("plan_class") or signal_class))
         target_top = y(float(price_plan["high"]))
         target_bottom = y(float(price_plan["low"]))
         target_mid = y(float(price_plan["midpoint"]))
-        target_label = f'{signal_label} ${price_plan["low"]:.2f}–${price_plan["high"]:.2f}'
+        target_label = (
+            f'{price_plan.get("label", signal_label)} '
+            f'${price_plan["low"]:.2f}–${price_plan["high"]:.2f}'
+        )
         target_zone = (
-            f'<rect class="target-zone {signal_class}" x="{left:.1f}" y="{target_top:.1f}" '
+            f'<rect class="target-zone {zone_class}" x="{left:.1f}" y="{target_top:.1f}" '
             f'width="{plot_width:.1f}" height="{max(1, target_bottom - target_top):.1f}"/>'
-            f'<line class="target-mid {signal_class}" x1="{left:.1f}" y1="{target_mid:.1f}" '
+            f'<line class="target-mid {zone_class}" x1="{left:.1f}" y1="{target_mid:.1f}" '
             f'x2="{left + plot_width:.1f}" y2="{target_mid:.1f}"/>'
-            f'<rect class="target-label-bg {signal_class}" x="{left + 5:.1f}" '
-            f'y="{max(top + 2, target_top + 3):.1f}" width="126" height="17" rx="4"/>'
+            f'<rect class="target-label-bg {zone_class}" x="{left + 5:.1f}" '
+            f'y="{max(top + 2, target_top + 3):.1f}" width="148" height="17" rx="4"/>'
             f'<text class="target-label" x="{left + 11:.1f}" '
             f'y="{max(top + 14, target_top + 15):.1f}">{html.escape(target_label)}</text>'
         )
@@ -286,7 +329,7 @@ def _kline_chart(
                 f'cy="{y(float(wave["last_pivot_price"])):.1f}" r="4"/>'
             )
     date_labels = "".join(
-        f'<text class="axis-label date-label" x="{x(index):.1f}" y="322">{candles[index].date.strftime("%b %d")}</text>'
+        f'<text class="axis-label date-label" x="{x(index):.1f}" y="414">{candles[index].date.strftime("%b %d")}</text>'
         for index in (0, len(candles) // 2, len(candles) - 1)
     )
     signal_probability = "--" if probability is None else f"{probability:.0%}"
@@ -378,14 +421,21 @@ def _board_signal(historical: dict | None) -> tuple[str, str, str, str]:
         classification = classify_wave_directional_evidence(historical)
     positive_rate = historical.get("positive_rate")
     if classification == "BUY" and positive_rate is not None:
-        return "BUY", "buy", f"{float(positive_rate):.0%}", "robust direction evidence"
+        probability = shrink_direction_probability(
+            float(positive_rate), int(historical.get("observations", 0))
+        )
+        return "BUY", "buy", f"{float(probability):.0%}", "shrunk robust evidence"
     if classification == "SELL" and positive_rate is not None:
-        return "SELL", "sell", f"{1 - float(positive_rate):.0%}", "robust direction evidence"
+        probability = shrink_direction_probability(
+            1 - float(positive_rate), int(historical.get("observations", 0))
+        )
+        return "SELL", "sell", f"{float(probability):.0%}", "shrunk robust evidence"
     return "WAIT", "wait", "--", "direction not proven"
 
 
 def _price_plan(signal_label: str, wave: dict, current_price: object) -> dict | None:
     """Return a structural review zone without inventing an exact execution price."""
+    plan_class = signal_label.lower()
     if signal_label == "BUY":
         label, low_key, high_key = (
             "Buy zone",
@@ -393,6 +443,7 @@ def _price_plan(signal_label: str, wave: dict, current_price: object) -> dict | 
             "support_zone_high",
         )
         source = "confirmed structural support"
+        interpretation = "Review add/buy only if price action still supports the thesis."
     elif signal_label == "SELL":
         label, low_key, high_key = (
             "Sell zone",
@@ -400,6 +451,7 @@ def _price_plan(signal_label: str, wave: dict, current_price: object) -> dict | 
             "resistance_zone_high",
         )
         source = "confirmed structural resistance"
+        interpretation = "Review trim/sell only if price stalls or rejects in this area."
     else:
         return None
     if wave.get(low_key) is None or wave.get(high_key) is None:
@@ -409,6 +461,14 @@ def _price_plan(signal_label: str, wave: dict, current_price: object) -> dict | 
         return None
     midpoint = (low + high) / 2
     current = float(current_price or wave.get("latest_close") or 0)
+    if signal_label == "SELL" and current > high:
+        label = "Breakout retest zone"
+        source = "former structural resistance"
+        plan_class = "breakout"
+        interpretation = (
+            "The old sell zone has been invalidated by a close above resistance; "
+            "treat it as a retest/support area before making a trim decision."
+        )
     if current <= 0:
         proximity = "Current-price distance unavailable."
     elif low <= current <= high:
@@ -429,6 +489,8 @@ def _price_plan(signal_label: str, wave: dict, current_price: object) -> dict | 
         "high": high,
         "midpoint": midpoint,
         "source": source,
+        "plan_class": plan_class,
+        "interpretation": interpretation,
         "proximity": proximity,
     }
 
@@ -443,11 +505,13 @@ def _price_plan_card(plan: dict | None, signal_class: str) -> str:
         f'{plan["proximity"]} Based on {plan["source"]}. '
         "Review area only; no automatic order."
     )
-    return f"""<section class="price-plan {signal_class}">
+    plan_class = html.escape(str(plan.get("plan_class") or signal_class))
+    return f"""<section class="price-plan {plan_class}">
       <div><small>{html.escape(plan["label"])}</small>
       <h3>{_optional_money(plan["low"])}–{_optional_money(plan["high"])}</h3></div>
       <div class="price-plan-mid"><small>Mid</small><b>{_optional_money(plan["midpoint"])}</b></div>
       <span class="info-tip" tabindex="0" data-tip="{html.escape(tooltip)}" aria-label="{html.escape(tooltip)}">i</span>
+      <p>{html.escape(str(plan.get("interpretation", "")))}</p>
     </section>"""
 
 
@@ -715,10 +779,16 @@ def build_dashboard(
             historical_wave
         )
         signal_probability = (
-            float(historical_wave.get("positive_rate", 0))
+            shrink_direction_probability(
+                float(historical_wave.get("positive_rate", 0)),
+                int(historical_wave.get("observations", 0)),
+            )
             if signal_label == "BUY" and historical_wave
             else (
-                1 - float(historical_wave.get("positive_rate", 1))
+                shrink_direction_probability(
+                    1 - float(historical_wave.get("positive_rate", 1)),
+                    int(historical_wave.get("observations", 0)),
+                )
                 if signal_label == "SELL" and historical_wave
                 else None
             )
@@ -842,6 +912,7 @@ def build_dashboard(
                 <div><h2>{html.escape(record.get("symbol", ""))}</h2><span class="decision-signal {signal_class}"><strong>{signal_label}</strong><b>{signal_percent}</b></span></div>
                 <span class="board-action">{html.escape(action.replace("_", " "))}</span>
               </div>
+                {_position_summary(record)}
                 {evidence_graphics}
                 {_price_plan_card(price_plan, signal_class) if signal_label in {"BUY", "SELL"} else ""}
                 {kline_chart}
@@ -879,11 +950,11 @@ def build_dashboard(
     prioritized_board = f"""
     <section class="decision-board" aria-label="Prioritized directional signals">
       <section class="signal-column buy-column">
-        <header><div><small>Highest probability first</small><h3>BUY</h3></div><b>{len(sorted_board_rows["BUY"])}</b></header>
+        <header><div><small>Highest confidence first</small><h3>BUY</h3></div><b>{len(sorted_board_rows["BUY"])}</b></header>
         <div class="signal-stack">{''.join(sorted_board_rows["BUY"]) or '<p class="empty-state">No robust buy direction today.</p>'}</div>
       </section>
       <section class="signal-column sell-column">
-        <header><div><small>Highest probability first</small><h3>SELL</h3></div><b>{len(sorted_board_rows["SELL"])}</b></header>
+        <header><div><small>Highest confidence first</small><h3>SELL</h3></div><b>{len(sorted_board_rows["SELL"])}</b></header>
         <div class="signal-stack">{''.join(sorted_board_rows["SELL"]) or '<p class="empty-state">No robust sell direction today.</p>'}</div>
       </section>
       <details class="signal-column wait-column">
@@ -1175,10 +1246,13 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .health-status.good {{ background:var(--green-dim); color:var(--green) }} .health-status.review {{ background:#2b240f; color:var(--amber) }} .health-status.poor {{ background:#321214; color:var(--red) }}
 .board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }}
 .drawer-backdrop {{ background:rgba(0,0,0,.78); display:none; inset:0; position:fixed; z-index:20 }} .drawer-backdrop.open {{ display:block }}
-.drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:720px; overflow:auto; padding:22px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .2s ease; width:min(94vw,720px); z-index:30 }}
+.drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:1040px; overflow:auto; padding:24px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .2s ease; width:min(96vw,1040px); z-index:30 }}
 .drawer.open {{ transform:translateX(0) }} .drawer-close {{ background:#171717; border:1px solid var(--line); border-radius:999px; color:var(--text); cursor:pointer; display:block; font:inherit; margin-left:auto; padding:7px 12px; position:sticky; top:0; z-index:2 }}
 .drawer-heading {{ align-items:center; display:flex; justify-content:space-between; gap:12px; margin:34px 0 18px }} .drawer-heading h2 {{ display:inline; font-size:32px; margin:0 10px 0 0 }}
 .holding-detail {{ overflow-wrap:anywhere; padding:0 }} .detail-title {{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px }}
+.position-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:1px; grid-template-columns:1.4fr repeat(5,1fr); margin:0 0 14px; overflow:hidden }}
+.position-hero>div {{ background:#101010; min-width:0; padding:15px }} .position-hero small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.5px; text-transform:uppercase }}
+.position-hero b {{ display:block; font-size:18px; margin-top:4px }} .position-main b {{ font-size:30px; letter-spacing:-.8px }} .position-main span {{ color:var(--muted); display:block; margin-top:2px }}
 .evidence-graphics {{ --tone:var(--amber); background:#0b0b0b; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; padding:14px }}
 .evidence-graphics.buy {{ --tone:var(--green) }} .evidence-graphics.sell {{ --tone:var(--red) }}
 .evidence-hero {{ align-items:center; display:grid; gap:16px; grid-template-columns:118px 1fr }}
@@ -1190,9 +1264,10 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .bar-track {{ background:#242424; border-radius:999px; height:7px; margin:4px 0; overflow:hidden }} .bar-track i {{ background:var(--tone); border-radius:999px; display:block; height:100% }}
 .evidence-bar.relative .bar-track i {{ background:#aaa }} .evidence-bar.relative b {{ color:#ddd }}
 .price-plan {{ align-items:center; background:#0b0b0b; border:1px solid var(--line); border-left:4px solid var(--amber); border-radius:10px; display:grid; gap:8px 16px; grid-template-columns:1fr auto auto; margin:0 0 12px; padding:13px 15px }}
-.price-plan.buy {{ border-left-color:var(--green) }} .price-plan.sell {{ border-left-color:var(--red) }}
+.price-plan.buy {{ border-left-color:var(--green) }} .price-plan.sell {{ border-left-color:var(--red) }} .price-plan.breakout {{ border-left-color:var(--green); background:#071008 }}
 .price-plan small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.5px; text-transform:uppercase }}
 .price-plan h3 {{ font-size:25px; margin:2px 0 0 }} .price-plan-mid {{ text-align:right }} .price-plan-mid b {{ display:block; font-size:18px }}
+.price-plan p {{ color:var(--muted); grid-column:1 / -1; margin:0 }}
 .price-plan.unavailable {{ display:block }} .info-tip {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--muted); cursor:help; display:flex; font-size:11px; font-weight:800; height:20px; justify-content:center; position:relative; width:20px }}
 .info-tip::after {{ background:#222; border:1px solid #555; border-radius:6px; bottom:29px; color:#ddd; content:attr(data-tip); display:none; font-size:11px; font-weight:500; line-height:1.35; padding:8px; position:absolute; right:-6px; text-transform:none; width:240px; z-index:5 }}
 .info-tip:hover::after,.info-tip:focus::after {{ display:block }} .info-tip:focus {{ border-color:#aaa; outline:none }}
@@ -1201,9 +1276,9 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
 .kline-chart {{ display:block; height:auto; overflow:visible; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
 .support-zone {{ fill:rgba(0,200,5,.10) }} .resistance-zone {{ fill:rgba(255,90,95,.10) }} .zone-label {{ fill:#999; font-size:8px; text-transform:uppercase }}
-.target-zone.buy {{ fill:rgba(0,200,5,.22); stroke:var(--green); stroke-width:1 }} .target-zone.sell {{ fill:rgba(255,90,95,.22); stroke:var(--red); stroke-width:1 }}
-.target-mid {{ stroke-width:1.7; stroke-dasharray:4 3 }} .target-mid.buy {{ stroke:var(--green) }} .target-mid.sell {{ stroke:var(--red) }}
-.target-label-bg.buy {{ fill:#006b22 }} .target-label-bg.sell {{ fill:#8b252a }} .target-label {{ fill:#fff; font-size:8px; font-weight:800 }}
+.target-zone.buy {{ fill:rgba(0,200,5,.22); stroke:var(--green); stroke-width:1 }} .target-zone.sell {{ fill:rgba(255,90,95,.22); stroke:var(--red); stroke-width:1 }} .target-zone.breakout {{ fill:rgba(0,200,5,.16); stroke:var(--green); stroke-dasharray:5 3; stroke-width:1.4 }}
+.target-mid {{ stroke-width:1.7; stroke-dasharray:4 3 }} .target-mid.buy {{ stroke:var(--green) }} .target-mid.sell {{ stroke:var(--red) }} .target-mid.breakout {{ stroke:var(--green) }}
+.target-label-bg.buy {{ fill:#006b22 }} .target-label-bg.sell {{ fill:#8b252a }} .target-label-bg.breakout {{ fill:#006b22 }} .target-label {{ fill:#fff; font-size:8px; font-weight:800 }}
 .up-candle {{ fill:var(--green); stroke:var(--green); stroke-width:1 }} .down-candle {{ fill:var(--red); stroke:var(--red); stroke-width:1 }} .volume {{ opacity:.22; stroke:none }}
 .active-wave {{ fill:none; stroke-width:2.2; stroke-dasharray:5 3 }} .active-wave.buy,.pivot-point.buy {{ stroke:var(--green); fill:var(--green) }} .active-wave.sell,.pivot-point.sell {{ stroke:var(--red); fill:var(--red) }} .active-wave.wait,.pivot-point.wait {{ stroke:var(--amber); fill:var(--amber) }}
 .volume-divider {{ stroke:#333; stroke-width:1 }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
@@ -1231,7 +1306,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   main {{ padding:24px 12px 60px }} .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr }}
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
-  .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
+  .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
 }}
 </style>
 </head>
@@ -1244,7 +1319,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   <button type="button" class="tab-button" data-tab-target="health" role="tab" aria-selected="false">Health &amp; Risk</button>
 </nav>
 <section id="tab-portfolio" class="tab-view active" role="tabpanel">
-<div class="board-intro"><div><h2>Priority Board</h2><p>Robust directional events first · highest probability at the top · click any row for details</p></div>
+<div class="board-intro"><div><h2>Priority Board</h2><p>Robust directional events first · highest confidence at the top · click any row for details</p></div>
 <p>WAIT is folded by default. Portfolio actions remain in the detail panel.</p></div>
 <section class="portfolio-board">{prioritized_board}</section>
 </section>

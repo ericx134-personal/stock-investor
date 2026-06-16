@@ -21,6 +21,11 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual((sell["low"], sell["high"], sell["midpoint"]), (108, 112, 110))
         self.assertIn("below the current price", buy["proximity"])
         self.assertIn("above the current price", sell["proximity"])
+        breakout = _price_plan("SELL", wave, 118)
+        self.assertEqual(breakout["label"], "Breakout retest zone")
+        self.assertEqual(breakout["plan_class"], "breakout")
+        self.assertIn("invalidated", breakout["interpretation"])
+        self.assertIn("below the current price", breakout["proximity"])
         self.assertIsNone(_price_plan("WAIT", wave, 100))
 
     def test_dashboard_prioritizes_and_escapes_alerts(self):
@@ -301,8 +306,9 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Conditional Wave Precision Audit", page)
         self.assertIn("Leave-one-symbol-out", page)
         self.assertIn("Conditional precision refused", page)
-        self.assertIn("<strong>BUY</strong><b>70%</b>", page)
-        self.assertIn("robust direction evidence", page)
+        self.assertIn("<strong>BUY</strong><b>57%</b>", page)
+        self.assertIn("57% shrunk confidence; raw analog rate 70%", page)
+        self.assertIn("shrunk robust evidence", page)
         self.assertIn("direction gate", page)
 
     def test_review_outcome_without_directional_rate_does_not_crash(self):
@@ -427,17 +433,21 @@ class DashboardTests(unittest.TestCase):
                 wave_conditional_scorecard_path=conditional,
                 prices_path=prices,
             )
-        self.assertIn("<strong>BUY</strong><b>83%</b>", page)
+        self.assertIn("<strong>BUY</strong><b>66%</b>", page)
+        self.assertIn("66% shrunk confidence; raw analog rate 83%", page)
         self.assertIn('class="price-target">$106.00–$112.00</small>', page)
         self.assertIn("<h3>$106.00–$112.00</h3>", page)
         self.assertIn('class="info-tip"', page)
         self.assertIn('class="target-zone buy"', page)
-        self.assertIn("BUY $106.00–$112.00", page)
+        self.assertIn("Buy zone $106.00–$112.00", page)
         self.assertIn("Conditional age/magnitude evidence used", page)
         self.assertIn("direction gate <b>BUY</b>", page)
         self.assertIn('class="kline-chart"', page)
         self.assertIn("126-session daily K-line", page)
         self.assertIn("Support zone", page)
+        self.assertIn("Your position", page)
+        self.assertIn("Average cost", page)
+        self.assertIn("Cost basis", page)
         self.assertIn('<details class="advanced-details">', page)
         self.assertNotIn('<details class="advanced-details" open>', page)
 

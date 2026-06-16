@@ -38,8 +38,9 @@ evaluation window. Therefore:
 - No displayed BUY or SELL is validated.
 - No model version is proven better by forward returns.
 - No K-line pattern is allowed to influence the promoted decision model.
-- The current dashboard percentages are historical analog rates, not
-  calibrated probabilities.
+- The current dashboard percentages are small-sample shrunk confidence scores;
+  raw historical analog rates are preserved but are not calibrated
+  probabilities.
 - The highest-value next milestone is immutable forecast recording followed by
   patient 21/63/126-session evaluation.
 
@@ -136,8 +137,9 @@ engagement rather than decision quality.
 | `wave-walk-forward-v1` | Exploratory replay | Historical non-overlapping wave outcomes |
 | `wave-conditional-v2` | Current exploratory audit | Predeclared conditions plus leave-one-symbol-out gate |
 | `wave-direction-v1` | Frozen observational ledger | Original displayed forecasts preserved for forward evaluation |
-| `wave-direction-v2` | Current observational ledger | Displayed forecasts requiring leave-one-symbol-out stability |
-| `wave-direction-v3` | Current observational ledger | v2 plus explicit stale/poor data-quality blocking |
+| `wave-direction-v2` | Frozen observational ledger | Displayed forecasts requiring leave-one-symbol-out stability |
+| `wave-direction-v3` | Frozen observational ledger | v2 plus explicit stale/poor data-quality blocking |
+| `wave-direction-v4` | Current observational ledger | v3 plus small-sample probability shrinkage with raw rates preserved |
 
 None is promoted as a proven predictive model.
 
@@ -238,6 +240,29 @@ Finding:
 - No individual candle or chart regime currently earns predictive authority.
 
 ### Structural waves are more explainable than exact top/bottom calls
+
+### Price zones need walk-forward error scoring
+
+The HOOD breakout on June 15, 2026 exposed a weakness in the first price-zone
+display: a static SELL resistance band can become misleading after price closes
+above its upper bound. In that state the old resistance is no longer a valid
+sell cap; it should be treated as a breakout/retest area until forward price
+action confirms rejection or support.
+
+The next improvement loop should replay zone forecasts historically. For each
+past session, pretend that day is "today," compute the available wave and
+buy/sell/retest zone, then reveal later bars and score:
+
+- Whether the zone was touched.
+- Time to first touch.
+- Whether price broke through and invalidated the zone.
+- Whether a broken resistance later held as support, or broken support became
+  resistance.
+- Forward return and adverse/favorable excursion after touch or miss.
+- Opportunity cost when the zone was too conservative and price never returned.
+
+This is the right way to improve the zones: evaluate rolling pretend-day
+forecast errors before changing thresholds or promoting a new model.
 
 `wave-v1` uses a causal percentage-reversal zigzag on completed daily bars.
 Only pivots confirmable with information available at the time are recorded.
@@ -560,15 +585,20 @@ Therefore:
 - Multiple-testing ledger and false-discovery control.
 - Sealed holdout for the wave-direction model.
 
-### Why the dashboard percentage is not a probability
+### Why the dashboard percentage is still not a calibrated probability
 
-The displayed percentage is the fraction of matching historical observations
-that moved in the labeled direction. It is not calibrated against future live
-outcomes and does not account for every source of selection bias.
+The displayed percentage is now a shrunk confidence score based on the fraction
+of matching historical observations that moved in the labeled direction. The
+raw analog rate is retained as `raw_probability`, but the board shows a value
+shrunk toward 50% with a 20-observation neutral prior.
+
+This is deliberately more conservative than showing the raw rate, but it is
+still not calibrated against future live outcomes and does not account for
+every source of selection bias.
 
 Until calibration work is complete, the honest language is:
 
-> Historical matching-wave directional rate
+> Small-sample shrunk directional confidence
 
 not:
 
@@ -728,6 +758,9 @@ holding, `SPCX`, `REVIEW`. `SPCX` remains price-fresh but lacks complete OHLCV
 history, so it is unsuitable for K-line conclusions.
 
 `wave-direction-v3` blocks directional conclusions for STALE or POOR inputs and
-blocks K-line rendering for POOR inputs. The current real portfolio has no
-POOR symbol, so the refreshed board remains 1 SELL and 26 WAIT; the new
-versioned ledger preserves the unchanged conclusion for forward comparison.
+blocks K-line rendering for POOR inputs. `wave-direction-v4` keeps those
+blockers and additionally shrinks displayed BUY/SELL confidence toward 50% so
+thin-but-robust samples do not look more certain than they are. The current
+real portfolio has no POOR symbol, so the refreshed board should preserve the
+same directional conclusion count while writing a new versioned ledger for
+forward comparison.

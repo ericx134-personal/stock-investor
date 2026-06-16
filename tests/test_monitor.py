@@ -185,6 +185,9 @@ class MonitorTests(unittest.TestCase):
             payload = json.loads(path.read_text())
         self.assertEqual(payload["model_version"], "decision-support-v2")
         self.assertEqual(payload["results"][0]["alert"]["action"], "HOLD")
+        self.assertEqual(payload["results"][0]["shares"], 1)
+        self.assertEqual(payload["results"][0]["average_cost"], 100)
+        self.assertEqual(payload["results"][0]["cost_basis"], 100)
 
     def test_decision_history_records_holds_idempotently(self):
         results = run_monitor(

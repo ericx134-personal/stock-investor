@@ -14,13 +14,15 @@ from .io import atomic_write_text
 WAVE_FEATURE_VERSION = "wave-v1"
 WAVE_EXPERIMENT_VERSION = "wave-walk-forward-v1"
 WAVE_CONDITIONAL_VERSION = "wave-conditional-v2"
-WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v3"
+WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v4"
 WAVE_OUTCOME_WINDOWS = (21, 63, 126)
 MIN_WAVE_HISTORY = 126
 MIN_REVERSAL = 0.08
 MIN_ROBUST_OBSERVATIONS = 10
 MIN_ROBUST_SYMBOLS = 8
 MAX_ROBUST_SYMBOL_SHARE = 0.25
+PROBABILITY_SHRINKAGE_PRIOR_OBSERVATIONS = 20
+PROBABILITY_SHRINKAGE_PRIOR_RATE = 0.5
 
 
 @dataclass(frozen=True)
@@ -128,6 +130,27 @@ def classify_wave_directional_evidence(row: dict) -> str:
     ):
         return "SELL"
     return "WAIT"
+
+
+def shrink_direction_probability(
+    raw_probability: float | None,
+    observations: int | None,
+    *,
+    prior_observations: int = PROBABILITY_SHRINKAGE_PRIOR_OBSERVATIONS,
+    prior_rate: float = PROBABILITY_SHRINKAGE_PRIOR_RATE,
+) -> float | None:
+    if raw_probability is None or observations is None or observations < 0:
+        return None
+    if prior_observations < 0 or not 0 <= prior_rate <= 1:
+        return None
+    if not 0 <= float(raw_probability) <= 1:
+        return None
+    denominator = observations + prior_observations
+    if denominator <= 0:
+        return float(raw_probability)
+    return (
+        float(raw_probability) * observations + prior_rate * prior_observations
+    ) / denominator
 
 
 def wave_age_bucket(wave_age_sessions: int | None) -> str | None:
@@ -740,6 +763,10 @@ def build_directional_forecasts(
                     "entry_close": latest.close,
                     "direction": "WAIT",
                     "probability": None,
+                    "raw_probability": None,
+                    "probability_shrinkage_prior_observations": (
+                        PROBABILITY_SHRINKAGE_PRIOR_OBSERVATIONS
+                    ),
                     "horizon": None,
                     "regime": blocked_reason or "Wave evidence unavailable",
                     "evidence_source": "NONE",
@@ -757,7 +784,7 @@ def build_directional_forecasts(
             classify_wave_directional_evidence(evidence) if evidence else "WAIT"
         )
         positive_rate = evidence.get("positive_rate") if evidence else None
-        probability = (
+        raw_probability = (
             float(positive_rate)
             if direction == "BUY" and positive_rate is not None
             else (
@@ -766,6 +793,8 @@ def build_directional_forecasts(
                 else None
             )
         )
+        observations = int(evidence.get("observations", 0)) if evidence else 0
+        probability = shrink_direction_probability(raw_probability, observations)
         forecast_id = (
             f"{WAVE_DIRECTION_FORECAST_VERSION}|{symbol}|{wave.latest_date}"
         )
@@ -778,10 +807,14 @@ def build_directional_forecasts(
                 "entry_close": wave.latest_close,
                 "direction": direction,
                 "probability": probability,
+                "raw_probability": raw_probability,
+                "probability_shrinkage_prior_observations": (
+                    PROBABILITY_SHRINKAGE_PRIOR_OBSERVATIONS
+                ),
                 "horizon": evidence.get("horizon") if evidence else None,
                 "regime": wave.regime,
                 "evidence_source": evidence_source,
-                "observations": int(evidence.get("observations", 0)) if evidence else 0,
+                "observations": observations,
                 "directional_symbols": (
                     int(evidence.get("directional_symbols", 0)) if evidence else 0
                 ),

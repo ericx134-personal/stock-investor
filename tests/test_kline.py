@@ -48,6 +48,9 @@ class KlineTests(unittest.TestCase):
     def test_history_is_idempotent(self):
         result = MonitorResult(
             "ABC",
+            10,
+            90,
+            900,
             100,
             1000,
             0.1,

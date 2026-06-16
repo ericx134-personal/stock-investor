@@ -19,6 +19,9 @@ from .thesis import Thesis, ThesisAssessment, assess_thesis
 @dataclass(frozen=True)
 class MonitorResult:
     symbol: str
+    shares: float
+    average_cost: float
+    cost_basis: float
     latest_close: float | None
     market_value: float
     portfolio_weight: float
@@ -97,6 +100,9 @@ def run_monitor(
             results.append(
                 MonitorResult(
                     position.symbol,
+                    position.shares,
+                    position.average_cost,
+                    position.shares * position.average_cost,
                     history[-1].close,
                     market_value,
                     portfolio_weight,
@@ -122,6 +128,9 @@ def run_monitor(
             results.append(
                 MonitorResult(
                     position.symbol,
+                    position.shares,
+                    position.average_cost,
+                    position.shares * position.average_cost,
                     history[-1].close if history else None,
                     market_value,
                     portfolio_weight,
@@ -204,6 +213,9 @@ def run_monitor(
         results.append(
             MonitorResult(
                 position.symbol,
+                position.shares,
+                position.average_cost,
+                position.shares * position.average_cost,
                 technicals.latest_close,
                 market_value,
                 portfolio_weight,

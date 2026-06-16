@@ -204,19 +204,21 @@ neutral, caution, or bearish/trim review, never promises of a future price.
 
 The default dashboard surface is a compact all-holdings portfolio board.
 It leads with a large color-coded BUY/SELL/WAIT badge and the matching
-historical-wave directional rate, then close, gain/loss, and weight. BUY or
+historical-wave direction confidence, then close, gain/loss, and weight. BUY or
 SELL requires the pooled 95% absolute-direction interval and per-symbol
 positive-mean-return breadth interval to agree, at least 10 observations across
 eight symbols, no symbol above 25% of the sample, and the same direction after
 removing every contributing symbol one at a time. Otherwise the board shows
-WAIT. The percentage is an exploratory analog rate, not a calibrated
-probability.
+WAIT. Starting with `wave-direction-v4`, the visible percentage is a
+small-sample shrunk confidence score, not a calibrated probability. The raw
+matching-wave directional rate is still preserved in the ledger and details
+view for calibration research.
 Holding evidence opens in a side panel; research tables and model-health
 diagnostics remain behind separate tabs so the main portfolio view stays
 glanceable.
 
 The holding side panel explains high-confidence directions graphically before
-showing raw metrics. It combines a directional-probability ring, pooled and
+showing raw metrics. It combines a directional-confidence ring, pooled and
 cross-stock evidence bars, and a 126-session daily K-line chart. Support and
 resistance zones, the current confirmed-pivot wave, volume, and the direction
 label are overlaid directly on the chart; dense text remains collapsed under
@@ -228,6 +230,13 @@ to the resistance zone. The active range and reference midpoint are drawn
 directly on the K-line chart; supporting text is kept in an info tooltip. The
 dashboard refuses to invent a price if the matching structural zone is
 unavailable.
+
+If price closes above the upper bound of a SELL resistance zone, the old sell
+zone is not treated as a valid cap. The dashboard relabels it as a breakout
+retest zone: former resistance that may become support or a later trim-review
+area if the breakout fails. This prevents an advancing breakout from being
+presented as an immediate mechanical sell just because a stale structural
+zone was crossed.
 
 The historical wave experiment is a separate exploratory surface. It replays
 only information available at each historical signal date, uses non-overlapping
@@ -269,12 +278,19 @@ POOR data also blocks K-line rendering. REVIEW-quality data remains visible
 with warnings because incomplete OHLCV does not necessarily invalidate
 close-only structural evidence.
 
+`wave-direction-v4` keeps the v3 data-quality gate and changes only the
+displayed BUY/SELL confidence. Raw historical analog rates are shrunk toward
+50% using a 20-observation neutral prior before they appear on the board,
+charts, and forecast ledger. This reduces overconfidence from thin-but-robust
+cells while preserving `raw_probability` for later calibration and model
+comparison.
+
 Every direction displayed on the portfolio board is now recorded in a separate
 append-only, versioned direction ledger. BUY and SELL forecasts retain their
-displayed historical analog rate, selected broad or conditional evidence
-source, horizon, and entry close. WAIT is also retained so coverage and
-selectivity cannot be hidden. Repeated same-direction displays for one symbol
-inside 21 sessions count as one episode.
+displayed shrunk confidence, raw historical analog rate, selected broad or
+conditional evidence source, horizon, and entry close. WAIT is also retained so
+coverage and selectivity cannot be hidden. Repeated same-direction displays for
+one symbol inside 21 sessions count as one episode.
 
 The direction scorecard evaluates 21-, 63-, and 126-session raw,
 benchmark-relative, and direction-aware returns, plus favorable and adverse

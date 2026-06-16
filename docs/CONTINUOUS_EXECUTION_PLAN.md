@@ -81,7 +81,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M034 Add confidence intervals for all directional success metrics.
 - [x] M035 Add bootstrap uncertainty for return and excursion metrics.
 - [x] M036 Add error cohorts for the largest false BUY and false SELL episodes.
-- [ ] M037 Add probability shrinkage for small samples.
+- [x] M037 Add probability shrinkage for small samples.
 - [ ] M038 Compare raw, Wilson-lower-bound, and shrunk displayed rates.
 - [ ] M039 Add time-decayed evidence as a versioned experiment.
 - [ ] M040 Freeze the first calibrated direction model candidate.
@@ -111,6 +111,9 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [ ] M058 Evaluate target-zone touch rate, time-to-touch, and post-touch outcome.
 - [ ] M059 Evaluate midpoint versus full-zone usefulness without claiming exact fills.
 - [ ] M060 Freeze or reject wave-v2 and price-zone-v2 using promotion gates.
+- [ ] M060A Add rolling historical price-zone replay: pretend each past session is today,
+  emit the buy/sell/retest zone, reveal the next bars, and score touch, miss,
+  breakout invalidation, retest behavior, and opportunity cost.
 
 ## Phase 7: Market, Fundamental, And Event Context
 

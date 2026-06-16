@@ -19,6 +19,7 @@ from stock_investor.wave import (
     evaluate_wave_history,
     load_wave_history,
     load_directional_forecast_history,
+    shrink_direction_probability,
     wave_age_bucket,
     wave_magnitude_bucket,
 )
@@ -283,7 +284,32 @@ class WaveTests(unittest.TestCase):
         )[0]
         self.assertEqual(forecast["direction"], "BUY")
         self.assertEqual(forecast["evidence_source"], "CONDITIONAL")
-        self.assertEqual(forecast["probability"], 0.83)
+        self.assertEqual(forecast["raw_probability"], 0.83)
+        self.assertLess(forecast["probability"], forecast["raw_probability"])
+        self.assertEqual(forecast["probability_shrinkage_prior_observations"], 20)
+
+    def test_direction_probability_shrinks_small_samples_toward_even_odds(self):
+        self.assertEqual(shrink_direction_probability(0.8, 0), 0.5)
+        self.assertAlmostEqual(shrink_direction_probability(0.8, 20), 0.65)
+        self.assertAlmostEqual(
+            shrink_direction_probability(0.8, 200), 0.7727272727272727
+        )
+        self.assertIsNone(shrink_direction_probability(1.2, 20))
+        self.assertIsNone(shrink_direction_probability(0.8, -1))
+
+    def test_blocked_wait_forecast_keeps_probability_schema(self):
+        forecast = build_directional_forecasts(
+            {},
+            {"ABC"},
+            [],
+            [],
+            prices={"ABC": [Price(date(2026, 1, 2), 100)]},
+            blocked_reasons={"ABC": "STALE price data"},
+        )[0]
+        self.assertEqual(forecast["direction"], "WAIT")
+        self.assertIsNone(forecast["probability"])
+        self.assertIsNone(forecast["raw_probability"])
+        self.assertEqual(forecast["probability_shrinkage_prior_observations"], 20)
 
     def test_directional_forecast_history_is_idempotent(self):
         forecast = {
