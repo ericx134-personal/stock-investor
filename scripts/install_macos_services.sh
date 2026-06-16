@@ -14,6 +14,7 @@ mkdir -p "$AGENT_DIR" "$RUNTIME_ROOT/data/private/logs"
 rsync -a "$PROJECT_ROOT/src/" "$RUNTIME_ROOT/src/"
 rsync -a "$PROJECT_ROOT/scripts/" "$RUNTIME_ROOT/scripts/"
 rsync -a "$PROJECT_ROOT/models/" "$RUNTIME_ROOT/models/"
+rsync -a "$PROJECT_ROOT/web/" "$RUNTIME_ROOT/"
 cp "$PROJECT_ROOT/pyproject.toml" "$RUNTIME_ROOT/pyproject.toml"
 mkdir -p "$RUNTIME_ROOT/portfolio"
 rsync -a "$PROJECT_ROOT/portfolio/" "$RUNTIME_ROOT/portfolio/"
@@ -37,7 +38,7 @@ install_agent() {
 install_agent web
 install_agent refresh
 
-echo "Installed persistent dashboard: http://127.0.0.1:8765/data/private/dashboard-v3.html"
+echo "Installed persistent dashboard: http://127.0.0.1:8765/"
 echo "Runtime copy: $RUNTIME_ROOT"
 echo "Refresh config: $RUNTIME_ROOT/data/private/service.env"
 echo "Logs: $RUNTIME_ROOT/data/private/logs/"

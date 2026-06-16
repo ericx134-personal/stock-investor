@@ -350,10 +350,12 @@ chmod +x scripts/run_market_refresh.sh scripts/install_macos_services.sh
 scripts/install_macos_services.sh
 ```
 
-The dashboard is then available at
-`http://127.0.0.1:8765/data/private/dashboard-v3.html`. It is intentionally
-bound to localhost because it contains private portfolio data. `launchd`
-starts it after login and restarts it after a crash.
+The stable bookmark URL is `http://127.0.0.1:8765/`. It loads the current
+private dashboard without exposing the versioned HTML path, so the bookmark can
+stay fixed as the dashboard evolves. The direct legacy path
+`http://127.0.0.1:8765/data/private/dashboard-v3.html` also remains available.
+The service is intentionally bound to localhost because it contains private
+portfolio data. `launchd` starts it after login and restarts it after a crash.
 
 Unattended latest-market-data updates use Yahoo Finance chart data by default
 and do not require credentials. A private runtime file at

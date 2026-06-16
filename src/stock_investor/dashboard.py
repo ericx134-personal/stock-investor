@@ -146,6 +146,141 @@ def _position_summary(record: dict) -> str:
     </section>"""
 
 
+def _holding_stage(record: dict) -> tuple[str, str]:
+    shares = float(record.get("shares") or 0)
+    unrealized = record.get("unrealized_return")
+    risk = record.get("risk") or {}
+    suggested_weight = risk.get("suggested_max_weight")
+    portfolio_weight = float(record.get("portfolio_weight") or 0)
+    if shares <= 0:
+        return "Watchlist candidate", "No live position; judge entry quality first."
+    if suggested_weight is not None and portfolio_weight > float(suggested_weight):
+        return "Oversized holding", "Position size deserves attention before adding."
+    if unrealized is not None and float(unrealized) >= 0.5:
+        return "Profit-protection mode", "Large winner; protect gains without assuming the trend is over."
+    if unrealized is not None and float(unrealized) >= 0.15:
+        return "Winner management", "Positive cushion; trims and trailing stops are different decisions."
+    if unrealized is not None and float(unrealized) <= -0.15:
+        return "Underwater review", "Loss context matters; separate thesis failure from normal volatility."
+    return "Active holding", "Manage around cost, weight, support, resistance, and thesis quality."
+
+
+def _professional_plan(
+    signal_label: str,
+    record: dict,
+    wave: dict,
+    price_plan: dict | None,
+) -> dict:
+    action = str((record.get("alert") or {}).get("action", ""))
+    reasons = " ".join((record.get("alert") or {}).get("reasons", []))
+    unrealized = record.get("unrealized_return")
+    stage, stage_detail = _holding_stage(record)
+    close = record.get("latest_close") or wave.get("latest_close")
+    support_low = wave.get("support_zone_low")
+    support_high = wave.get("support_zone_high")
+    resistance_low = wave.get("resistance_zone_low")
+    resistance_high = wave.get("resistance_zone_high")
+    if signal_label == "BUY":
+        label = "STARTER BUY" if float(record.get("shares") or 0) <= 0 else "ADD REVIEW"
+        invalidation = (
+            f"Invalid below {_optional_money(support_low)}"
+            if support_low is not None
+            else "Invalidation pending support evidence"
+        )
+        return {
+            "label": label,
+            "class": "buy",
+            "stage": stage,
+            "stage_detail": stage_detail,
+            "primary": (
+                "Use the buy zone as a review range, not a market order. "
+                "Require thesis and risk-room confirmation before adding."
+            ),
+            "risk_line": invalidation,
+            "management": "Scale only if price holds support and market context is not hostile.",
+        }
+    if signal_label == "SELL":
+        if price_plan and price_plan.get("plan_class") == "breakout":
+            label = "BREAKOUT RETEST"
+            primary = (
+                "Old resistance was exceeded, so the old sell zone is no longer a clean exit. "
+                "Watch whether it becomes support."
+            )
+            risk_line = (
+                f"Failure back below {_optional_money(resistance_low)} reopens trim risk"
+                if resistance_low is not None
+                else "Retest level pending resistance evidence"
+            )
+            management = "Prefer trailing-profit logic over a fixed sell cap while breakout holds."
+            css_class = "breakout"
+        elif unrealized is not None and float(unrealized) >= 0.2:
+            label = "TRAIL PROFIT"
+            primary = "Winner with sell pressure: protect profit without assuming the whole trend is finished."
+            risk_line = (
+                f"First structural support: {_optional_money(support_low)}–{_optional_money(support_high)}"
+                if support_low is not None and support_high is not None
+                else "Trailing support pending"
+            )
+            management = "Consider staged trim near resistance and trailing stop below support."
+            css_class = "sell"
+        elif action == "TRIM_REVIEW":
+            label = "TRIM REVIEW"
+            primary = "Portfolio or deterioration pressure suggests reducing exposure, not automatically exiting."
+            risk_line = (
+                f"Resistance review: {_optional_money(resistance_low)}–{_optional_money(resistance_high)}"
+                if resistance_low is not None and resistance_high is not None
+                else "Resistance review pending"
+            )
+            management = "Size decision should consider weight, conviction, and tax context."
+            css_class = "sell"
+        elif "thesis" in reasons.lower() or "severe" in reasons.lower():
+            label = "EXIT REVIEW"
+            primary = "The issue may be thesis or severe risk, so this is different from a normal profit trim."
+            risk_line = "Recheck thesis before using chart support as an excuse to hold."
+            management = "If the thesis is broken, technical bounce zones should not override the exit review."
+            css_class = "sell"
+        else:
+            label = "SELL REVIEW"
+            primary = "Historical wave evidence leans down; wait for price behavior around resistance/support."
+            risk_line = (
+                f"Latest close: {_optional_money(close)}"
+                if close is not None
+                else "Latest close unavailable"
+            )
+            management = "Do not treat this as a forced liquidation signal."
+            css_class = "sell"
+        return {
+            "label": label,
+            "class": css_class,
+            "stage": stage,
+            "stage_detail": stage_detail,
+            "primary": primary,
+            "risk_line": risk_line,
+            "management": management,
+        }
+    return {
+        "label": "WAIT",
+        "class": "wait",
+        "stage": stage,
+        "stage_detail": stage_detail,
+        "primary": "No robust directional edge. Manage the existing holding by thesis, weight, and risk.",
+        "risk_line": "No new buy/sell price plan.",
+        "management": "Wait is an active decision when evidence is thin.",
+    }
+
+
+def _professional_plan_card(plan: dict) -> str:
+    return f"""<section class="professional-plan {html.escape(plan["class"])}">
+      <div><small>PROFESSIONAL PLAN</small><h3>{html.escape(plan["label"])}</h3></div>
+      <div><small>Position stage</small><b>{html.escape(plan["stage"])}</b><span>{html.escape(plan["stage_detail"])}</span></div>
+      <p>{html.escape(plan["primary"])}</p>
+      <div class="plan-grid">
+        <span><small>Risk line</small><b>{html.escape(plan["risk_line"])}</b></span>
+        <span><small>Management</small><b>{html.escape(plan["management"])}</b></span>
+      </div>
+    </section>"""
+
+
 def _evidence_graphics(
     historical: dict | None,
     wave: dict,
@@ -207,6 +342,7 @@ def _kline_chart(
     probability: float | None,
     price_plan: dict | None = None,
     data_quality_status: str | None = None,
+    average_cost: object = None,
 ) -> str:
     if data_quality_status == "POOR":
         return '<div class="chart-unavailable">K-line chart blocked by the data-quality gate.</div>'
@@ -237,6 +373,8 @@ def _kline_chart(
     ):
         if wave.get(key) is not None:
             price_values.append(float(wave[key]))
+    if average_cost is not None and float(average_cost) > 0:
+        price_values.append(float(average_cost))
     price_low, price_high = min(price_values), max(price_values)
     padding = max((price_high - price_low) * 0.06, price_high * 0.01)
     price_low, price_high = price_low - padding, price_high + padding
@@ -283,6 +421,15 @@ def _kline_chart(
             f'y="{max(top + 2, target_top + 3):.1f}" width="148" height="17" rx="4"/>'
             f'<text class="target-label" x="{left + 11:.1f}" '
             f'y="{max(top + 14, target_top + 15):.1f}">{html.escape(target_label)}</text>'
+        )
+    cost_line = ""
+    if average_cost is not None and float(average_cost) > 0:
+        cost_y = y(float(average_cost))
+        cost_line = (
+            f'<line class="average-cost-line" x1="{left:.1f}" y1="{cost_y:.1f}" '
+            f'x2="{left + plot_width:.1f}" y2="{cost_y:.1f}"/>'
+            f'<text class="average-cost-label" x="{left + plot_width - 70:.1f}" '
+            f'y="{cost_y - 4:.1f}">Avg cost ${float(average_cost):.2f}</text>'
         )
     grid = []
     for fraction in (0, 0.25, 0.5, 0.75, 1):
@@ -337,11 +484,11 @@ def _kline_chart(
       <div class="chart-heading"><div><small>126-session daily K-line</small><h3>Price wave in context</h3></div>
       <span class="chart-signal {signal_class}">{html.escape(signal_label)} {signal_probability}</span></div>
       <svg class="kline-chart" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(signal_label)} evidence on daily candlestick chart">
-        {''.join(grid)}{''.join(zones)}{target_zone}{''.join(candle_shapes)}{pivot_line}
+        {''.join(grid)}{''.join(zones)}{target_zone}{cost_line}{''.join(candle_shapes)}{pivot_line}
         <line class="volume-divider" x1="{left}" y1="{volume_top - 5}" x2="{left + plot_width}" y2="{volume_top - 5}"/>
         {date_labels}
       </svg>
-      <div class="chart-legend"><span class="support-key">Support zone</span><span class="resistance-key">Resistance zone</span><span class="wave-key">Active wave</span><span>Volume</span></div>
+      <div class="chart-legend"><span class="support-key">Support zone</span><span class="resistance-key">Resistance zone</span><span class="cost-key">Average cost</span><span class="wave-key">Active wave</span><span>Volume</span></div>
     </section>"""
 
 
@@ -826,6 +973,12 @@ def build_dashboard(
             wave,
             record.get("latest_close") or wave.get("latest_close"),
         )
+        professional_plan = _professional_plan(
+            signal_label,
+            record,
+            wave,
+            price_plan,
+        )
         evidence_graphics = _evidence_graphics(
             historical_wave, wave, signal_label, signal_class
         )
@@ -839,6 +992,7 @@ def build_dashboard(
             (price_health_by_symbol.get(record.get("symbol", "")) or {}).get(
                 "data_quality_status"
             ),
+            record.get("average_cost"),
         )
         unrealized_return = record.get("unrealized_return")
         return_class = (
@@ -941,6 +1095,7 @@ def build_dashboard(
                 <span class="board-action">{html.escape(action.replace("_", " "))}</span>
               </div>
                 {_position_summary(record)}
+                {_professional_plan_card(professional_plan)}
                 {evidence_graphics}
                 {_price_plan_card(price_plan, signal_class) if signal_label in {"BUY", "SELL"} else ""}
                 {kline_chart}
@@ -1357,6 +1512,12 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .position-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:1px; grid-template-columns:1.4fr repeat(5,1fr); margin:0 0 14px; overflow:hidden }}
 .position-hero>div {{ background:#101010; min-width:0; padding:15px }} .position-hero small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.5px; text-transform:uppercase }}
 .position-hero b {{ display:block; font-size:18px; margin-top:4px }} .position-main b {{ font-size:30px; letter-spacing:-.8px }} .position-main span {{ color:var(--muted); display:block; margin-top:2px }}
+.professional-plan {{ background:#0b0b0b; border:1px solid var(--line); border-left:4px solid var(--amber); border-radius:12px; display:grid; gap:10px; grid-template-columns:1fr 1.2fr; margin:0 0 12px; padding:14px 16px }}
+.professional-plan.buy {{ border-left-color:var(--green) }} .professional-plan.sell {{ border-left-color:var(--red) }} .professional-plan.breakout {{ border-left-color:var(--green); background:#071008 }}
+.professional-plan small {{ color:var(--muted); display:block; font-size:10px; font-weight:800; letter-spacing:.5px; text-transform:uppercase }}
+.professional-plan h3 {{ font-size:23px; margin:2px 0 0 }} .professional-plan b {{ display:block; font-size:14px; margin-top:3px }} .professional-plan span {{ color:var(--muted); display:block; font-size:12px; margin-top:2px }}
+.professional-plan p {{ color:#d8d8d8; grid-column:1 / -1; margin:0 }} .plan-grid {{ display:grid; gap:8px; grid-column:1 / -1; grid-template-columns:1fr 1fr }}
+.plan-grid span {{ background:#111; border-radius:8px; padding:10px }} .plan-grid b {{ color:var(--text); font-size:13px; font-weight:650 }}
 .evidence-graphics {{ --tone:var(--amber); background:#0b0b0b; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; padding:14px }}
 .evidence-graphics.buy {{ --tone:var(--green) }} .evidence-graphics.sell {{ --tone:var(--red) }}
 .evidence-hero {{ align-items:center; display:grid; gap:16px; grid-template-columns:118px 1fr }}
@@ -1383,10 +1544,11 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .target-zone.buy {{ fill:rgba(0,200,5,.22); stroke:var(--green); stroke-width:1 }} .target-zone.sell {{ fill:rgba(255,90,95,.22); stroke:var(--red); stroke-width:1 }} .target-zone.breakout {{ fill:rgba(0,200,5,.16); stroke:var(--green); stroke-dasharray:5 3; stroke-width:1.4 }}
 .target-mid {{ stroke-width:1.7; stroke-dasharray:4 3 }} .target-mid.buy {{ stroke:var(--green) }} .target-mid.sell {{ stroke:var(--red) }} .target-mid.breakout {{ stroke:var(--green) }}
 .target-label-bg.buy {{ fill:#006b22 }} .target-label-bg.sell {{ fill:#8b252a }} .target-label-bg.breakout {{ fill:#006b22 }} .target-label {{ fill:#fff; font-size:8px; font-weight:800 }}
+.average-cost-line {{ stroke:#e6e6e6; stroke-width:1.2; stroke-dasharray:3 3; opacity:.85 }} .average-cost-label {{ fill:#e6e6e6; font-size:8px; font-weight:800 }}
 .up-candle {{ fill:var(--green); stroke:var(--green); stroke-width:1 }} .down-candle {{ fill:var(--red); stroke:var(--red); stroke-width:1 }} .volume {{ opacity:.22; stroke:none }}
 .active-wave {{ fill:none; stroke-width:2.2; stroke-dasharray:5 3 }} .active-wave.buy,.pivot-point.buy {{ stroke:var(--green); fill:var(--green) }} .active-wave.sell,.pivot-point.sell {{ stroke:var(--red); fill:var(--red) }} .active-wave.wait,.pivot-point.wait {{ stroke:var(--amber); fill:var(--amber) }}
 .volume-divider {{ stroke:#333; stroke-width:1 }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
-.chart-legend .support-key::before {{ background:var(--green) }} .chart-legend .resistance-key::before {{ background:var(--red) }} .chart-legend .wave-key::before {{ background:var(--amber) }}
+.chart-legend .support-key::before {{ background:var(--green) }} .chart-legend .resistance-key::before {{ background:var(--red) }} .chart-legend .wave-key::before {{ background:var(--amber) }} .chart-legend .cost-key::before {{ background:#e6e6e6 }}
 .chart-unavailable {{ background:#111; border-radius:7px; color:var(--muted); margin-bottom:12px; padding:18px }}
 .advanced-details {{ border-top:1px solid var(--line); margin-top:12px; padding-top:8px }} .advanced-details summary {{ color:var(--muted); cursor:pointer; font-weight:650; padding:8px 0 }} .advanced-details[open] summary {{ color:var(--text) }}
 .detail-title div {{ background:#111; border-radius:7px; padding:10px }} .detail-title span {{ color:var(--muted); display:block; font-size:11px; margin-top:3px }}
@@ -1410,7 +1572,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   main {{ padding:24px 12px 60px }} .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr }}
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
-  .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
+  .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
 }}
 </style>
 </head>

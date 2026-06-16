@@ -4,7 +4,7 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 
-from stock_investor.dashboard import _price_plan, build_dashboard
+from stock_investor.dashboard import _price_plan, _professional_plan, build_dashboard
 
 
 class DashboardTests(unittest.TestCase):
@@ -27,6 +27,54 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("invalidated", breakout["interpretation"])
         self.assertIn("below the current price", breakout["proximity"])
         self.assertIsNone(_price_plan("WAIT", wave, 100))
+
+    def test_professional_plan_distinguishes_sell_management_modes(self):
+        wave = {
+            "latest_close": 118,
+            "support_zone_low": 100,
+            "support_zone_high": 104,
+            "resistance_zone_low": 108,
+            "resistance_zone_high": 112,
+        }
+        breakout_zone = _price_plan("SELL", wave, 118)
+        breakout = _professional_plan(
+            "SELL",
+            {"shares": 10, "unrealized_return": 0.4, "alert": {"action": "HOLD"}},
+            wave,
+            breakout_zone,
+        )
+        self.assertEqual(breakout["label"], "BREAKOUT RETEST")
+        self.assertEqual(breakout["class"], "breakout")
+        self.assertIn("trailing-profit", breakout["management"])
+
+        trail = _professional_plan(
+            "SELL",
+            {"shares": 10, "unrealized_return": 0.4, "alert": {"action": "HOLD"}},
+            {**wave, "latest_close": 110},
+            {"plan_class": "sell"},
+        )
+        self.assertEqual(trail["label"], "TRAIL PROFIT")
+        self.assertEqual(trail["stage"], "Winner management")
+
+        trim = _professional_plan(
+            "SELL",
+            {"shares": 10, "unrealized_return": 0.05, "alert": {"action": "TRIM_REVIEW"}},
+            wave,
+            {"plan_class": "sell"},
+        )
+        self.assertEqual(trim["label"], "TRIM REVIEW")
+
+        exit_review = _professional_plan(
+            "SELL",
+            {
+                "shares": 10,
+                "unrealized_return": -0.2,
+                "alert": {"action": "REVIEW", "reasons": ["Thesis broken"]},
+            },
+            wave,
+            {"plan_class": "sell"},
+        )
+        self.assertEqual(exit_review["label"], "EXIT REVIEW")
 
     def test_dashboard_prioritizes_and_escapes_alerts(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -347,6 +395,13 @@ class DashboardTests(unittest.TestCase):
                         "results": [
                             {
                                 "symbol": "ABC",
+                                "shares": 10,
+                                "average_cost": 100,
+                                "cost_basis": 1000,
+                                "market_value": 1195,
+                                "portfolio_weight": 0.12,
+                                "latest_close": 119.5,
+                                "unrealized_return": 0.195,
                                 "alert": {"action": "HOLD", "score": 0, "reasons": []},
                             }
                         ]
@@ -392,6 +447,13 @@ class DashboardTests(unittest.TestCase):
                         "results": [
                             {
                                 "symbol": "ABC",
+                                "shares": 10,
+                                "average_cost": 100,
+                                "cost_basis": 1000,
+                                "market_value": 1195,
+                                "portfolio_weight": 0.12,
+                                "latest_close": 119.5,
+                                "unrealized_return": 0.195,
                                 "alert": {"action": "HOLD", "score": 0, "reasons": []},
                             }
                         ]
@@ -515,6 +577,13 @@ class DashboardTests(unittest.TestCase):
                         "results": [
                             {
                                 "symbol": "ABC",
+                                "shares": 10,
+                                "average_cost": 100,
+                                "cost_basis": 1000,
+                                "market_value": 1195,
+                                "portfolio_weight": 0.12,
+                                "latest_close": 119.5,
+                                "unrealized_return": 0.195,
                                 "alert": {"action": "HOLD", "score": 0, "reasons": []},
                             }
                         ]
@@ -616,6 +685,11 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Your position", page)
         self.assertIn("Average cost", page)
         self.assertIn("Cost basis", page)
+        self.assertIn("PROFESSIONAL PLAN", page)
+        self.assertIn("ADD REVIEW", page)
+        self.assertIn("Average cost", page)
+        self.assertIn("average-cost-line", page)
+        self.assertIn("Avg cost $100.00", page)
         self.assertIn('<details class="advanced-details">', page)
         self.assertNotIn('<details class="advanced-details" open>', page)
 
