@@ -567,8 +567,9 @@ The monitor evaluates candidates in the context of the whole portfolio:
 Portfolio-level breaches are printed and can be persisted with
 `--risk-history`. Copy and edit [examples/risk-policy.json](examples/risk-policy.json)
 to set limits appropriate for the account. The daily workflow automatically
-fetches factor proxy prices configured in that policy; `fetch-alpaca` accepts
-repeatable `--extra-symbol` arguments for manual workflows.
+fetches factor proxy prices configured in that policy; both `fetch-yahoo` and
+the optional `fetch-alpaca` provider accept repeatable `--extra-symbol`
+arguments for manual workflows.
 
 The example policy uses `SPY` as a transparent broad-US-market proxy and alerts
 when absolute portfolio beta exceeds `1.25`. Beta is estimated from aligned

@@ -483,11 +483,12 @@ Recommended sequence:
 
 1. Read all linked Robinhood account positions and balances through the
    official Trading MCP, then convert a sanitized snapshot into monitor inputs.
-2. Add a supported market-data provider for prices and news.
+2. Use no-credential Yahoo Finance chart data for unattended daily prices by
+   default. Use Robinhood historical exports or Alpaca only as explicit
+   opt-in sources when there is a clear reason.
 3. Add SEC EDGAR APIs for filings and standardized company facts.
-4. Connect Robinhood's official Trading MCP only if desired. It can read
-   positions and transactions across Robinhood accounts, but can place trades
-   only in a dedicated Agentic account.
+4. Keep all real snapshots, price files, dashboards, and ledgers under ignored
+   private paths.
 
 Never use unofficial login automation or store brokerage credentials.
 Never persist Robinhood account numbers in monitoring artifacts. The importer
@@ -504,7 +505,7 @@ preserves separately maintained risk metadata.
 - [x] Explainable review alerts
 - [x] Concentration and drawdown warnings
 - [x] Idempotent alert history
-- [x] Automatic supported Alpaca adjusted-price ingestion
+- [x] No-credential Yahoo market-data refresh with optional provider override
 - [x] Sector, theme, correlation, and volatility-budget risk controls
 - [x] Structured thesis notes, review dates, and measurable invalidation rules
 - [x] Append-only user feedback labels and responses on individual alerts
