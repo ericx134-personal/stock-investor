@@ -54,6 +54,7 @@ from .thesis import load_theses
 from .wave import (
     append_directional_forecast_history,
     append_wave_history,
+    build_direction_rate_comparison_scorecard,
     build_directional_forecasts,
     build_price_zone_replay,
     build_price_zone_replay_scorecard,
@@ -147,6 +148,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "wave_conditional_scorecard": output_dir / "wave-conditional-scorecard.json",
         "price_zone_replay": output_dir / "price-zone-replay.json",
         "price_zone_replay_scorecard": output_dir / "price-zone-replay-scorecard.json",
+        "direction_rate_comparison": output_dir / "direction-rate-comparison.json",
         "direction_forecasts": output_dir / "wave-direction-forecasts.jsonl",
         "direction_forecast_outcomes": output_dir / "wave-direction-forecast-outcomes.json",
         "direction_forecast_scorecard": output_dir / "wave-direction-forecast-scorecard.json",
@@ -279,6 +281,11 @@ def run_refresh(
     _write_json(wave_experiment_outcomes, paths["wave_experiment_outcomes"])
     _write_json(wave_experiment_scorecard, paths["wave_experiment_scorecard"])
     _write_json(wave_conditional_scorecard, paths["wave_conditional_scorecard"])
+    direction_rate_comparison = build_direction_rate_comparison_scorecard(
+        wave_experiment_scorecard,
+        wave_conditional_scorecard,
+    )
+    _write_json(direction_rate_comparison, paths["direction_rate_comparison"])
     price_zone_replay = build_price_zone_replay(experiment_prices)
     price_zone_replay_scorecard = build_price_zone_replay_scorecard(
         price_zone_replay
@@ -412,6 +419,7 @@ def run_refresh(
             wave_scorecard_path=paths["wave_scorecard"],
             wave_experiment_scorecard_path=paths["wave_experiment_scorecard"],
             wave_conditional_scorecard_path=paths["wave_conditional_scorecard"],
+            direction_rate_comparison_path=paths["direction_rate_comparison"],
             direction_forecast_scorecard_path=paths["direction_forecast_scorecard"],
             forecast_calibration_curves_path=paths["forecast_calibration_curves"],
             direction_classification_metrics_path=paths["direction_classification_metrics"],
@@ -503,6 +511,7 @@ def run_refresh(
         "historical_wave_observations": len(wave_experiment_outcomes),
         "historical_wave_scorecard_rows": len(wave_experiment_scorecard),
         "conditional_wave_scorecard_rows": len(wave_conditional_scorecard),
+        "direction_rate_comparison_rows": len(direction_rate_comparison),
         "historical_directional_leave_one_out_downgrades": sum(
             row.get("directional_pre_leave_one_out_classification")
             != row.get("directional_evidence_classification")

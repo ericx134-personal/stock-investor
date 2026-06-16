@@ -8,6 +8,7 @@ from stock_investor.data import Price
 from stock_investor.wave import (
     append_directional_forecast_history,
     append_wave_history,
+    build_direction_rate_comparison_scorecard,
     build_directional_forecasts,
     build_price_zone_replay,
     build_price_zone_replay_scorecard,
@@ -298,6 +299,44 @@ class WaveTests(unittest.TestCase):
         )
         self.assertIsNone(shrink_direction_probability(1.2, 20))
         self.assertIsNone(shrink_direction_probability(0.8, -1))
+
+    def test_direction_rate_comparison_keeps_raw_shrunk_and_wilson_floor(self):
+        broad = [
+            {
+                "regime": "Advancing wave",
+                "horizon": "63d",
+                "observations": 20,
+                "directional_symbols": 12,
+                "positive_rate": 0.8,
+                "positive_rate_ci_low": 0.6,
+                "positive_rate_ci_high": 0.92,
+                "symbol_positive_return_ci_low": 0.55,
+                "symbol_positive_return_ci_high": 0.9,
+                "top_symbol_return_observation_share": 0.15,
+            },
+            {
+                "regime": "Declining wave",
+                "horizon": "63d",
+                "observations": 20,
+                "directional_symbols": 12,
+                "positive_rate": 0.2,
+                "positive_rate_ci_low": 0.08,
+                "positive_rate_ci_high": 0.4,
+                "symbol_positive_return_ci_low": 0.1,
+                "symbol_positive_return_ci_high": 0.45,
+                "top_symbol_return_observation_share": 0.15,
+            },
+        ]
+        rows = build_direction_rate_comparison_scorecard(broad, [])
+        by_direction = {row["direction"]: row for row in rows}
+        self.assertEqual(set(by_direction), {"BUY", "SELL"})
+        self.assertAlmostEqual(by_direction["BUY"]["raw_probability"], 0.8)
+        self.assertAlmostEqual(by_direction["BUY"]["shrunk_probability"], 0.65)
+        self.assertAlmostEqual(by_direction["BUY"]["wilson_lower_probability"], 0.6)
+        self.assertAlmostEqual(by_direction["SELL"]["raw_probability"], 0.8)
+        self.assertAlmostEqual(by_direction["SELL"]["shrunk_probability"], 0.65)
+        self.assertAlmostEqual(by_direction["SELL"]["wilson_lower_probability"], 0.6)
+        self.assertEqual(by_direction["BUY"]["display_policy"], "SHRUNK_RATE")
 
     def test_blocked_wait_forecast_keeps_probability_schema(self):
         forecast = build_directional_forecasts(

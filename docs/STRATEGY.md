@@ -509,6 +509,7 @@ preserves separately maintained risk metadata.
 - [x] Full daily K-line/OHLCV feature preservation and forward evaluation
 - [x] Confirmed-pivot structural-wave evidence and long-horizon evaluation
 - [x] Causal non-overlapping historical wave experiment with uncertainty
+- [x] Raw, shrunk, and Wilson-floor directional-rate comparison artifact
 - [ ] Production schedule connected to the real portfolio
 
 ### Phase 3A: Real-Portfolio Learning Loop

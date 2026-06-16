@@ -337,6 +337,51 @@ class DashboardTests(unittest.TestCase):
             page = build_dashboard(snapshot, decision_scorecard_path=scorecard)
         self.assertIn("60% positive-return rate across 5 matured outcomes", page)
 
+    def test_research_tab_shows_direction_rate_comparison(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "snapshot.json"
+            snapshot.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "symbol": "ABC",
+                                "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                            }
+                        ]
+                    }
+                )
+            )
+            comparison = root / "direction-rate-comparison.json"
+            comparison.write_text(
+                json.dumps(
+                    [
+                        {
+                            "comparison_version": "direction-rate-comparison-v1",
+                            "source": "BROAD",
+                            "direction": "BUY",
+                            "horizon": "63d",
+                            "regime": "Advancing wave",
+                            "wave_age_bucket": None,
+                            "wave_magnitude_bucket": None,
+                            "observations": 20,
+                            "directional_symbols": 12,
+                            "raw_probability": 0.8,
+                            "shrunk_probability": 0.65,
+                            "wilson_lower_probability": 0.6,
+                        }
+                    ]
+                )
+            )
+            page = build_dashboard(
+                snapshot,
+                direction_rate_comparison_path=comparison,
+            )
+        self.assertIn("Raw vs Shrunk vs Wilson Direction Rates", page)
+        self.assertIn("<td>80.0%</td><td>65.0%</td><td>60.0%</td>", page)
+        self.assertIn("raw rates are not promoted directly", page)
+
     def test_robust_conditional_direction_can_override_inconclusive_broad_direction(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -560,6 +560,7 @@ def build_dashboard(
     wave_scorecard_path: str | Path | None = None,
     wave_experiment_scorecard_path: str | Path | None = None,
     wave_conditional_scorecard_path: str | Path | None = None,
+    direction_rate_comparison_path: str | Path | None = None,
     direction_forecast_scorecard_path: str | Path | None = None,
     forecast_calibration_curves_path: str | Path | None = None,
     direction_classification_metrics_path: str | Path | None = None,
@@ -636,6 +637,12 @@ def build_dashboard(
         json.loads(Path(wave_conditional_scorecard_path).read_text())
         if wave_conditional_scorecard_path
         and Path(wave_conditional_scorecard_path).exists()
+        else []
+    )
+    direction_rate_comparison = (
+        json.loads(Path(direction_rate_comparison_path).read_text())
+        if direction_rate_comparison_path
+        and Path(direction_rate_comparison_path).exists()
         else []
     )
     direction_forecast_scorecard = (
@@ -1137,6 +1144,27 @@ def build_dashboard(
             ),
         )
     ) or '<tr><td colspan="10">No conditional wave evidence available.</td></tr>'
+    direction_rate_rows = "".join(
+        f"<tr><td>{html.escape(row['source'])}</td>"
+        f"<td>{html.escape(row['direction'])}</td>"
+        f"<td>{html.escape(str(row.get('horizon') or ''))}</td>"
+        f"<td>{html.escape(str(row.get('regime') or ''))}</td>"
+        f"<td>{html.escape(str(row.get('wave_age_bucket') or '—'))}</td>"
+        f"<td>{html.escape(str(row.get('wave_magnitude_bucket') or '—'))}</td>"
+        f"<td>{_optional_percent(row.get('raw_probability'))}</td>"
+        f"<td>{_optional_percent(row.get('shrunk_probability'))}</td>"
+        f"<td>{_optional_percent(row.get('wilson_lower_probability'))}</td>"
+        f"<td>{int(row.get('directional_symbols', 0))} symbols · {int(row.get('observations', 0))} observations</td></tr>"
+        for row in sorted(
+            direction_rate_comparison,
+            key=lambda row: (
+                row.get("direction", ""),
+                -float(row.get("shrunk_probability") or 0),
+                -int(row.get("observations", 0)),
+                row.get("source", ""),
+            ),
+        )
+    ) or '<tr><td colspan="10">No robust BUY/SELL directional-rate comparisons yet.</td></tr>'
     direction_validation_rows = "".join(
         f"<tr><td>{html.escape(row['forecast_version'])}</td>"
         f"<td>{html.escape(row['direction'])}</td>"
@@ -1356,6 +1384,10 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <table><thead><tr><th>Relative evidence</th><th>Direction gate</th><th>Wave regime</th><th>Horizon</th><th>Wave age</th><th>Move magnitude</th><th>Beat SPY (95% CI)</th><th>Cross-stock breadth (95% CI)</th><th>Leave-one-symbol-out</th><th>Evidence · sample</th></tr></thead>
 <tbody>{conditional_wave_rows}</tbody></table>
 <p class="note">Age buckets are predeclared as early (≤10 sessions), mature (11–25), and extended (&gt;25). Move magnitude is normalized by each signal's reversal threshold: developing (&lt;1.5×), established (1.5–3×), and extended (&gt;3×). A conditional view can replace its broad regime analog only when the same strict pooled, cross-stock, and concentration gates pass; otherwise the dashboard explicitly refuses the extra precision.</p></section>
+<section class="panel"><h2>Raw vs Shrunk vs Wilson Direction Rates</h2>
+<table><thead><tr><th>Source</th><th>Direction</th><th>Horizon</th><th>Wave regime</th><th>Wave age</th><th>Move magnitude</th><th>Raw rate</th><th>Displayed</th><th>Wilson floor</th><th>Evidence · sample</th></tr></thead>
+<tbody>{direction_rate_rows}</tbody></table>
+<p class="note">Displayed confidence uses the shrunk rate, pulled toward 50% by a neutral 20-observation prior. The Wilson floor is stricter and stays visible as the audit floor; raw rates are not promoted directly.</p></section>
 <section class="panel"><h2>Live Structural Wave Evidence</h2>
 <table><thead><tr><th>Wave regime</th><th>Horizon</th><th>Positive rate</th><th>Matured sample</th><th>Mean return</th></tr></thead>
 <tbody>{wave_evidence_rows}</tbody></table>

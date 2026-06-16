@@ -764,3 +764,26 @@ thin-but-robust samples do not look more certain than they are. The current
 real portfolio has no POOR symbol, so the refreshed board should preserve the
 same directional conclusion count while writing a new versioned ledger for
 forward comparison.
+
+## Direction Rate Comparison V1
+
+Hypothesis: a displayed BUY or SELL confidence should not use the raw historical
+positive-rate directly, because raw rates are too sensitive to small samples and
+single-regime luck. M038 therefore writes `direction-rate-comparison-v1`, which
+compares three values for every robust BUY/SELL analog row:
+
+- raw direction probability from the historical positive-rate.
+- shrunk displayed probability using the neutral 20-observation prior.
+- Wilson-lower probability as the conservative audit floor.
+
+The artifact includes both broad regime rows and conditional age/magnitude rows,
+but only after the existing pooled, cross-symbol breadth, concentration, and
+leave-one-symbol-out gates classify the row as BUY or SELL. WAIT rows are
+excluded to avoid inventing confidence for non-signals.
+
+Decision rule: keep displaying the shrunk rate for readability, keep the Wilson
+floor visible in the Research tab, and never promote raw rates directly. This is
+a calibration audit artifact, not a new signal version. Failure gate: if future
+outcomes show that displayed confidence remains materially above realized
+directional success, the next candidate must move closer to the Wilson floor or
+add stronger time-period stability gates before promotion.

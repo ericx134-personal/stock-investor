@@ -16,6 +16,7 @@ WAVE_EXPERIMENT_VERSION = "wave-walk-forward-v1"
 WAVE_CONDITIONAL_VERSION = "wave-conditional-v2"
 WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v4"
 PRICE_ZONE_REPLAY_VERSION = "price-zone-replay-v1"
+DIRECTION_RATE_COMPARISON_VERSION = "direction-rate-comparison-v1"
 WAVE_OUTCOME_WINDOWS = (21, 63, 126)
 PRICE_ZONE_REPLAY_HORIZON = 5
 MIN_WAVE_HISTORY = 126
@@ -842,6 +843,91 @@ def build_wave_conditional_scorecard(outcomes: list[dict]) -> list[dict]:
             groups.items()
         )
     ]
+
+
+def _direction_rate_values(row: dict, direction: str) -> tuple[float | None, float | None]:
+    positive_rate = row.get("positive_rate")
+    ci_low = row.get("positive_rate_ci_low")
+    ci_high = row.get("positive_rate_ci_high")
+    if positive_rate is None:
+        return None, None
+    if direction == "BUY":
+        return float(positive_rate), float(ci_low) if ci_low is not None else None
+    if direction == "SELL":
+        return (
+            1 - float(positive_rate),
+            1 - float(ci_high) if ci_high is not None else None,
+        )
+    return None, None
+
+
+def build_direction_rate_comparison_scorecard(
+    broad_scorecard: list[dict],
+    conditional_scorecard: list[dict],
+) -> list[dict]:
+    """Compare raw, Wilson-lower, and shrunk displayed directional rates."""
+    rows = []
+    for source, scorecard in (
+        ("BROAD", broad_scorecard),
+        ("CONDITIONAL", conditional_scorecard),
+    ):
+        for row in scorecard:
+            direction = classify_wave_directional_evidence(row)
+            if direction == "WAIT":
+                continue
+            observations = int(row.get("observations", 0))
+            raw_probability, wilson_lower_probability = _direction_rate_values(
+                row, direction
+            )
+            shrunk_probability = shrink_direction_probability(
+                raw_probability, observations
+            )
+            rows.append(
+                {
+                    "comparison_version": DIRECTION_RATE_COMPARISON_VERSION,
+                    "source": source,
+                    "direction": direction,
+                    "horizon": row.get("horizon"),
+                    "regime": row.get("regime"),
+                    "wave_age_bucket": row.get("wave_age_bucket"),
+                    "wave_magnitude_bucket": row.get("wave_magnitude_bucket"),
+                    "observations": observations,
+                    "directional_symbols": int(row.get("directional_symbols", 0)),
+                    "top_symbol_return_observation_share": row.get(
+                        "top_symbol_return_observation_share"
+                    ),
+                    "directional_leave_one_out_stable": row.get(
+                        "directional_leave_one_out_stable"
+                    ),
+                    "raw_probability": raw_probability,
+                    "wilson_lower_probability": wilson_lower_probability,
+                    "shrunk_probability": shrunk_probability,
+                    "shrunk_minus_raw": (
+                        shrunk_probability - raw_probability
+                        if shrunk_probability is not None
+                        and raw_probability is not None
+                        else None
+                    ),
+                    "wilson_lower_minus_raw": (
+                        wilson_lower_probability - raw_probability
+                        if wilson_lower_probability is not None
+                        and raw_probability is not None
+                        else None
+                    ),
+                    "display_policy": "SHRUNK_RATE",
+                    "failure_gate": "Do not promote raw rates; Wilson lower bound remains the conservative audit floor.",
+                }
+            )
+    return sorted(
+        rows,
+        key=lambda item: (
+            item["direction"],
+            -float(item.get("shrunk_probability") or 0),
+            -int(item.get("observations", 0)),
+            item.get("source", ""),
+            item.get("regime", ""),
+        ),
+    )
 
 
 def _wave_value(wave: WaveSignals | dict, key: str) -> object:
