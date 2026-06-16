@@ -285,6 +285,13 @@ charts, and forecast ledger. This reduces overconfidence from thin-but-robust
 cells while preserving `raw_probability` for later calibration and model
 comparison.
 
+`wave-direction-v4-candidate` is frozen as the first calibrated direction model
+candidate, but it is not promoted. The machine-readable manifest pins the
+current gate, confidence policy, read-only constraints, and pending promotion
+gates. Promotion requires matured sealed calibration evidence, acceptable
+BUY/SELL precision, false-direction cohort review, and successful time-decay
+replication without higher concentration.
+
 Every direction displayed on the portfolio board is now recorded in a separate
 append-only, versioned direction ledger. BUY and SELL forecasts retain their
 displayed shrunk confidence, raw historical analog rate, selected broad or
@@ -511,6 +518,7 @@ preserves separately maintained risk metadata.
 - [x] Causal non-overlapping historical wave experiment with uncertainty
 - [x] Raw, shrunk, and Wilson-floor directional-rate comparison artifact
 - [x] Experimental time-decayed structural-wave scorecard
+- [x] Frozen `wave-direction-v4-candidate` manifest with pending promotion gates
 - [ ] Production schedule connected to the real portfolio
 
 ### Phase 3A: Real-Portfolio Learning Loop

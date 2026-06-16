@@ -29,6 +29,17 @@ class ModelRegistryTests(unittest.TestCase):
                 policy.require_revisions_for_buy,
             )
 
+    def test_frozen_direction_candidate_is_read_only_and_unpromoted(self):
+        path = Path(__file__).parents[1] / "models" / "wave-direction-v4-candidate.json"
+        payload = json.loads(path.read_text())
+        self.assertEqual(payload["promotion_status"], "frozen_candidate")
+        self.assertEqual(payload["trade_permissions"], "none")
+        self.assertEqual(payload["base_forecast_version"], "wave-direction-v4")
+        self.assertTrue(payload["confidence_policy"]["wilson_lower_bound_is_audit_floor"])
+        self.assertTrue(
+            all(gate["status"] == "pending" for gate in payload["promotion_gates"])
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

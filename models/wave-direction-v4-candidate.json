@@ -1,0 +1,69 @@
+{
+  "model_version": "wave-direction-v4-candidate",
+  "base_forecast_version": "wave-direction-v4",
+  "frozen_at_local_date": "2026-06-15",
+  "promotion_status": "frozen_candidate",
+  "purpose": "Candidate calibrated structural-wave direction model for read-only portfolio decision support.",
+  "trade_permissions": "none",
+  "forecast_horizons": ["21d", "63d", "126d"],
+  "evidence_layers": {
+    "wave_features": "wave-v1",
+    "broad_replay": "wave-walk-forward-v1",
+    "conditional_replay": "wave-conditional-v2",
+    "displayed_forecast_ledger": "wave-direction-v4",
+    "rate_comparison": "direction-rate-comparison-v1",
+    "time_decay_audit": "wave-time-decay-v1",
+    "price_quality_gate": "price-health-v1"
+  },
+  "direction_gate": {
+    "minimum_observations": 10,
+    "minimum_directional_symbols": 8,
+    "maximum_top_symbol_observation_share": 0.25,
+    "requires_pooled_wilson_interval_agreement": true,
+    "requires_cross_symbol_breadth_wilson_interval_agreement": true,
+    "requires_leave_one_symbol_out_stability": true,
+    "data_quality_blocks": ["STALE", "POOR"],
+    "wait_is_explicit_non_signal": true
+  },
+  "confidence_policy": {
+    "displayed_value": "shrunk_probability",
+    "raw_value_preserved_as": "raw_probability",
+    "neutral_prior_rate": 0.5,
+    "neutral_prior_observations": 20,
+    "wilson_lower_bound_is_audit_floor": true,
+    "raw_rates_must_not_be_promoted_directly": true
+  },
+  "candidate_constraints": {
+    "does_not_change_base_decision_support_v3_actions": true,
+    "does_not_place_or_preview_orders": true,
+    "does_not_use_margin_or_leverage_as_buy_blocker": true,
+    "price_zones_are_review_ranges_not_trade_orders": true
+  },
+  "promotion_gates": [
+    {
+      "id": "sealed_forward_calibration",
+      "status": "pending",
+      "required_evidence": "Matured BUY and SELL forecast episodes must show displayed confidence within 10 percentage points of realized directional success across fixed calibration buckets."
+    },
+    {
+      "id": "direction_precision",
+      "status": "pending",
+      "required_evidence": "BUY and SELL precision lower confidence bounds must be acceptable on matured forecasts across at least five symbols."
+    },
+    {
+      "id": "false_direction_cohorts",
+      "status": "pending",
+      "required_evidence": "Largest false BUY and SELL episodes must not reveal a repeatable data-quality, concentration, or regime failure."
+    },
+    {
+      "id": "time_decay_replication",
+      "status": "pending",
+      "required_evidence": "Time-decayed evidence may inform a future version only if it improves sealed calibration without increasing single-symbol concentration."
+    }
+  ],
+  "failure_gates": [
+    "Any Robinhood write action or order preview invalidates the candidate.",
+    "Any use of stale or poor price data for BUY or SELL invalidates the candidate.",
+    "Any promotion based on raw in-sample rates without matured forecast outcomes invalidates the candidate."
+  ]
+}

@@ -140,6 +140,7 @@ engagement rather than decision quality.
 | `wave-direction-v2` | Frozen observational ledger | Displayed forecasts requiring leave-one-symbol-out stability |
 | `wave-direction-v3` | Frozen observational ledger | v2 plus explicit stale/poor data-quality blocking |
 | `wave-direction-v4` | Current observational ledger | v3 plus small-sample probability shrinkage with raw rates preserved |
+| `wave-direction-v4-candidate` | Frozen candidate, not promoted | Machine-readable candidate manifest with pending calibration gates |
 
 None is promoted as a proven predictive model.
 
@@ -806,3 +807,17 @@ Decision rule: time-decayed rows are research-only and cannot replace the
 current equal-weight evidence. Failure gate: do not promote a time-decayed
 candidate unless sealed forward outcomes improve calibration and do not increase
 single-symbol concentration or false-direction cohorts.
+
+## Wave Direction V4 Candidate Freeze
+
+M040 freezes `wave-direction-v4-candidate` in
+`models/wave-direction-v4-candidate.json`. This is not a promoted model and does
+not change live decision-support behavior. It is a reviewable candidate manifest
+that pins the current v4 direction gate, the shrunk confidence display policy,
+the raw-vs-Wilson audit artifact, and the time-decay research audit.
+
+Promotion remains blocked until fixed forward outcomes mature. The required
+gates are sealed calibration, BUY/SELL precision, false-direction cohort review,
+and time-decay replication. Any Robinhood write action, use of stale or poor
+price data for BUY/SELL, or promotion based only on raw in-sample rates
+invalidates the candidate.

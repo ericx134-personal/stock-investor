@@ -84,7 +84,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M037 Add probability shrinkage for small samples.
 - [x] M038 Compare raw, Wilson-lower-bound, and shrunk displayed rates.
 - [x] M039 Add time-decayed evidence as a versioned experiment.
-- [ ] M040 Freeze the first calibrated direction model candidate.
+- [x] M040 Freeze the first calibrated direction model candidate.
 
 ## Phase 5: Statistical Safety
 
