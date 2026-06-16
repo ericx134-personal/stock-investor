@@ -8,6 +8,25 @@ from pathlib import Path
 from stock_investor.refresh import refresh_lock, run_refresh, validate_production_refresh
 
 
+def write_positions(path: Path, *, revisions: str = "") -> None:
+    path.write_text(
+        "symbol,shares,average_cost,max_portfolio_weight,quality,"
+        "valuation,revisions,thesis_broken,cik,sector,theme\n"
+        f"ABC,10,100,0.1,0.8,0.5,{revisions},false,,Test,\n"
+    )
+
+
+def write_price_history(path: Path, *, days: int = 300) -> None:
+    with path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(("date", "symbol", "close"))
+        start = date.today() - timedelta(days=days - 1)
+        for offset in range(days):
+            current = start + timedelta(days=offset)
+            writer.writerow((current.isoformat(), "ABC", 100 + offset))
+            writer.writerow((current.isoformat(), "SPY", 400 + offset))
+
+
 class RefreshTests(unittest.TestCase):
     def test_refresh_lock_rejects_overlap_and_cleans_up(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -45,20 +64,9 @@ class RefreshTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             positions = root / "positions.csv"
-            positions.write_text(
-                "symbol,shares,average_cost,max_portfolio_weight,quality,"
-                "valuation,revisions,thesis_broken,cik,sector,theme\n"
-                "ABC,10,100,0.1,0.8,0.5,,false,,Test,\n"
-            )
+            write_positions(positions)
             prices = root / "prices.csv"
-            with prices.open("w", newline="") as handle:
-                writer = csv.writer(handle)
-                writer.writerow(("date", "symbol", "close"))
-                start = date.today() - timedelta(days=299)
-                for offset in range(300):
-                    current = start + timedelta(days=offset)
-                    writer.writerow((current.isoformat(), "ABC", 100 + offset))
-                    writer.writerow((current.isoformat(), "SPY", 400 + offset))
+            write_price_history(prices)
             output = root / "private"
 
             first = run_refresh(
@@ -155,20 +163,9 @@ class RefreshTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             positions = root / "positions.csv"
-            positions.write_text(
-                "symbol,shares,average_cost,max_portfolio_weight,quality,"
-                "valuation,revisions,thesis_broken,cik,sector,theme\n"
-                "ABC,10,100,0.1,0.8,0.5,0.2,false,,Test,\n"
-            )
+            write_positions(positions, revisions="0.2")
             prices = root / "prices.csv"
-            with prices.open("w", newline="") as handle:
-                writer = csv.writer(handle)
-                writer.writerow(("date", "symbol", "close"))
-                start = date.today() - timedelta(days=299)
-                for offset in range(300):
-                    current = start + timedelta(days=offset)
-                    writer.writerow((current.isoformat(), "ABC", 100 + offset))
-                    writer.writerow((current.isoformat(), "SPY", 400 + offset))
+            write_price_history(prices)
             baseline_output = root / "baseline"
             run_refresh(
                 positions, prices, baseline_output, "decision-support-v1"
