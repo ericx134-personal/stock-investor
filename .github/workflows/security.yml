@@ -11,6 +11,13 @@ permissions:
   contents: read
 
 jobs:
+  public-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check repository is safe to publish
+        run: scripts/check_public_safety.sh
+
   codeql:
     runs-on: ubuntu-latest
     permissions:

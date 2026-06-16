@@ -28,8 +28,14 @@ resolved locally.
    PYTHONPATH=src python3 -m unittest discover -s tests
    ```
 
-5. Update `docs/RESEARCH_FINDINGS.md` only when evidence changes.
-6. Keep model changes versioned; do not rewrite historical forecasts.
+5. Run the public-safety gate before pushing:
+
+   ```bash
+   scripts/check_public_safety.sh
+   ```
+
+6. Update `docs/RESEARCH_FINDINGS.md` only when evidence changes.
+7. Keep model changes versioned; do not rewrite historical forecasts.
 
 ## Pull Request Checklist
 
