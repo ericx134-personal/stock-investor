@@ -50,6 +50,16 @@ class ReadOnlyContractTests(unittest.TestCase):
                         )
         self.assertEqual(violations, [], f"HTTP write requests found: {violations}")
 
+    def test_market_refresh_uses_no_credential_provider_by_default(self):
+        script = (ROOT / "scripts" / "run_market_refresh.sh").read_text()
+        self.assertIn("Using Yahoo Finance chart data (no credentials)", script)
+        self.assertIn("ENABLE_ALPACA_MARKET_DATA", script)
+        self.assertNotIn("Alpaca credentials missing; using Yahoo", script)
+        self.assertLess(
+            script.index("ENABLE_ALPACA_MARKET_DATA"),
+            script.index("fetch-alpaca"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

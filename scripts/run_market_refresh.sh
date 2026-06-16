@@ -22,7 +22,7 @@ fi
 
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] starting scheduled market refresh"
 
-if [[ -n "${APCA_API_KEY_ID:-}" && -n "${APCA_API_SECRET_KEY:-}" ]]; then
+if [[ "${ENABLE_ALPACA_MARKET_DATA:-0}" == "1" && -n "${APCA_API_KEY_ID:-}" && -n "${APCA_API_SECRET_KEY:-}" ]]; then
   START_DATE="$(date -v-730d +%Y-%m-%d)"
   END_DATE="$(date -v+1d +%Y-%m-%d)"
   PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli fetch-alpaca \
@@ -33,7 +33,7 @@ if [[ -n "${APCA_API_KEY_ID:-}" && -n "${APCA_API_SECRET_KEY:-}" ]]; then
   PRICE_SOURCE="Alpaca Market Data API (${ALPACA_FEED:-iex}, adjusted)"
   PRICE_ADJUSTMENT="all"
 else
-  echo "Alpaca credentials missing; using Yahoo Finance chart fallback" >&2
+  echo "Using Yahoo Finance chart data (no credentials)" >&2
   START_DATE="$(date -v-730d +%Y-%m-%d)"
   END_DATE="$(date -v+1d +%Y-%m-%d)"
   PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli fetch-yahoo \

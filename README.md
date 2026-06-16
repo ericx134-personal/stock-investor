@@ -357,34 +357,38 @@ The dashboard is then available at
 bound to localhost because it contains private portfolio data. `launchd`
 starts it after login and restarts it after a crash.
 
-For unattended latest-market-data updates, create the private runtime file
-`~/Library/Application Support/stock-investor/data/private/service.env`:
-
-```bash
-APCA_API_KEY_ID="..."
-APCA_API_SECRET_KEY="..."
-ALPACA_FEED="iex"
-```
+Unattended latest-market-data updates use Yahoo Finance chart data by default
+and do not require credentials. A private runtime file at
+`~/Library/Application Support/stock-investor/data/private/service.env` is only
+needed for optional settings such as archive retention.
 
 macOS privacy controls prevent background LaunchAgents from reliably reading
 `Documents`, so the installer creates a private operational copy under
 `~/Library/Application Support/stock-investor`. Re-run the installer after
 manually changing portfolio inputs or application code.
 
-The refresh service fetches two years of adjusted daily bars through Alpaca
-when credentials are configured. Without Alpaca credentials, it automatically
-falls back to Yahoo Finance chart data and merges those bars with the existing
-price file so normally listed symbols continue updating while unsupported or
-delisted symbols keep their last known history. It atomically replaces the
-price input only after a successful fetch, then runs the production-safe
-evidence refresh. It also creates one credential-free private archive per day
-under `data/private/archives/` and retains 30 daily archives by default. It
-never deletes source ledgers or rewrites forecasts; only expired archive
-bundles are pruned. Set `ARCHIVE_KEEP_DAYS` in `service.env` to change the
-archive retention period. Every scheduled run safely restores the daily bundle
-into an isolated temporary directory, rejects unsafe paths, links,
-credentials, and logs, parses every JSON/JSONL artifact, and confirms that all
+The refresh service fetches two years of daily bars through Yahoo Finance chart
+data, merges those bars with the existing price file so unsupported or delisted
+symbols keep their last known history, atomically replaces the price input only
+after a successful fetch, then runs the production-safe evidence refresh. It
+also creates one credential-free private archive per day under
+`data/private/archives/` and retains 30 daily archives by default. It never
+deletes source ledgers or rewrites forecasts; only expired archive bundles are
+pruned. Set `ARCHIVE_KEEP_DAYS` in `service.env` to change the archive
+retention period. Every scheduled run safely restores the daily bundle into an
+isolated temporary directory, rejects unsafe paths, links, credentials, and
+logs, parses every JSON/JSONL artifact, and confirms that all
 manifest-declared artifacts are present.
+
+Alpaca remains available only as an explicit opt-in override for users who
+want that provider:
+
+```bash
+ENABLE_ALPACA_MARKET_DATA=1
+APCA_API_KEY_ID="..."
+APCA_API_SECRET_KEY="..."
+ALPACA_FEED="iex"
+```
 Service logs are under `data/private/logs/`. macOS cannot serve or refresh
 while the machine is shut down or asleep.
 
