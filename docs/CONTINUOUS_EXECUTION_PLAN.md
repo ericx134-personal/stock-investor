@@ -33,6 +33,39 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - Promote a model only when it improves sealed forward evidence without
   materially worsening calibration, drawdown, coverage, or stability.
 
+## PM Direction
+
+The product is currently in a trust-building stage, not a signal-expansion
+stage. The next work should make the system more reliable, easier to understand,
+and harder to fool before adding more BUY/SELL opportunities.
+
+Near-term product goals:
+
+1. **Freshness trust**: the dashboard must make stale or degraded market data
+   impossible to miss, and the refresh job must classify provider failures
+   clearly enough to fix without guessing.
+2. **Prediction accountability**: HOOD-style zone misses are expected research
+   failures until proven otherwise; every zone and direction must be replayed
+   against past and future data before promotion.
+3. **User comprehension**: the detail view should feel like a portfolio holding
+   card first, with cost, shares, P/L, and position context visible before dense
+   research tables.
+4. **Governance before confidence**: no model or threshold is promoted because
+   it looks good in one backtest. Promotion, probation, rollback, and retirement
+   gates must be explicit.
+
+Current execution queue:
+
+- P0: M023 provider retries and failure classification.
+- P0: M045 time-period stability checks for the current wave candidate.
+- P0: M049 formal promotion, probation, retirement, and rollback gates.
+- P1: M081 compact model-health and opportunity summaries.
+- P1: M084 chart crosshair and OHLCV tooltips.
+- P1: M085 historical forecasts and matured outcomes on K-line charts.
+- P1: M086 selectable chart horizons.
+- P2: M017 symbol-change, merger, and delisting detection.
+- P2: M061-M063 market-regime conditioning only after stability gates pass.
+
 ## Phase 1: Measurement Foundation
 
 - [x] M001 Persist immutable BUY, SELL, and WAIT forecasts.

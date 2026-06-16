@@ -41,8 +41,9 @@ evaluation window. Therefore:
 - The current dashboard percentages are small-sample shrunk confidence scores;
   raw historical analog rates are preserved but are not calibrated
   probabilities.
-- The highest-value next milestone is immutable forecast recording followed by
-  patient 21/63/126-session evaluation.
+- The highest-value next work is refresh reliability, time-period stability,
+  and formal model-promotion gates before any new signal is allowed to increase
+  dashboard confidence.
 
 ## Research Objective
 

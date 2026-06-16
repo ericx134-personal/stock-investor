@@ -16,8 +16,8 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] A002 Evaluate directional forecasts after 21, 63, and 126 sessions.
 - [x] A003 Build forecast scorecards by direction and horizon.
 - [x] A004 Track forecast calibration by displayed probability bucket.
-- [ ] A005 Track coverage: share of holdings receiving BUY/SELL versus WAIT.
-- [ ] A006 Track false-positive BUY and SELL rates.
+- [x] A005 Track coverage: share of holdings receiving BUY/SELL versus WAIT.
+- [x] A006 Track false-positive BUY and SELL rates.
 - [x] A007 Track maximum favorable and adverse excursion per forecast.
 - [x] A008 Separate absolute-direction success from SPY-relative success.
 - [x] A009 Add forecast episode de-duplication to avoid repeated-signal inflation.
@@ -133,9 +133,9 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] J002 Add Brier score for directional forecasts.
 - [x] J003 Add precision, recall, and coverage for BUY and SELL separately.
 - [x] J004 Add bootstrap uncertainty for return statistics.
-- [ ] J005 Add multiple-testing ledger for every research experiment.
-- [ ] J006 Add false-discovery warnings after repeated experiments.
-- [ ] J007 Add walk-forward train/development/test partitions.
+- [x] J005 Add multiple-testing ledger for every research experiment.
+- [x] J006 Add false-discovery warnings after repeated experiments.
+- [x] J007 Add walk-forward train/development/test partitions.
 - [x] J008 Add symbol-level leave-one-out robustness checks.
 - [ ] J009 Add time-period stability checks.
 - [ ] J010 Define formal promotion and retirement gates for models.
