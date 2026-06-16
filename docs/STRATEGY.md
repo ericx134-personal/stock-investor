@@ -298,6 +298,10 @@ show when an attractive result came from many simultaneous tests. The ledger is
 audit-only; it cannot promote a model without false-discovery controls or sealed
 holdout replication.
 
+False-discovery warnings are generated from that ledger. They mark large
+experiment families as `BLOCK_PROMOTION`, keeping the research visible while
+preventing a raw best row from being treated as model evidence.
+
 Every direction displayed on the portfolio board is now recorded in a separate
 append-only, versioned direction ledger. BUY and SELL forecasts retain their
 displayed shrunk confidence, raw historical analog rate, selected broad or
@@ -526,6 +530,7 @@ preserves separately maintained risk metadata.
 - [x] Experimental time-decayed structural-wave scorecard
 - [x] Frozen `wave-direction-v4-candidate` manifest with pending promotion gates
 - [x] Multiple-testing ledger for active research artifacts
+- [x] False-discovery warnings for repeated hypothesis tests
 - [ ] Production schedule connected to the real portfolio
 
 ### Phase 3A: Real-Portfolio Learning Loop

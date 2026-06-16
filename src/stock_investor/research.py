@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 MULTIPLE_TESTING_LEDGER_VERSION = "multiple-testing-ledger-v1"
+FALSE_DISCOVERY_WARNING_VERSION = "false-discovery-warnings-v1"
 
 
 EXPERIMENT_REGISTRY = [
@@ -151,3 +152,24 @@ def build_multiple_testing_ledger(artifact_counts: dict[str, int]) -> dict:
         "family_hypothesis_counts": dict(sorted(family_totals.items())),
         "rows": rows,
     }
+
+
+def build_false_discovery_warnings(ledger: dict) -> list[dict]:
+    warnings = []
+    for family, count in sorted(ledger.get("family_hypothesis_counts", {}).items()):
+        risk = _risk_level(int(count))
+        if risk == "LOW":
+            continue
+        warnings.append(
+            {
+                "warning_version": FALSE_DISCOVERY_WARNING_VERSION,
+                "family": family,
+                "family_hypothesis_count": int(count),
+                "risk": risk,
+                "status": "BLOCK_PROMOTION",
+                "message": (
+                    f"{family} has {int(count)} tested rows; raw winners need false-discovery control or sealed holdout replication before promotion."
+                ),
+            }
+        )
+    return warnings

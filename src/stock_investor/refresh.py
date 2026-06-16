@@ -50,7 +50,7 @@ from .monitor import (
 )
 from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk_history
 from .robinhood import load_robinhood_cash
-from .research import build_multiple_testing_ledger
+from .research import build_false_discovery_warnings, build_multiple_testing_ledger
 from .thesis import load_theses
 from .wave import (
     append_directional_forecast_history,
@@ -160,6 +160,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "direction_classification_metrics": output_dir / "direction-classification-metrics.json",
         "direction_error_cohorts": output_dir / "direction-error-cohorts.json",
         "multiple_testing_ledger": output_dir / "multiple-testing-ledger.json",
+        "false_discovery_warnings": output_dir / "false-discovery-warnings.json",
         "comparison": output_dir / f"model-v1-{slug.removeprefix('model-')}-comparison.json",
         "dashboard": output_dir / f"dashboard-{slug.removeprefix('model-')}.html",
         "manifest": output_dir / "refresh-manifest.json",
@@ -385,6 +386,10 @@ def run_refresh(
         }
     )
     _write_json(multiple_testing_ledger, paths["multiple_testing_ledger"])
+    false_discovery_warnings = build_false_discovery_warnings(
+        multiple_testing_ledger
+    )
+    _write_json(false_discovery_warnings, paths["false_discovery_warnings"])
 
     records = [
         {
@@ -452,6 +457,7 @@ def run_refresh(
             direction_classification_metrics_path=paths["direction_classification_metrics"],
             direction_error_cohorts_path=paths["direction_error_cohorts"],
             multiple_testing_ledger_path=paths["multiple_testing_ledger"],
+            false_discovery_warnings_path=paths["false_discovery_warnings"],
             model_health_path=paths["model_health"],
             price_health_path=paths["price_health"],
             prices_path=prices_path,
@@ -572,6 +578,7 @@ def run_refresh(
         "multiple_testing_total_hypotheses": multiple_testing_ledger[
             "total_hypothesis_count"
         ],
+        "false_discovery_warning_count": len(false_discovery_warnings),
         "price_zone_replay_count": len(price_zone_replay),
         "price_zone_replay_scorecard_rows": len(price_zone_replay_scorecard),
         "historical_wave_evidence_counts": dict(

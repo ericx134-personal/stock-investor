@@ -469,6 +469,42 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("family-level false-discovery controls", page)
         self.assertIn("<td>structural_wave</td><td>wave_conditional_scorecard</td>", page)
 
+    def test_research_tab_shows_false_discovery_warnings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "snapshot.json"
+            snapshot.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "symbol": "ABC",
+                                "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                            }
+                        ]
+                    }
+                )
+            )
+            warnings = root / "false-discovery-warnings.json"
+            warnings.write_text(
+                json.dumps(
+                    [
+                        {
+                            "warning_version": "false-discovery-warnings-v1",
+                            "family": "structural_wave",
+                            "family_hypothesis_count": 100,
+                            "risk": "HIGH",
+                            "status": "BLOCK_PROMOTION",
+                            "message": "structural_wave has 100 tested rows; raw winners need false-discovery control.",
+                        }
+                    ]
+                )
+            )
+            page = build_dashboard(snapshot, false_discovery_warnings_path=warnings)
+        self.assertIn("False-Discovery Warnings", page)
+        self.assertIn("BLOCK_PROMOTION", page)
+        self.assertIn("Warnings block model promotion", page)
+
     def test_robust_conditional_direction_can_override_inconclusive_broad_direction(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

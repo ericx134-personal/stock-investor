@@ -567,6 +567,7 @@ def build_dashboard(
     direction_classification_metrics_path: str | Path | None = None,
     direction_error_cohorts_path: str | Path | None = None,
     multiple_testing_ledger_path: str | Path | None = None,
+    false_discovery_warnings_path: str | Path | None = None,
     model_health_path: str | Path | None = None,
     price_health_path: str | Path | None = None,
     prices_path: str | Path | None = None,
@@ -682,6 +683,12 @@ def build_dashboard(
         if multiple_testing_ledger_path
         and Path(multiple_testing_ledger_path).exists()
         else None
+    )
+    false_discovery_warnings = (
+        json.loads(Path(false_discovery_warnings_path).read_text())
+        if false_discovery_warnings_path
+        and Path(false_discovery_warnings_path).exists()
+        else []
     )
     model_health = (
         json.loads(Path(model_health_path).read_text())
@@ -1273,6 +1280,18 @@ def build_dashboard(
         if multiple_testing_ledger
         else ""
     )
+    false_discovery_rows = "".join(
+        f"<tr><td>{html.escape(row['family'])}</td>"
+        f"<td>{int(row.get('family_hypothesis_count', 0))}</td>"
+        f"<td><span class=\"health-status {html.escape(str(row.get('risk', '')).lower())}\">{html.escape(row.get('risk', ''))}</span></td>"
+        f"<td>{html.escape(row.get('status', ''))}</td>"
+        f"<td>{html.escape(row.get('message', ''))}</td></tr>"
+        for row in false_discovery_warnings
+    ) or '<tr><td colspan="5">No false-discovery warnings at the current testing volume.</td></tr>'
+    false_discovery_panel = f"""<section class="panel"><h2>False-Discovery Warnings</h2>
+<table><thead><tr><th>Family</th><th>Tested rows</th><th>Risk</th><th>Status</th><th>Meaning</th></tr></thead>
+<tbody>{false_discovery_rows}</tbody></table>
+<p class="note">Warnings block model promotion from attractive in-sample rows. They do not hide research rows; they force replication or correction before promotion.</p></section>"""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1328,6 +1347,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .health-status.pass,.health-status.ready {{ background:var(--green-dim); color:var(--green) }} .health-status.fail,.health-status.blocked {{ background:#321214; color:var(--red) }} .health-status.pending {{ background:#2b240f; color:var(--amber) }} .health-status.degraded {{ background:#35240c; color:#ffb84d }}
 .health-status.fresh {{ background:var(--green-dim); color:var(--green) }} .health-status.stale,.health-status.missing {{ background:#321214; color:var(--red) }}
 .health-status.good {{ background:var(--green-dim); color:var(--green) }} .health-status.review {{ background:#2b240f; color:var(--amber) }} .health-status.poor {{ background:#321214; color:var(--red) }}
+.health-status.low {{ background:var(--green-dim); color:var(--green) }} .health-status.medium {{ background:#2b240f; color:var(--amber) }} .health-status.high {{ background:#321214; color:var(--red) }}
 .board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }}
 .drawer-backdrop {{ background:rgba(0,0,0,.78); display:none; inset:0; position:fixed; z-index:20 }} .drawer-backdrop.open {{ display:block }}
 .drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:1040px; overflow:auto; padding:24px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .2s ease; width:min(96vw,1040px); z-index:30 }}
@@ -1425,6 +1445,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <tbody>{error_cohort_rows}</tbody></table>
 <p class="note">False BUY means the forward return was flat or negative; false SELL means the stock was flat or up. Rows are ranked by worst direction-aware return and preserve the original forecast version.</p></section>
 {multiple_testing_panel}
+{false_discovery_panel}
 <section class="panel"><h2>All-Decision Forward Evidence</h2>
 <table><thead><tr><th>Decision</th><th>Horizon</th><th>Matured sample</th><th>Positive return</th><th>Mean excess return</th><th>Directional success</th></tr></thead>
 <tbody>{decision_evidence_rows}</tbody></table>

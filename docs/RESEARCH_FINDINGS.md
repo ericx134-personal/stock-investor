@@ -836,3 +836,16 @@ experiment row cannot promote a model unless future work adds family-level
 false-discovery controls or sealed holdout replication. This directly addresses
 backtest-overfitting risk as more wave, K-line, calibration, and price-zone
 experiments accumulate.
+
+## False Discovery Warnings V1
+
+M042 adds `false-discovery-warnings-v1`, generated as
+`false-discovery-warnings.json` during refresh and shown in the Research tab.
+The artifact scans the multiple-testing ledger by experiment family and emits
+`BLOCK_PROMOTION` warnings when a family has enough tested rows that attractive
+raw winners are likely to include false discoveries.
+
+Decision rule: warnings do not hide research rows and do not change live
+signals. They block promotion until a future milestone adds explicit
+false-discovery correction or sealed holdout replication for the affected
+family.
