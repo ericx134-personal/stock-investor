@@ -302,6 +302,11 @@ False-discovery warnings are generated from that ledger. They mark large
 experiment families as `BLOCK_PROMOTION`, keeping the research visible while
 preventing a raw best row from being treated as model evidence.
 
+Evaluation periods are fixed in `models/evaluation-periods-v1.json`: train
+through December 31, 2025, development through June 30, 2026, and sealed test
+from July 1, 2026 onward. The sealed period starts after already-inspected
+source data, so it remains a future test rather than a relabeled backtest.
+
 Every direction displayed on the portfolio board is now recorded in a separate
 append-only, versioned direction ledger. BUY and SELL forecasts retain their
 displayed shrunk confidence, raw historical analog rate, selected broad or
@@ -531,6 +536,7 @@ preserves separately maintained risk metadata.
 - [x] Frozen `wave-direction-v4-candidate` manifest with pending promotion gates
 - [x] Multiple-testing ledger for active research artifacts
 - [x] False-discovery warnings for repeated hypothesis tests
+- [x] Fixed train, development, and sealed-test evaluation periods
 - [x] Production schedule connected to the real portfolio with market-data fallback
 
 ### Phase 3A: Real-Portfolio Learning Loop

@@ -1,0 +1,36 @@
+{
+  "schema_version": "evaluation-periods-v1",
+  "frozen_at_local_date": "2026-06-16",
+  "timezone": "America/Los_Angeles",
+  "source_price_cutoff_used_for_design": "2026-06-16",
+  "purpose": "Fixed train, development, and sealed-test windows for model-governance decisions.",
+  "periods": [
+    {
+      "name": "train",
+      "start": "2024-06-17",
+      "end": "2025-12-31",
+      "status": "available_for_research",
+      "allowed_use": "Fit exploratory thresholds, estimate broad historical base rates, and debug feature construction."
+    },
+    {
+      "name": "development",
+      "start": "2026-01-01",
+      "end": "2026-06-30",
+      "status": "available_for_candidate_selection",
+      "allowed_use": "Compare predeclared candidate variants and choose exactly one frozen challenger before sealed evaluation."
+    },
+    {
+      "name": "sealed_test",
+      "start": "2026-07-01",
+      "end": null,
+      "status": "sealed_future",
+      "allowed_use": "Evaluate frozen candidates only after outcomes mature; do not tune thresholds, buckets, or provider rules on this period."
+    }
+  ],
+  "rules": [
+    "Do not move period boundaries after inspecting outcomes.",
+    "Do not use sealed_test outcomes to choose thresholds, buckets, providers, or labels.",
+    "Any model changed after 2026-06-30 must be evaluated on a later sealed window.",
+    "Promotion requires a frozen candidate manifest before sealed outcomes are inspected."
+  ]
+}

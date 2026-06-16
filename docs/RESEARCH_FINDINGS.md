@@ -849,3 +849,18 @@ Decision rule: warnings do not hide research rows and do not change live
 signals. They block promotion until a future milestone adds explicit
 false-discovery correction or sealed holdout replication for the affected
 family.
+
+## Fixed Evaluation Periods V1
+
+M043 freezes `models/evaluation-periods-v1.json` with three governance
+periods:
+
+- train: June 17, 2024 through December 31, 2025.
+- development: January 1, 2026 through June 30, 2026.
+- sealed_test: July 1, 2026 onward.
+
+The sealed period starts after the latest source price data inspected during
+this milestone, June 16, 2026. This means existing June outcomes are not
+retroactively called sealed. Promotion candidates must be frozen before sealed
+outcomes are inspected, and any model changed after June 30, 2026 needs a later
+sealed window.

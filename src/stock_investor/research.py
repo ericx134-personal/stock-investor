@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
+import json
+from pathlib import Path
+
 
 MULTIPLE_TESTING_LEDGER_VERSION = "multiple-testing-ledger-v1"
 FALSE_DISCOVERY_WARNING_VERSION = "false-discovery-warnings-v1"
@@ -173,3 +177,36 @@ def build_false_discovery_warnings(ledger: dict) -> list[dict]:
             }
         )
     return warnings
+
+
+def load_evaluation_periods(path: str | Path) -> dict:
+    payload = json.loads(Path(path).read_text())
+    validate_evaluation_periods(payload)
+    return payload
+
+
+def validate_evaluation_periods(payload: dict) -> None:
+    if payload.get("schema_version") != "evaluation-periods-v1":
+        raise ValueError("evaluation periods must use schema evaluation-periods-v1")
+    periods = payload.get("periods")
+    if not isinstance(periods, list) or [item.get("name") for item in periods] != [
+        "train",
+        "development",
+        "sealed_test",
+    ]:
+        raise ValueError("evaluation periods must be train, development, sealed_test")
+    previous_end = None
+    for period in periods:
+        start = date.fromisoformat(period["start"])
+        end = date.fromisoformat(period["end"]) if period.get("end") else None
+        if end is not None and end < start:
+            raise ValueError(f"{period['name']} end is before start")
+        if previous_end is not None and start <= previous_end:
+            raise ValueError("evaluation periods must be strictly non-overlapping")
+        previous_end = end or start
+    sealed = periods[-1]
+    cutoff = date.fromisoformat(payload["source_price_cutoff_used_for_design"])
+    if date.fromisoformat(sealed["start"]) <= cutoff:
+        raise ValueError("sealed_test must start after inspected source data")
+    if sealed.get("end") is not None or sealed.get("status") != "sealed_future":
+        raise ValueError("sealed_test must be an open future period")

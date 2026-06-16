@@ -1,8 +1,11 @@
 import unittest
+from pathlib import Path
 
 from stock_investor.research import (
     build_false_discovery_warnings,
     build_multiple_testing_ledger,
+    load_evaluation_periods,
+    validate_evaluation_periods,
 )
 
 
@@ -40,6 +43,42 @@ class ResearchLedgerTests(unittest.TestCase):
         self.assertEqual(by_family["structural_wave"]["risk"], "HIGH")
         self.assertEqual(by_family["structural_wave"]["status"], "BLOCK_PROMOTION")
         self.assertNotIn("calibration_audit", by_family)
+
+    def test_fixed_evaluation_periods_keep_sealed_period_in_future(self):
+        path = Path(__file__).parents[1] / "models" / "evaluation-periods-v1.json"
+        payload = load_evaluation_periods(path)
+        self.assertEqual(
+            [period["name"] for period in payload["periods"]],
+            ["train", "development", "sealed_test"],
+        )
+        self.assertEqual(payload["periods"][-1]["status"], "sealed_future")
+        self.assertGreater(
+            payload["periods"][-1]["start"],
+            payload["source_price_cutoff_used_for_design"],
+        )
+
+    def test_evaluation_period_validation_rejects_seen_sealed_data(self):
+        with self.assertRaisesRegex(ValueError, "after inspected source data"):
+            validate_evaluation_periods(
+                {
+                    "schema_version": "evaluation-periods-v1",
+                    "source_price_cutoff_used_for_design": "2026-06-16",
+                    "periods": [
+                        {"name": "train", "start": "2024-01-01", "end": "2025-01-01"},
+                        {
+                            "name": "development",
+                            "start": "2025-01-02",
+                            "end": "2026-01-01",
+                        },
+                        {
+                            "name": "sealed_test",
+                            "start": "2026-06-01",
+                            "end": None,
+                            "status": "sealed_future",
+                        },
+                    ],
+                }
+            )
 
 
 if __name__ == "__main__":
