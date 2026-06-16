@@ -49,13 +49,11 @@ PYTHONPATH=src python3 -m stock_investor.cli monitor \
   examples/positions.csv examples/prices.csv --history data/alerts.jsonl
 ```
 
-To fetch real adjusted daily bars through Alpaca's official Market Data API,
-create read-only market-data credentials and keep them in environment variables:
+To fetch recent real daily bars without credentials, use the Yahoo Finance chart
+fallback. It is the default provider for the always-on Mac refresh workflow:
 
 ```bash
-export APCA_API_KEY_ID="..."
-export APCA_API_SECRET_KEY="..."
-PYTHONPATH=src python3 -m stock_investor.cli fetch-alpaca \
+PYTHONPATH=src python3 -m stock_investor.cli fetch-yahoo \
   portfolio/positions.csv data/prices.csv
 PYTHONPATH=src python3 -m stock_investor.cli monitor \
   portfolio/positions.csv data/prices.csv \
@@ -81,9 +79,9 @@ PYTHONPATH=src python3 -m stock_investor.cli daily \
   --brief-output data/daily-brief.md
 ```
 
-The default `iex` feed is suitable for initial monitoring and free/paper-only
-Alpaca accounts. Use `--feed sip` only when the account's market-data plan
-permits it. The adapter requests `adjustment=all` and follows pagination.
+Alpaca support remains in the codebase only as an explicit opt-in provider for
+users who already have a valid reason and their own read-only market-data
+credentials. It is not required for normal operation.
 
 ## Robinhood Read-Only Import
 

@@ -39,5 +39,5 @@ install_agent refresh
 
 echo "Installed persistent dashboard: http://127.0.0.1:8765/data/private/dashboard-v3.html"
 echo "Runtime copy: $RUNTIME_ROOT"
-echo "Refresh credentials: $RUNTIME_ROOT/data/private/service.env"
+echo "Refresh config: $RUNTIME_ROOT/data/private/service.env"
 echo "Logs: $RUNTIME_ROOT/data/private/logs/"
