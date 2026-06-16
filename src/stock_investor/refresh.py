@@ -55,6 +55,8 @@ from .wave import (
     append_directional_forecast_history,
     append_wave_history,
     build_directional_forecasts,
+    build_price_zone_replay,
+    build_price_zone_replay_scorecard,
     build_wave_conditional_scorecard,
     build_wave_scorecard,
     build_wave_walk_forward_outcomes,
@@ -143,6 +145,8 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "wave_experiment_outcomes": output_dir / "wave-experiment-outcomes.json",
         "wave_experiment_scorecard": output_dir / "wave-experiment-scorecard.json",
         "wave_conditional_scorecard": output_dir / "wave-conditional-scorecard.json",
+        "price_zone_replay": output_dir / "price-zone-replay.json",
+        "price_zone_replay_scorecard": output_dir / "price-zone-replay-scorecard.json",
         "direction_forecasts": output_dir / "wave-direction-forecasts.jsonl",
         "direction_forecast_outcomes": output_dir / "wave-direction-forecast-outcomes.json",
         "direction_forecast_scorecard": output_dir / "wave-direction-forecast-scorecard.json",
@@ -275,6 +279,12 @@ def run_refresh(
     _write_json(wave_experiment_outcomes, paths["wave_experiment_outcomes"])
     _write_json(wave_experiment_scorecard, paths["wave_experiment_scorecard"])
     _write_json(wave_conditional_scorecard, paths["wave_conditional_scorecard"])
+    price_zone_replay = build_price_zone_replay(experiment_prices)
+    price_zone_replay_scorecard = build_price_zone_replay_scorecard(
+        price_zone_replay
+    )
+    _write_json(price_zone_replay, paths["price_zone_replay"])
+    _write_json(price_zone_replay_scorecard, paths["price_zone_replay_scorecard"])
     direction_forecasts = build_directional_forecasts(
         waves,
         held_symbols,
@@ -521,6 +531,8 @@ def run_refresh(
             sorted(Counter(row["status"] for row in direction_classification_metrics).items())
         ),
         "direction_error_cohort_count": len(direction_error_cohorts),
+        "price_zone_replay_count": len(price_zone_replay),
+        "price_zone_replay_scorecard_rows": len(price_zone_replay_scorecard),
         "historical_wave_evidence_counts": dict(
             sorted(
                 Counter(

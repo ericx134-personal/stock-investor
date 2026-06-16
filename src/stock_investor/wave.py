@@ -15,7 +15,9 @@ WAVE_FEATURE_VERSION = "wave-v1"
 WAVE_EXPERIMENT_VERSION = "wave-walk-forward-v1"
 WAVE_CONDITIONAL_VERSION = "wave-conditional-v2"
 WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v4"
+PRICE_ZONE_REPLAY_VERSION = "price-zone-replay-v1"
 WAVE_OUTCOME_WINDOWS = (21, 63, 126)
+PRICE_ZONE_REPLAY_HORIZON = 5
 MIN_WAVE_HISTORY = 126
 MIN_REVERSAL = 0.08
 MIN_ROBUST_OBSERVATIONS = 10
@@ -176,6 +178,22 @@ def wave_magnitude_bucket(
     return multiple, "EXTENDED"
 
 
+def _bar_low(price: Price) -> float:
+    return float(price.low if price.low is not None else price.close)
+
+
+def _bar_high(price: Price) -> float:
+    return float(price.high if price.high is not None else price.close)
+
+
+def _zone_intersects(price: Price, low: float, high: float) -> bool:
+    return _bar_low(price) <= high and _bar_high(price) >= low
+
+
+def _first_offset(values: list[bool]) -> int | None:
+    return next((index + 1 for index, value in enumerate(values) if value), None)
+
+
 def _atr_threshold(history: list[Price]) -> float:
     recent = history[-21:]
     ranges = []
@@ -309,6 +327,156 @@ def calculate_waves(prices: dict[str, list[Price]]) -> dict[str, WaveSignals]:
         except ValueError:
             continue
     return waves
+
+
+def _zone_replay_record(
+    wave: WaveSignals,
+    zone_label: str,
+    low: float | None,
+    high: float | None,
+    forward: list[Price],
+) -> dict | None:
+    if low is None or high is None or low <= 0 or high <= 0 or not forward:
+        return None
+    low, high = sorted((float(low), float(high)))
+    current = float(wave.latest_close)
+    zone_type = zone_label
+    if zone_label == "SELL" and current > high:
+        zone_type = "BREAKOUT_RETEST"
+    elif zone_label == "BUY" and current < low:
+        zone_type = "BREAKDOWN_RETEST"
+    touches = [_zone_intersects(item, low, high) for item in forward]
+    touch_offset = _first_offset(touches)
+    if zone_label == "BUY":
+        invalidations = [float(item.close) < low for item in forward]
+        favorable = max(_bar_high(item) / current - 1 for item in forward)
+        adverse = min(_bar_low(item) / current - 1 for item in forward)
+    else:
+        invalidations = [float(item.close) > high for item in forward]
+        favorable = max(1 - _bar_low(item) / current for item in forward)
+        adverse = min(1 - _bar_high(item) / current for item in forward)
+    invalidation_offset = _first_offset(invalidations)
+    final_return = float(forward[-1].close) / current - 1
+    if zone_type == "BREAKOUT_RETEST":
+        outcome = (
+            "RETEST_HELD"
+            if touch_offset is not None and float(forward[-1].close) >= high
+            else "NO_RETEST"
+            if touch_offset is None
+            else "RETEST_FAILED"
+        )
+    elif zone_type == "BREAKDOWN_RETEST":
+        outcome = (
+            "RETEST_HELD"
+            if touch_offset is not None and float(forward[-1].close) <= low
+            else "NO_RETEST"
+            if touch_offset is None
+            else "RETEST_FAILED"
+        )
+    elif invalidation_offset is not None and (
+        touch_offset is None or invalidation_offset < touch_offset
+    ):
+        outcome = "INVALIDATED_BEFORE_TOUCH"
+    elif touch_offset is not None:
+        outcome = "TOUCHED"
+    else:
+        outcome = "MISSED"
+    return {
+        "replay_version": PRICE_ZONE_REPLAY_VERSION,
+        "symbol": wave.symbol,
+        "signal_date": wave.latest_date,
+        "entry_close": current,
+        "zone_label": zone_label,
+        "zone_type": zone_type,
+        "zone_low": low,
+        "zone_high": high,
+        "zone_midpoint": (low + high) / 2,
+        "horizon_sessions": len(forward),
+        "touch_offset_sessions": touch_offset,
+        "invalidation_offset_sessions": invalidation_offset,
+        "outcome": outcome,
+        "forward_return": final_return,
+        "max_favorable_excursion": favorable,
+        "max_adverse_excursion": adverse,
+        "wave_regime": wave.regime,
+        "wave_direction": wave.direction,
+        "wave_age_sessions": wave.wave_age_sessions,
+        "active_wave_return": wave.active_wave_return,
+    }
+
+
+def build_price_zone_replay(
+    prices: dict[str, list[Price]],
+    *,
+    horizon_sessions: int = PRICE_ZONE_REPLAY_HORIZON,
+    min_history: int = MIN_WAVE_HISTORY,
+) -> list[dict]:
+    """Replay structural price zones using only bars available at each signal date."""
+    if horizon_sessions <= 0:
+        raise ValueError("horizon_sessions must be positive")
+    records = []
+    for symbol, history in sorted(prices.items()):
+        if len(history) <= min_history + horizon_sessions:
+            continue
+        for index in range(min_history - 1, len(history) - horizon_sessions):
+            try:
+                wave = calculate_wave(symbol, history[: index + 1])
+            except ValueError:
+                continue
+            forward = history[index + 1 : index + 1 + horizon_sessions]
+            for zone_label, low, high in (
+                ("BUY", wave.support_zone_low, wave.support_zone_high),
+                ("SELL", wave.resistance_zone_low, wave.resistance_zone_high),
+            ):
+                record = _zone_replay_record(wave, zone_label, low, high, forward)
+                if record:
+                    records.append(record)
+    return records
+
+
+def build_price_zone_replay_scorecard(records: list[dict]) -> list[dict]:
+    groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for record in records:
+        groups[(str(record["zone_type"]), str(record["wave_regime"]))].append(record)
+    rows = []
+    for (zone_type, regime), values in sorted(groups.items()):
+        observations = len(values)
+        touched = sum(1 for item in values if item["touch_offset_sessions"] is not None)
+        invalidated = sum(
+            1 for item in values if item["outcome"] == "INVALIDATED_BEFORE_TOUCH"
+        )
+        retest_held = sum(1 for item in values if item["outcome"] == "RETEST_HELD")
+        rows.append(
+            {
+                "replay_version": PRICE_ZONE_REPLAY_VERSION,
+                "zone_type": zone_type,
+                "wave_regime": regime,
+                "observations": observations,
+                "touch_rate": touched / observations if observations else None,
+                "invalidation_rate": (
+                    invalidated / observations if observations else None
+                ),
+                "retest_hold_rate": retest_held / observations if observations else None,
+                "mean_forward_return": (
+                    sum(float(item["forward_return"]) for item in values) / observations
+                    if observations
+                    else None
+                ),
+                "mean_max_favorable_excursion": (
+                    sum(float(item["max_favorable_excursion"]) for item in values)
+                    / observations
+                    if observations
+                    else None
+                ),
+                "mean_max_adverse_excursion": (
+                    sum(float(item["max_adverse_excursion"]) for item in values)
+                    / observations
+                    if observations
+                    else None
+                ),
+            }
+        )
+    return rows
 
 
 def write_wave_snapshot(waves: dict[str, WaveSignals], path: str | Path) -> None:

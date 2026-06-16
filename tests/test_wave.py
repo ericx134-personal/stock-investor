@@ -9,6 +9,8 @@ from stock_investor.wave import (
     append_directional_forecast_history,
     append_wave_history,
     build_directional_forecasts,
+    build_price_zone_replay,
+    build_price_zone_replay_scorecard,
     build_wave_conditional_scorecard,
     build_wave_scorecard,
     build_wave_walk_forward_outcomes,
@@ -327,6 +329,27 @@ class WaveTests(unittest.TestCase):
             records = load_directional_forecast_history(path)
         self.assertEqual(len(records), 1)
         self.assertIn("observed_at", records[0])
+
+    def test_price_zone_replay_scores_pretend_day_zones(self):
+        records = build_price_zone_replay({"ABC": wave_history()}, horizon_sessions=5)
+        self.assertTrue(records)
+        sample = records[0]
+        self.assertEqual(sample["replay_version"], "price-zone-replay-v1")
+        self.assertIn(sample["zone_label"], {"BUY", "SELL"})
+        self.assertIn(
+            sample["outcome"],
+            {
+                "TOUCHED",
+                "MISSED",
+                "INVALIDATED_BEFORE_TOUCH",
+                "RETEST_HELD",
+                "NO_RETEST",
+                "RETEST_FAILED",
+            },
+        )
+        scorecard = build_price_zone_replay_scorecard(records)
+        self.assertTrue(scorecard)
+        self.assertIn("touch_rate", scorecard[0])
 
     def test_directional_forecast_records_wait_when_wave_is_unavailable(self):
         history = wave_history()[:20]

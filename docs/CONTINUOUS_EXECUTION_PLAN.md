@@ -111,7 +111,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [ ] M058 Evaluate target-zone touch rate, time-to-touch, and post-touch outcome.
 - [ ] M059 Evaluate midpoint versus full-zone usefulness without claiming exact fills.
 - [ ] M060 Freeze or reject wave-v2 and price-zone-v2 using promotion gates.
-- [ ] M060A Add rolling historical price-zone replay: pretend each past session is today,
+- [x] M060A Add rolling historical price-zone replay: pretend each past session is today,
   emit the buy/sell/retest zone, reveal the next bars, and score touch, miss,
   breakout invalidation, retest behavior, and opportunity cost.
 
