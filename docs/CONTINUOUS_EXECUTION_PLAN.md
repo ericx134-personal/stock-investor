@@ -83,7 +83,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - [x] M036 Add error cohorts for the largest false BUY and false SELL episodes.
 - [x] M037 Add probability shrinkage for small samples.
 - [x] M038 Compare raw, Wilson-lower-bound, and shrunk displayed rates.
-- [ ] M039 Add time-decayed evidence as a versioned experiment.
+- [x] M039 Add time-decayed evidence as a versioned experiment.
 - [ ] M040 Freeze the first calibrated direction model candidate.
 
 ## Phase 5: Statistical Safety

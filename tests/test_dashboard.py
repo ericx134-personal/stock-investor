@@ -382,6 +382,49 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("<td>80.0%</td><td>65.0%</td><td>60.0%</td>", page)
         self.assertIn("raw rates are not promoted directly", page)
 
+    def test_research_tab_shows_time_decayed_wave_experiment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "snapshot.json"
+            snapshot.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "symbol": "ABC",
+                                "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                            }
+                        ]
+                    }
+                )
+            )
+            time_decay = root / "wave-time-decay-scorecard.json"
+            time_decay.write_text(
+                json.dumps(
+                    [
+                        {
+                            "decay_version": "wave-time-decay-v1",
+                            "regime": "Advancing wave",
+                            "horizon": "21d",
+                            "weighted_positive_rate": 0.66,
+                            "weighted_mean_return": 0.12,
+                            "weighted_mean_excess_return": 0.04,
+                            "weighted_observations": 8.5,
+                            "symbols": 9,
+                            "observations": 12,
+                            "top_symbol_weight_share": 0.2,
+                        }
+                    ]
+                )
+            )
+            page = build_dashboard(
+                snapshot,
+                wave_time_decay_scorecard_path=time_decay,
+            )
+        self.assertIn("Time-Decayed Wave Experiment", page)
+        self.assertIn("older analogs decay with a one-year half-life", page)
+        self.assertIn("<td>66.0%</td><td>12.0%</td><td>4.0%</td>", page)
+
     def test_robust_conditional_direction_can_override_inconclusive_broad_direction(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

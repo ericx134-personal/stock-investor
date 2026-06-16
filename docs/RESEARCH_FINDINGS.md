@@ -787,3 +787,22 @@ a calibration audit artifact, not a new signal version. Failure gate: if future
 outcomes show that displayed confidence remains materially above realized
 directional success, the next candidate must move closer to the Wilson floor or
 add stronger time-period stability gates before promotion.
+
+## Wave Time Decay V1
+
+Hypothesis: older wave analogs may describe a different market regime and should
+be audited separately from the equal-weight walk-forward scorecard before any
+live signal policy changes. M039 therefore writes `wave-time-decay-v1`, an
+experimental broad-regime scorecard that applies exponential decay to historical
+wave outcomes using a one-year half-life.
+
+The experiment reports weighted positive rate, weighted mean return, weighted
+mean excess return, weighted observation count, symbol count, and the largest
+single-symbol weight share for each wave regime and horizon. It uses the same
+causal non-overlapping walk-forward outcomes as the equal-weight wave
+experiment; only the aggregation changes.
+
+Decision rule: time-decayed rows are research-only and cannot replace the
+current equal-weight evidence. Failure gate: do not promote a time-decayed
+candidate unless sealed forward outcomes improve calibration and do not increase
+single-symbol concentration or false-direction cohorts.

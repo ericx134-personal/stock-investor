@@ -510,6 +510,7 @@ preserves separately maintained risk metadata.
 - [x] Confirmed-pivot structural-wave evidence and long-horizon evaluation
 - [x] Causal non-overlapping historical wave experiment with uncertainty
 - [x] Raw, shrunk, and Wilson-floor directional-rate comparison artifact
+- [x] Experimental time-decayed structural-wave scorecard
 - [ ] Production schedule connected to the real portfolio
 
 ### Phase 3A: Real-Portfolio Learning Loop

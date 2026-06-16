@@ -14,6 +14,7 @@ from stock_investor.wave import (
     build_price_zone_replay_scorecard,
     build_wave_conditional_scorecard,
     build_wave_scorecard,
+    build_wave_time_decay_scorecard,
     build_wave_walk_forward_outcomes,
     build_wave_walk_forward_scorecard,
     calculate_wave,
@@ -337,6 +338,32 @@ class WaveTests(unittest.TestCase):
         self.assertAlmostEqual(by_direction["SELL"]["shrunk_probability"], 0.65)
         self.assertAlmostEqual(by_direction["SELL"]["wilson_lower_probability"], 0.6)
         self.assertEqual(by_direction["BUY"]["display_policy"], "SHRUNK_RATE")
+
+    def test_time_decayed_wave_scorecard_weights_recent_analogs_more(self):
+        outcomes = [
+            {
+                "symbol": "OLD",
+                "regime": "Advancing wave",
+                "horizon": "21d",
+                "signal_date": "2025-01-01",
+                "forward_return": -0.10,
+                "excess_return": -0.08,
+            },
+            {
+                "symbol": "NEW",
+                "regime": "Advancing wave",
+                "horizon": "21d",
+                "signal_date": "2026-01-01",
+                "forward_return": 0.20,
+                "excess_return": 0.15,
+            },
+        ]
+        row = build_wave_time_decay_scorecard(outcomes, half_life_days=365)[0]
+        self.assertEqual(row["decay_version"], "wave-time-decay-v1")
+        self.assertEqual(row["observations"], 2)
+        self.assertAlmostEqual(row["weighted_positive_rate"], 2 / 3, places=2)
+        self.assertGreater(row["weighted_mean_return"], 0)
+        self.assertEqual(row["status"], "EXPERIMENTAL")
 
     def test_blocked_wait_forecast_keeps_probability_schema(self):
         forecast = build_directional_forecasts(

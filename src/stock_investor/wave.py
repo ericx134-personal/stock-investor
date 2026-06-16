@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from statistics import median
 
@@ -17,8 +17,10 @@ WAVE_CONDITIONAL_VERSION = "wave-conditional-v2"
 WAVE_DIRECTION_FORECAST_VERSION = "wave-direction-v4"
 PRICE_ZONE_REPLAY_VERSION = "price-zone-replay-v1"
 DIRECTION_RATE_COMPARISON_VERSION = "direction-rate-comparison-v1"
+WAVE_TIME_DECAY_VERSION = "wave-time-decay-v1"
 WAVE_OUTCOME_WINDOWS = (21, 63, 126)
 PRICE_ZONE_REPLAY_HORIZON = 5
+TIME_DECAY_HALF_LIFE_DAYS = 365
 MIN_WAVE_HISTORY = 126
 MIN_REVERSAL = 0.08
 MIN_ROBUST_OBSERVATIONS = 10
@@ -928,6 +930,74 @@ def build_direction_rate_comparison_scorecard(
             item.get("regime", ""),
         ),
     )
+
+
+def _time_decay_weight(signal_date: str, latest_date: date, half_life_days: int) -> float:
+    if half_life_days <= 0:
+        raise ValueError("half_life_days must be positive")
+    age_days = max(0, (latest_date - date.fromisoformat(signal_date)).days)
+    return 0.5 ** (age_days / half_life_days)
+
+
+def _weighted_mean(values: list[tuple[float, float]]) -> float | None:
+    total_weight = sum(weight for _, weight in values)
+    if total_weight <= 0:
+        return None
+    return sum(value * weight for value, weight in values) / total_weight
+
+
+def build_wave_time_decay_scorecard(
+    outcomes: list[dict],
+    *,
+    half_life_days: int = TIME_DECAY_HALF_LIFE_DAYS,
+) -> list[dict]:
+    """Score broad wave regimes with exponentially decayed historical evidence."""
+    if half_life_days <= 0:
+        raise ValueError("half_life_days must be positive")
+    groups = defaultdict(list)
+    for outcome in outcomes:
+        groups[(outcome["regime"], outcome["horizon"])].append(outcome)
+    rows = []
+    for (regime, horizon), values in sorted(groups.items()):
+        latest = max(date.fromisoformat(item["signal_date"]) for item in values)
+        weighted_returns = []
+        weighted_positive = []
+        weighted_excess = []
+        weights_by_symbol = defaultdict(float)
+        for item in values:
+            weight = _time_decay_weight(item["signal_date"], latest, half_life_days)
+            forward_return = float(item["forward_return"])
+            weighted_returns.append((forward_return, weight))
+            weighted_positive.append((1.0 if forward_return > 0 else 0.0, weight))
+            weights_by_symbol[item["symbol"]] += weight
+            if item.get("excess_return") is not None:
+                weighted_excess.append((float(item["excess_return"]), weight))
+        total_weight = sum(weight for _, weight in weighted_returns)
+        top_symbol_weight = max(weights_by_symbol.values(), default=0.0)
+        rows.append(
+            {
+                "decay_version": WAVE_TIME_DECAY_VERSION,
+                "experiment_version": WAVE_EXPERIMENT_VERSION,
+                "feature_version": WAVE_FEATURE_VERSION,
+                "regime": regime,
+                "horizon": horizon,
+                "half_life_days": half_life_days,
+                "observations": len(values),
+                "weighted_observations": total_weight,
+                "symbols": len(weights_by_symbol),
+                "top_symbol_weight_share": (
+                    top_symbol_weight / total_weight if total_weight else None
+                ),
+                "latest_signal_date": latest.isoformat(),
+                "oldest_signal_date": min(item["signal_date"] for item in values),
+                "weighted_positive_rate": _weighted_mean(weighted_positive),
+                "weighted_mean_return": _weighted_mean(weighted_returns),
+                "weighted_mean_excess_return": _weighted_mean(weighted_excess),
+                "status": "EXPERIMENTAL",
+                "failure_gate": "Do not replace equal-weight evidence until sealed forward outcomes improve calibration.",
+            }
+        )
+    return rows
 
 
 def _wave_value(wave: WaveSignals | dict, key: str) -> object:

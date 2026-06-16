@@ -560,6 +560,7 @@ def build_dashboard(
     wave_scorecard_path: str | Path | None = None,
     wave_experiment_scorecard_path: str | Path | None = None,
     wave_conditional_scorecard_path: str | Path | None = None,
+    wave_time_decay_scorecard_path: str | Path | None = None,
     direction_rate_comparison_path: str | Path | None = None,
     direction_forecast_scorecard_path: str | Path | None = None,
     forecast_calibration_curves_path: str | Path | None = None,
@@ -637,6 +638,12 @@ def build_dashboard(
         json.loads(Path(wave_conditional_scorecard_path).read_text())
         if wave_conditional_scorecard_path
         and Path(wave_conditional_scorecard_path).exists()
+        else []
+    )
+    wave_time_decay_scorecard = (
+        json.loads(Path(wave_time_decay_scorecard_path).read_text())
+        if wave_time_decay_scorecard_path
+        and Path(wave_time_decay_scorecard_path).exists()
         else []
     )
     direction_rate_comparison = (
@@ -1165,6 +1172,24 @@ def build_dashboard(
             ),
         )
     ) or '<tr><td colspan="10">No robust BUY/SELL directional-rate comparisons yet.</td></tr>'
+    time_decay_rows = "".join(
+        f"<tr><td>{html.escape(row['regime'])}</td>"
+        f"<td>{html.escape(row['horizon'])}</td>"
+        f"<td>{_optional_percent(row.get('weighted_positive_rate'))}</td>"
+        f"<td>{_optional_percent(row.get('weighted_mean_return'))}</td>"
+        f"<td>{_optional_percent(row.get('weighted_mean_excess_return'))}</td>"
+        f"<td>{_optional_number(row.get('weighted_observations'))}</td>"
+        f"<td>{int(row.get('symbols', 0))} symbols · {int(row.get('observations', 0))} raw observations</td>"
+        f"<td>{_optional_percent(row.get('top_symbol_weight_share'))}</td></tr>"
+        for row in sorted(
+            wave_time_decay_scorecard,
+            key=lambda row: (
+                -float(row.get("weighted_mean_return") or -1),
+                -float(row.get("weighted_observations") or 0),
+                row.get("regime", ""),
+            ),
+        )
+    ) or '<tr><td colspan="8">No time-decayed wave experiment rows available.</td></tr>'
     direction_validation_rows = "".join(
         f"<tr><td>{html.escape(row['forecast_version'])}</td>"
         f"<td>{html.escape(row['direction'])}</td>"
@@ -1388,6 +1413,10 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <table><thead><tr><th>Source</th><th>Direction</th><th>Horizon</th><th>Wave regime</th><th>Wave age</th><th>Move magnitude</th><th>Raw rate</th><th>Displayed</th><th>Wilson floor</th><th>Evidence · sample</th></tr></thead>
 <tbody>{direction_rate_rows}</tbody></table>
 <p class="note">Displayed confidence uses the shrunk rate, pulled toward 50% by a neutral 20-observation prior. The Wilson floor is stricter and stays visible as the audit floor; raw rates are not promoted directly.</p></section>
+<section class="panel"><h2>Time-Decayed Wave Experiment</h2>
+<table><thead><tr><th>Wave regime</th><th>Horizon</th><th>Weighted positive</th><th>Weighted return</th><th>Weighted excess</th><th>Weighted n</th><th>Evidence · sample</th><th>Top symbol weight</th></tr></thead>
+<tbody>{time_decay_rows}</tbody></table>
+<p class="note">Experimental view only: older analogs decay with a one-year half-life. It helps detect stale regimes but does not replace equal-weight evidence until sealed forward outcomes improve calibration.</p></section>
 <section class="panel"><h2>Live Structural Wave Evidence</h2>
 <table><thead><tr><th>Wave regime</th><th>Horizon</th><th>Positive rate</th><th>Matured sample</th><th>Mean return</th></tr></thead>
 <tbody>{wave_evidence_rows}</tbody></table>
