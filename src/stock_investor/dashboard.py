@@ -566,6 +566,7 @@ def build_dashboard(
     forecast_calibration_curves_path: str | Path | None = None,
     direction_classification_metrics_path: str | Path | None = None,
     direction_error_cohorts_path: str | Path | None = None,
+    multiple_testing_ledger_path: str | Path | None = None,
     model_health_path: str | Path | None = None,
     price_health_path: str | Path | None = None,
     prices_path: str | Path | None = None,
@@ -675,6 +676,12 @@ def build_dashboard(
         if direction_error_cohorts_path
         and Path(direction_error_cohorts_path).exists()
         else []
+    )
+    multiple_testing_ledger = (
+        json.loads(Path(multiple_testing_ledger_path).read_text())
+        if multiple_testing_ledger_path
+        and Path(multiple_testing_ledger_path).exists()
+        else None
     )
     model_health = (
         json.loads(Path(model_health_path).read_text())
@@ -1242,6 +1249,30 @@ def build_dashboard(
         f"<td>{html.escape(str(row.get('evidence_source') or ''))}</td></tr>"
         for row in direction_error_cohorts
     ) or '<tr><td colspan="10">No matured false BUY or SELL episodes yet.</td></tr>'
+    multiple_testing_rows = "".join(
+        f"<tr><td>{html.escape(row['family'])}</td>"
+        f"<td>{html.escape(row['id'])}</td>"
+        f"<td>{int(row.get('hypothesis_count', 0))}</td>"
+        f"<td>{html.escape(row.get('multiple_testing_risk', ''))}</td>"
+        f"<td>{int(row.get('family_hypothesis_count', 0))}</td>"
+        f"<td>{html.escape(row.get('family_multiple_testing_risk', ''))}</td>"
+        f"<td>{'Yes' if row.get('predeclared') else 'No'}</td>"
+        f"<td>{html.escape(row.get('promotion_status', ''))}</td></tr>"
+        for row in (multiple_testing_ledger or {}).get("rows", [])
+    ) or '<tr><td colspan="8">No multiple-testing ledger has been generated yet.</td></tr>'
+    multiple_testing_panel = (
+        f"""<section class="panel"><h2>Multiple-Testing Ledger</h2>
+<div class="experiment">
+  <div><b>{int(multiple_testing_ledger.get("total_hypothesis_count", 0))}</b><span>Total tested rows</span></div>
+  <div><b>{len(multiple_testing_ledger.get("family_hypothesis_counts", {}))}</b><span>Experiment families</span></div>
+  <div><b>0</b><span>Promoted from ledger alone</span></div>
+</div>
+<table><thead><tr><th>Family</th><th>Experiment</th><th>Rows</th><th>Risk</th><th>Family rows</th><th>Family risk</th><th>Predeclared</th><th>Status</th></tr></thead>
+<tbody>{multiple_testing_rows}</tbody></table>
+<p class="note">This ledger makes repeated testing visible. A high-looking result from any one row is not enough for promotion; family-level false-discovery controls or sealed holdout replication are required first.</p></section>"""
+        if multiple_testing_ledger
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1393,6 +1424,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Rank</th><th>Symbol</th><th>Date</th><th>Displayed</th><th>Directional return</th><th>Max adverse</th><th>Evidence</th></tr></thead>
 <tbody>{error_cohort_rows}</tbody></table>
 <p class="note">False BUY means the forward return was flat or negative; false SELL means the stock was flat or up. Rows are ranked by worst direction-aware return and preserve the original forecast version.</p></section>
+{multiple_testing_panel}
 <section class="panel"><h2>All-Decision Forward Evidence</h2>
 <table><thead><tr><th>Decision</th><th>Horizon</th><th>Matured sample</th><th>Positive return</th><th>Mean excess return</th><th>Directional success</th></tr></thead>
 <tbody>{decision_evidence_rows}</tbody></table>

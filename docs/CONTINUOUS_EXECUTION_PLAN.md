@@ -88,7 +88,7 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## Phase 5: Statistical Safety
 
-- [ ] M041 Create a multiple-testing ledger for every experiment.
+- [x] M041 Create a multiple-testing ledger for every experiment.
 - [ ] M042 Add false-discovery warnings after repeated hypothesis tests.
 - [ ] M043 Create fixed train, development, and sealed test periods.
 - [ ] M044 Add expanding-window walk-forward validation.

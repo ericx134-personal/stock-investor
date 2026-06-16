@@ -821,3 +821,18 @@ gates are sealed calibration, BUY/SELL precision, false-direction cohort review,
 and time-decay replication. Any Robinhood write action, use of stale or poor
 price data for BUY/SELL, or promotion based only on raw in-sample rates
 invalidates the candidate.
+
+## Multiple-Testing Ledger V1
+
+M041 adds `multiple-testing-ledger-v1`, generated as
+`multiple-testing-ledger.json` during every refresh and displayed in the
+Research tab. The ledger records each active experiment family, the artifact
+that produced tested rows, the number of tested rows, family-level tested-row
+counts, predeclaration status, and whether promotion is allowed from the ledger
+alone.
+
+Decision rule: every row is `LEDGER_ONLY`. A strong-looking result from one
+experiment row cannot promote a model unless future work adds family-level
+false-discovery controls or sealed holdout replication. This directly addresses
+backtest-overfitting risk as more wave, K-line, calibration, and price-zone
+experiments accumulate.

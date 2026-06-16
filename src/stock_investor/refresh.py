@@ -50,6 +50,7 @@ from .monitor import (
 )
 from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk_history
 from .robinhood import load_robinhood_cash
+from .research import build_multiple_testing_ledger
 from .thesis import load_theses
 from .wave import (
     append_directional_forecast_history,
@@ -158,6 +159,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "forecast_calibration_curves": output_dir / "forecast-calibration-curves.json",
         "direction_classification_metrics": output_dir / "direction-classification-metrics.json",
         "direction_error_cohorts": output_dir / "direction-error-cohorts.json",
+        "multiple_testing_ledger": output_dir / "multiple-testing-ledger.json",
         "comparison": output_dir / f"model-v1-{slug.removeprefix('model-')}-comparison.json",
         "dashboard": output_dir / f"dashboard-{slug.removeprefix('model-')}.html",
         "manifest": output_dir / "refresh-manifest.json",
@@ -365,6 +367,24 @@ def run_refresh(
     decision_scorecard = build_scorecard(decision_outcomes)
     write_outcomes(decision_outcomes, paths["decision_outcomes"])
     write_scorecard(decision_scorecard, paths["decision_scorecard"])
+    multiple_testing_ledger = build_multiple_testing_ledger(
+        {
+            "scorecard": len(scorecard),
+            "decision_scorecard": len(decision_scorecard),
+            "kline_scorecard": len(kline_scorecard),
+            "wave_scorecard": len(wave_scorecard),
+            "wave_experiment_scorecard": len(wave_experiment_scorecard),
+            "wave_conditional_scorecard": len(wave_conditional_scorecard),
+            "direction_forecast_scorecard": len(direction_forecast_scorecard),
+            "forecast_calibration_scorecard": len(forecast_calibration_scorecard),
+            "direction_classification_metrics": len(direction_classification_metrics),
+            "direction_error_cohorts": len(direction_error_cohorts),
+            "price_zone_replay_scorecard": len(price_zone_replay_scorecard),
+            "direction_rate_comparison": len(direction_rate_comparison),
+            "wave_time_decay_scorecard": len(wave_time_decay_scorecard),
+        }
+    )
+    _write_json(multiple_testing_ledger, paths["multiple_testing_ledger"])
 
     records = [
         {
@@ -431,6 +451,7 @@ def run_refresh(
             forecast_calibration_curves_path=paths["forecast_calibration_curves"],
             direction_classification_metrics_path=paths["direction_classification_metrics"],
             direction_error_cohorts_path=paths["direction_error_cohorts"],
+            multiple_testing_ledger_path=paths["multiple_testing_ledger"],
             model_health_path=paths["model_health"],
             price_health_path=paths["price_health"],
             prices_path=prices_path,
@@ -548,6 +569,9 @@ def run_refresh(
             sorted(Counter(row["status"] for row in direction_classification_metrics).items())
         ),
         "direction_error_cohort_count": len(direction_error_cohorts),
+        "multiple_testing_total_hypotheses": multiple_testing_ledger[
+            "total_hypothesis_count"
+        ],
         "price_zone_replay_count": len(price_zone_replay),
         "price_zone_replay_scorecard_rows": len(price_zone_replay_scorecard),
         "historical_wave_evidence_counts": dict(

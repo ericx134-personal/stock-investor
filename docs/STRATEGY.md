@@ -292,6 +292,12 @@ gates. Promotion requires matured sealed calibration evidence, acceptable
 BUY/SELL precision, false-direction cohort review, and successful time-decay
 replication without higher concentration.
 
+The refresh pipeline writes a multiple-testing ledger for every active research
+artifact. It counts tested rows by experiment and family so the dashboard can
+show when an attractive result came from many simultaneous tests. The ledger is
+audit-only; it cannot promote a model without false-discovery controls or sealed
+holdout replication.
+
 Every direction displayed on the portfolio board is now recorded in a separate
 append-only, versioned direction ledger. BUY and SELL forecasts retain their
 displayed shrunk confidence, raw historical analog rate, selected broad or
@@ -519,6 +525,7 @@ preserves separately maintained risk metadata.
 - [x] Raw, shrunk, and Wilson-floor directional-rate comparison artifact
 - [x] Experimental time-decayed structural-wave scorecard
 - [x] Frozen `wave-direction-v4-candidate` manifest with pending promotion gates
+- [x] Multiple-testing ledger for active research artifacts
 - [ ] Production schedule connected to the real portfolio
 
 ### Phase 3A: Real-Portfolio Learning Loop

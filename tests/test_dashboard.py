@@ -425,6 +425,50 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("older analogs decay with a one-year half-life", page)
         self.assertIn("<td>66.0%</td><td>12.0%</td><td>4.0%</td>", page)
 
+    def test_research_tab_shows_multiple_testing_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot = root / "snapshot.json"
+            snapshot.write_text(
+                json.dumps(
+                    {
+                        "results": [
+                            {
+                                "symbol": "ABC",
+                                "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                            }
+                        ]
+                    }
+                )
+            )
+            ledger = root / "multiple-testing-ledger.json"
+            ledger.write_text(
+                json.dumps(
+                    {
+                        "ledger_version": "multiple-testing-ledger-v1",
+                        "total_hypothesis_count": 33,
+                        "family_hypothesis_counts": {"structural_wave": 33},
+                        "rows": [
+                            {
+                                "family": "structural_wave",
+                                "id": "wave_conditional_scorecard",
+                                "hypothesis_count": 33,
+                                "multiple_testing_risk": "HIGH",
+                                "family_hypothesis_count": 33,
+                                "family_multiple_testing_risk": "HIGH",
+                                "predeclared": True,
+                                "promotion_status": "LEDGER_ONLY",
+                            }
+                        ],
+                    }
+                )
+            )
+            page = build_dashboard(snapshot, multiple_testing_ledger_path=ledger)
+        self.assertIn("Multiple-Testing Ledger", page)
+        self.assertIn("Total tested rows", page)
+        self.assertIn("family-level false-discovery controls", page)
+        self.assertIn("<td>structural_wave</td><td>wave_conditional_scorecard</td>", page)
+
     def test_robust_conditional_direction_can_override_inconclusive_broad_direction(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
