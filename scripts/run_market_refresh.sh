@@ -33,8 +33,16 @@ if [[ -n "${APCA_API_KEY_ID:-}" && -n "${APCA_API_SECRET_KEY:-}" ]]; then
   PRICE_SOURCE="Alpaca Market Data API (${ALPACA_FEED:-iex}, adjusted)"
   PRICE_ADJUSTMENT="all"
 else
-  echo "market fetch skipped: configure APCA_API_KEY_ID and APCA_API_SECRET_KEY in $CONFIG" >&2
-  PRICE_SOURCE="Robinhood MCP read-only export"
+  echo "Alpaca credentials missing; using Yahoo Finance chart fallback" >&2
+  START_DATE="$(date -v-730d +%Y-%m-%d)"
+  END_DATE="$(date -v+1d +%Y-%m-%d)"
+  PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli fetch-yahoo \
+    portfolio/positions.csv "$TEMP_PRICES" \
+    --start "$START_DATE" --end "$END_DATE" \
+    --extra-symbol SPY \
+    --merge-existing "$PRICES"
+  mv "$TEMP_PRICES" "$PRICES"
+  PRICE_SOURCE="Yahoo Finance chart fallback"
   PRICE_ADJUSTMENT="unknown"
 fi
 

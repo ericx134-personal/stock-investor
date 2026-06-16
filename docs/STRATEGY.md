@@ -531,7 +531,7 @@ preserves separately maintained risk metadata.
 - [x] Frozen `wave-direction-v4-candidate` manifest with pending promotion gates
 - [x] Multiple-testing ledger for active research artifacts
 - [x] False-discovery warnings for repeated hypothesis tests
-- [ ] Production schedule connected to the real portfolio
+- [x] Production schedule connected to the real portfolio with market-data fallback
 
 ### Phase 3A: Real-Portfolio Learning Loop
 

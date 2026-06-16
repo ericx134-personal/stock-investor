@@ -49,6 +49,7 @@ from .monitor import run_monitor, write_alert_history, write_monitor_snapshot
 from .providers.alpaca import fetch_daily_bars, write_prices_csv
 from .providers.robinhood import extract_historicals_from_session, load_historical_response
 from .providers.sec import fetch_company_facts, fetch_submissions, fetch_ticker_ciks
+from .providers.yahoo import fetch_yahoo_daily_bars, merge_price_histories
 from .refresh import refresh_lock, run_refresh, validate_production_refresh
 from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk_history
 from .robinhood import (
@@ -225,6 +226,33 @@ def _fetch_alpaca(
     prices = fetch_daily_bars(symbols, start, end, key_id, secret_key, feed)
     write_prices_csv(prices, output_path)
     print(f"Wrote {sum(map(len, prices.values()))} adjusted daily bars to {output_path}")
+    return 0
+
+
+def _fetch_yahoo(
+    positions_path: str,
+    output_path: str,
+    start: str,
+    end: str,
+    extra_symbols: tuple[str, ...] = (),
+    merge_existing_path: str | None = None,
+) -> int:
+    symbols = [position.symbol for position in load_positions(positions_path)]
+    symbols.extend(symbol.upper() for symbol in extra_symbols if symbol)
+    updates = fetch_yahoo_daily_bars(symbols, start, end)
+    prices = (
+        merge_price_histories(load_prices(merge_existing_path), updates)
+        if merge_existing_path and Path(merge_existing_path).exists()
+        else updates
+    )
+    write_prices_csv(prices, output_path)
+    missing = sorted(set(symbols) - set(updates))
+    if missing:
+        print(
+            "Yahoo missing latest bars for: " + ", ".join(missing),
+            flush=True,
+        )
+    print(f"Wrote {sum(map(len, prices.values()))} Yahoo daily bars to {output_path}")
     return 0
 
 
@@ -802,6 +830,20 @@ def main() -> int:
     fetch_parser.add_argument("--feed", choices=("iex", "sip"), default="iex")
     fetch_parser.add_argument("--extra-symbol", action="append", default=[])
 
+    yahoo_parser = subparsers.add_parser(
+        "fetch-yahoo", help="fetch daily prices from Yahoo Finance chart data"
+    )
+    yahoo_parser.add_argument("positions")
+    yahoo_parser.add_argument("output")
+    yahoo_parser.add_argument(
+        "--start", default=(date.today() - timedelta(days=730)).isoformat()
+    )
+    yahoo_parser.add_argument(
+        "--end", default=(date.today() + timedelta(days=1)).isoformat()
+    )
+    yahoo_parser.add_argument("--extra-symbol", action="append", default=[])
+    yahoo_parser.add_argument("--merge-existing")
+
     daily_parser = subparsers.add_parser(
         "daily", help="fetch prices, monitor, and persist actionable alerts"
     )
@@ -1056,6 +1098,15 @@ def main() -> int:
             args.end,
             args.feed,
             tuple(args.extra_symbol),
+        )
+    if args.command == "fetch-yahoo":
+        return _fetch_yahoo(
+            args.positions,
+            args.output,
+            args.start,
+            args.end,
+            tuple(args.extra_symbol),
+            args.merge_existing,
         )
     if args.command == "daily":
         return _daily(
