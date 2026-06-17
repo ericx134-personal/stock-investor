@@ -114,6 +114,14 @@ EXPERIMENT_REGISTRY = [
         "predeclared": True,
         "promoted_signal_allowed": False,
     },
+    {
+        "id": "wave_time_period_stability_scorecard",
+        "family": "structural_wave",
+        "artifact_key": "wave_time_period_stability_scorecard",
+        "hypothesis": "Wave evidence must be stable across fixed train, development, and sealed periods before promotion.",
+        "predeclared": True,
+        "promoted_signal_allowed": False,
+    },
 ]
 
 

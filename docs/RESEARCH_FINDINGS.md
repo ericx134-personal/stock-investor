@@ -879,3 +879,18 @@ Decision rule: the artifact is a leakage check and a stability diagnostic, not
 a live signal. Failure gate: weak expanding-window results block promotion of
 any equal-weight wave candidate until the candidate passes sealed forward
 outcomes or a predeclared alternative rule.
+
+## Wave Time-Period Stability V1
+
+M045 adds `wave-time-period-stability-v1`, generated as
+`wave-time-period-stability-scorecard.json` during every refresh. It partitions
+the existing causal wave walk-forward outcomes into the fixed train,
+development, and sealed-test periods from `models/evaluation-periods-v1.json`,
+then compares directional and SPY-relative evidence classifications for each
+wave regime and horizon.
+
+Decision rule: this artifact is a promotion gate, not a live signal. Promotion
+is blocked unless at least two fixed periods have enough observations and those
+periods produce non-conflicting directional and relative classifications. Until
+sealed-test outcomes mature, most rows should remain blocked for insufficient
+period evidence.

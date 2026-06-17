@@ -50,7 +50,11 @@ from .monitor import (
 )
 from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk_history
 from .robinhood import load_robinhood_cash
-from .research import build_false_discovery_warnings, build_multiple_testing_ledger
+from .research import (
+    build_false_discovery_warnings,
+    build_multiple_testing_ledger,
+    load_evaluation_periods,
+)
 from .thesis import load_theses
 from .wave import (
     append_directional_forecast_history,
@@ -64,6 +68,7 @@ from .wave import (
     build_wave_expanding_window_scorecard,
     build_wave_expanding_window_validation,
     build_wave_time_decay_scorecard,
+    build_wave_time_period_stability_scorecard,
     build_wave_walk_forward_outcomes,
     build_wave_walk_forward_scorecard,
     calculate_waves,
@@ -151,6 +156,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "wave_experiment_scorecard": output_dir / "wave-experiment-scorecard.json",
         "wave_conditional_scorecard": output_dir / "wave-conditional-scorecard.json",
         "wave_time_decay_scorecard": output_dir / "wave-time-decay-scorecard.json",
+        "wave_time_period_stability_scorecard": output_dir / "wave-time-period-stability-scorecard.json",
         "wave_expanding_validation": output_dir / "wave-expanding-validation.json",
         "wave_expanding_validation_scorecard": output_dir / "wave-expanding-validation-scorecard.json",
         "price_zone_replay": output_dir / "price-zone-replay.json",
@@ -290,6 +296,15 @@ def run_refresh(
     wave_time_decay_scorecard = build_wave_time_decay_scorecard(
         wave_experiment_outcomes
     )
+    evaluation_periods = load_evaluation_periods(
+        Path(__file__).resolve().parents[2] / "models" / "evaluation-periods-v1.json"
+    )
+    wave_time_period_stability_scorecard = (
+        build_wave_time_period_stability_scorecard(
+            wave_experiment_outcomes,
+            evaluation_periods,
+        )
+    )
     wave_expanding_validation = build_wave_expanding_window_validation(
         wave_experiment_outcomes
     )
@@ -300,6 +315,10 @@ def run_refresh(
     _write_json(wave_experiment_scorecard, paths["wave_experiment_scorecard"])
     _write_json(wave_conditional_scorecard, paths["wave_conditional_scorecard"])
     _write_json(wave_time_decay_scorecard, paths["wave_time_decay_scorecard"])
+    _write_json(
+        wave_time_period_stability_scorecard,
+        paths["wave_time_period_stability_scorecard"],
+    )
     _write_json(wave_expanding_validation, paths["wave_expanding_validation"])
     _write_json(
         wave_expanding_validation_scorecard,
@@ -398,6 +417,9 @@ def run_refresh(
             "price_zone_replay_scorecard": len(price_zone_replay_scorecard),
             "direction_rate_comparison": len(direction_rate_comparison),
             "wave_time_decay_scorecard": len(wave_time_decay_scorecard),
+            "wave_time_period_stability_scorecard": len(
+                wave_time_period_stability_scorecard
+            ),
             "wave_expanding_validation_scorecard": len(
                 wave_expanding_validation_scorecard
             ),
@@ -564,6 +586,9 @@ def run_refresh(
         "historical_wave_scorecard_rows": len(wave_experiment_scorecard),
         "conditional_wave_scorecard_rows": len(wave_conditional_scorecard),
         "wave_time_decay_scorecard_rows": len(wave_time_decay_scorecard),
+        "wave_time_period_stability_scorecard_rows": len(
+            wave_time_period_stability_scorecard
+        ),
         "wave_expanding_validation_count": len(wave_expanding_validation),
         "wave_expanding_validation_scorecard_rows": len(
             wave_expanding_validation_scorecard

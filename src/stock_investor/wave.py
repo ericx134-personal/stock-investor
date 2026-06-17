@@ -19,6 +19,7 @@ PRICE_ZONE_REPLAY_VERSION = "price-zone-replay-v1"
 DIRECTION_RATE_COMPARISON_VERSION = "direction-rate-comparison-v1"
 WAVE_TIME_DECAY_VERSION = "wave-time-decay-v1"
 WAVE_EXPANDING_VALIDATION_VERSION = "wave-expanding-validation-v1"
+WAVE_TIME_PERIOD_STABILITY_VERSION = "wave-time-period-stability-v1"
 WAVE_OUTCOME_WINDOWS = (21, 63, 126)
 PRICE_ZONE_REPLAY_HORIZON = 5
 TIME_DECAY_HALF_LIFE_DAYS = 365
@@ -1072,6 +1073,106 @@ def build_wave_expanding_window_scorecard(records: list[dict]) -> list[dict]:
                     else None
                 ),
                 "status": "RESEARCH_ONLY",
+            }
+        )
+    return rows
+
+
+def _period_name_for_date(signal_date: str, periods: list[dict]) -> str | None:
+    observed = date.fromisoformat(signal_date)
+    for period in periods:
+        start = date.fromisoformat(period["start"])
+        end = date.fromisoformat(period["end"]) if period.get("end") else None
+        if observed >= start and (end is None or observed <= end):
+            return str(period["name"])
+    return None
+
+
+def _empty_period_result(period_name: str) -> dict:
+    return {
+        "period": period_name,
+        "observations": 0,
+        "directional_evidence_classification": "WAIT",
+        "evidence_classification": "INCONCLUSIVE",
+        "positive_rate": None,
+        "mean_return": None,
+        "beat_benchmark_rate": None,
+        "mean_excess_return": None,
+    }
+
+
+def build_wave_time_period_stability_scorecard(
+    outcomes: list[dict],
+    evaluation_periods: dict,
+    *,
+    min_period_observations: int = MIN_ROBUST_OBSERVATIONS,
+) -> list[dict]:
+    """Check whether wave evidence is stable across fixed governance periods."""
+    periods = evaluation_periods.get("periods") or []
+    if not periods:
+        return []
+    grouped = defaultdict(list)
+    for outcome in outcomes:
+        period = _period_name_for_date(str(outcome["signal_date"]), periods)
+        if period:
+            grouped[(outcome["regime"], outcome["horizon"])].append(
+                {**outcome, "period": period}
+            )
+    rows = []
+    period_names = [str(period["name"]) for period in periods]
+    for (regime, horizon), values in sorted(grouped.items()):
+        period_results = []
+        for period_name in period_names:
+            period_values = [item for item in values if item["period"] == period_name]
+            if not period_values:
+                period_results.append(_empty_period_result(period_name))
+                continue
+            period_results.append(
+                _walk_forward_scorecard_row(
+                    period_values,
+                    {"period": period_name},
+                    include_leave_one_out=False,
+                )
+            )
+        robust_periods = [
+            item
+            for item in period_results
+            if int(item.get("observations", 0)) >= min_period_observations
+        ]
+        directional_classes = sorted(
+            {
+                str(item.get("directional_evidence_classification"))
+                for item in robust_periods
+            }
+        )
+        relative_classes = sorted(
+            {str(item.get("evidence_classification")) for item in robust_periods}
+        )
+        if len(robust_periods) < 2:
+            status = "BLOCK_PROMOTION_INSUFFICIENT_PERIODS"
+        elif len(directional_classes) > 1 or len(relative_classes) > 1:
+            status = "BLOCK_PROMOTION_CONFLICT"
+        else:
+            status = "PASS"
+        rows.append(
+            {
+                "stability_version": WAVE_TIME_PERIOD_STABILITY_VERSION,
+                "experiment_version": WAVE_EXPERIMENT_VERSION,
+                "feature_version": WAVE_FEATURE_VERSION,
+                "regime": regime,
+                "horizon": horizon,
+                "period_count": len(period_names),
+                "robust_period_count": len(robust_periods),
+                "min_period_observations": min_period_observations,
+                "directional_classifications": directional_classes,
+                "relative_classifications": relative_classes,
+                "period_results": period_results,
+                "status": status,
+                "failure_gate": (
+                    "Block promotion unless at least two fixed periods have enough "
+                    "observations and produce non-conflicting directional and "
+                    "relative classifications."
+                ),
             }
         )
     return rows

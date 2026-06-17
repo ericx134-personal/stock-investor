@@ -56,7 +56,6 @@ Near-term product goals:
 
 Current execution queue:
 
-- P0: M045 time-period stability checks for the current wave candidate.
 - P0: M049 formal promotion, probation, retirement, and rollback gates.
 - P1: M081 compact model-health and opportunity summaries.
 - P1: M084 chart crosshair and OHLCV tooltips.
@@ -124,7 +123,7 @@ Current execution queue:
 - [x] M042 Add false-discovery warnings after repeated hypothesis tests.
 - [x] M043 Create fixed train, development, and sealed test periods.
 - [x] M044 Add expanding-window walk-forward validation.
-- [ ] M045 Add time-period stability checks.
+- [x] M045 Add time-period stability checks.
 - [ ] M046 Add bull, bear, sideways, and high-volatility stability checks.
 - [ ] M047 Add sector-level stability checks.
 - [ ] M048 Add sensitivity analysis around every promoted threshold.

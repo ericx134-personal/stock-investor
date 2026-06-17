@@ -17,6 +17,7 @@ from stock_investor.wave import (
     build_wave_expanding_window_validation,
     build_wave_scorecard,
     build_wave_time_decay_scorecard,
+    build_wave_time_period_stability_scorecard,
     build_wave_walk_forward_outcomes,
     build_wave_walk_forward_scorecard,
     calculate_wave,
@@ -391,6 +392,49 @@ class WaveTests(unittest.TestCase):
         scorecard = build_wave_expanding_window_scorecard(records)
         self.assertEqual(scorecard[0]["directional_success_rate"], 0.5)
         self.assertEqual(scorecard[0]["status"], "RESEARCH_ONLY")
+
+    def test_time_period_stability_blocks_conflicting_period_evidence(self):
+        periods = {
+            "periods": [
+                {"name": "train", "start": "2025-01-01", "end": "2025-12-31"},
+                {"name": "development", "start": "2026-01-01", "end": "2026-06-30"},
+                {"name": "sealed_test", "start": "2026-07-01", "end": None},
+            ]
+        }
+        outcomes = []
+        for index in range(10):
+            outcomes.append(
+                {
+                    "symbol": f"T{index}",
+                    "regime": "Advancing wave",
+                    "horizon": "21d",
+                    "signal_date": f"2025-03-{index + 1:02d}",
+                    "forward_return": 0.1,
+                    "excess_return": 0.05,
+                    "max_gain": 0.12,
+                    "max_loss": -0.02,
+                }
+            )
+            outcomes.append(
+                {
+                    "symbol": f"D{index}",
+                    "regime": "Advancing wave",
+                    "horizon": "21d",
+                    "signal_date": f"2026-03-{index + 1:02d}",
+                    "forward_return": -0.1,
+                    "excess_return": -0.05,
+                    "max_gain": 0.02,
+                    "max_loss": -0.12,
+                }
+            )
+        rows = build_wave_time_period_stability_scorecard(outcomes, periods)
+        self.assertEqual(rows[0]["stability_version"], "wave-time-period-stability-v1")
+        self.assertEqual(rows[0]["status"], "BLOCK_PROMOTION_CONFLICT")
+        self.assertEqual(rows[0]["robust_period_count"], 2)
+        self.assertEqual(
+            rows[0]["directional_classifications"],
+            ["BUY", "SELL"],
+        )
 
     def test_blocked_wait_forecast_keeps_probability_schema(self):
         forecast = build_directional_forecasts(
