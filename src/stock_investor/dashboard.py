@@ -442,6 +442,7 @@ def _kline_chart(
     volumes = [float(item.volume or 0) for item in candles]
     max_volume = max(volumes) or 1
     candle_shapes = []
+    candle_hitboxes = []
     for index, item in enumerate(candles):
         center = x(index)
         open_value, close_value = float(item.open), float(item.close)
@@ -454,6 +455,15 @@ def _kline_chart(
             f'<line class="{css_class}" x1="{center:.1f}" y1="{y(high_value):.1f}" x2="{center:.1f}" y2="{y(low_value):.1f}"/>'
             f'<rect class="{css_class}" x="{center - body_width / 2:.1f}" y="{body_top:.1f}" width="{body_width:.1f}" height="{body_height:.1f}"/>'
             f'<rect class="volume {css_class}" x="{center - body_width / 2:.1f}" y="{volume_bottom - volume_height:.1f}" width="{body_width:.1f}" height="{volume_height:.1f}"/>'
+        )
+        candle_hitboxes.append(
+            f'<rect class="candle-hitbox" x="{left + index * x_step:.1f}" y="{top:.1f}" '
+            f'width="{x_step:.1f}" height="{volume_bottom - top:.1f}" tabindex="0" '
+            f'aria-label="{item.date.isoformat()} open ${open_value:.2f} high ${high_value:.2f} low ${low_value:.2f} close ${close_value:.2f}" '
+            f'data-date="{item.date.isoformat()}" data-x="{center:.1f}" data-close-y="{y(close_value):.1f}" '
+            f'data-open="${open_value:.2f}" data-high="${high_value:.2f}" '
+            f'data-low="${low_value:.2f}" data-close="${close_value:.2f}" '
+            f'data-volume="{float(item.volume or 0):,.0f}"/>'
         )
     pivot_line = ""
     pivot_date = wave.get("last_pivot_date")
@@ -487,7 +497,11 @@ def _kline_chart(
         {''.join(grid)}{''.join(zones)}{target_zone}{cost_line}{''.join(candle_shapes)}{pivot_line}
         <line class="volume-divider" x1="{left}" y1="{volume_top - 5}" x2="{left + plot_width}" y2="{volume_top - 5}"/>
         {date_labels}
+        <line class="chart-crosshair vertical" data-chart-crosshair-x x1="{left}" y1="{top}" x2="{left}" y2="{volume_bottom}"/>
+        <line class="chart-crosshair horizontal" data-chart-crosshair-y x1="{left}" y1="{top}" x2="{left + plot_width}" y2="{top}"/>
+        {''.join(candle_hitboxes)}
       </svg>
+      <div class="chart-tooltip" aria-live="polite" hidden></div>
       <div class="chart-legend"><span class="support-key">Support zone</span><span class="resistance-key">Resistance zone</span><span class="cost-key">Average cost</span><span class="wave-key">Active wave</span><span>Volume</span></div>
     </section>"""
 
@@ -1565,7 +1579,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .price-plan.unavailable {{ display:block }} .info-tip {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--muted); cursor:help; display:flex; font-size:11px; font-weight:800; height:20px; justify-content:center; position:relative; width:20px }}
 .info-tip::after {{ background:#222; border:1px solid #555; border-radius:6px; bottom:29px; color:#ddd; content:attr(data-tip); display:none; font-size:11px; font-weight:500; line-height:1.35; padding:8px; position:absolute; right:-6px; text-transform:none; width:240px; z-index:5 }}
 .info-tip:hover::after,.info-tip:focus::after {{ display:block }} .info-tip:focus {{ border-color:#aaa; outline:none }}
-.kline-chart-card {{ background:#0b0b0b; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; padding:13px }}
+.kline-chart-card {{ background:#0b0b0b; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; padding:13px; position:relative }}
 .chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ font-size:17px; margin:1px 0 0 }}
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
 .kline-chart {{ display:block; height:auto; overflow:visible; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
@@ -1576,6 +1590,10 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .average-cost-line {{ stroke:#e6e6e6; stroke-width:1.2; stroke-dasharray:3 3; opacity:.85 }} .average-cost-label {{ fill:#e6e6e6; font-size:8px; font-weight:800 }}
 .up-candle {{ fill:var(--green); stroke:var(--green); stroke-width:1 }} .down-candle {{ fill:var(--red); stroke:var(--red); stroke-width:1 }} .volume {{ opacity:.22; stroke:none }}
 .active-wave {{ fill:none; stroke-width:2.2; stroke-dasharray:5 3 }} .active-wave.buy,.pivot-point.buy {{ stroke:var(--green); fill:var(--green) }} .active-wave.sell,.pivot-point.sell {{ stroke:var(--red); fill:var(--red) }} .active-wave.wait,.pivot-point.wait {{ stroke:var(--amber); fill:var(--amber) }}
+.candle-hitbox {{ cursor:crosshair; fill:transparent; outline:none }} .candle-hitbox:focus {{ stroke:#fff; stroke-opacity:.35; stroke-width:1 }}
+.chart-crosshair {{ display:none; pointer-events:none; stroke:#e6e6e6; stroke-dasharray:3 3; stroke-width:.9; opacity:.7 }} .chart-crosshair.active {{ display:block }}
+.chart-tooltip {{ background:#050505; border:1px solid #555; border-radius:8px; box-shadow:0 10px 28px rgba(0,0,0,.45); color:var(--text); font-size:11px; left:12px; min-width:190px; padding:8px 10px; pointer-events:none; position:absolute; top:50px; z-index:4 }}
+.chart-tooltip b,.chart-tooltip span {{ display:block }} .chart-tooltip span {{ color:var(--muted); margin-top:2px }}
 .volume-divider {{ stroke:#333; stroke-width:1 }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
 .chart-legend .support-key::before {{ background:var(--green) }} .chart-legend .resistance-key::before {{ background:var(--red) }} .chart-legend .wave-key::before {{ background:var(--amber) }} .chart-legend .cost-key::before {{ background:#e6e6e6 }}
 .chart-unavailable {{ background:#111; border-radius:7px; color:var(--muted); margin-bottom:12px; padding:18px }}
@@ -1738,6 +1756,45 @@ document.querySelectorAll("[data-detail-target]").forEach((button) => button.add
 document.querySelectorAll("[data-close-drawer]").forEach((button) => button.addEventListener("click", closeDrawer));
 document.addEventListener("keydown", (event) => {{
   if (event.key === "Escape") closeDrawer();
+}});
+
+document.querySelectorAll(".kline-chart-card").forEach((card) => {{
+  const svg = card.querySelector(".kline-chart");
+  const tooltip = card.querySelector(".chart-tooltip");
+  const vertical = card.querySelector("[data-chart-crosshair-x]");
+  const horizontal = card.querySelector("[data-chart-crosshair-y]");
+  const hitboxes = [...card.querySelectorAll(".candle-hitbox")];
+  if (!svg || !tooltip || !vertical || !horizontal || hitboxes.length === 0) return;
+  const viewBox = svg.viewBox.baseVal;
+  const showPoint = (hitbox) => {{
+    const x = Number(hitbox.dataset.x);
+    const y = Number(hitbox.dataset.closeY);
+    vertical.setAttribute("x1", x.toFixed(1));
+    vertical.setAttribute("x2", x.toFixed(1));
+    horizontal.setAttribute("y1", y.toFixed(1));
+    horizontal.setAttribute("y2", y.toFixed(1));
+    vertical.classList.add("active");
+    horizontal.classList.add("active");
+    tooltip.hidden = false;
+    tooltip.innerHTML = `<b>${{hitbox.dataset.date}}</b><span>O ${{hitbox.dataset.open}} · H ${{hitbox.dataset.high}} · L ${{hitbox.dataset.low}}</span><span>C ${{hitbox.dataset.close}} · Vol ${{hitbox.dataset.volume}}</span>`;
+    const rect = svg.getBoundingClientRect();
+    const left = Math.min(Math.max((x / viewBox.width) * rect.width + 10, 8), Math.max(8, rect.width - 215));
+    const top = Math.min(Math.max((y / viewBox.height) * rect.height - 58, 8), Math.max(8, rect.height - 82));
+    tooltip.style.left = `${{left}}px`;
+    tooltip.style.top = `${{top}}px`;
+  }};
+  const hidePoint = () => {{
+    tooltip.hidden = true;
+    vertical.classList.remove("active");
+    horizontal.classList.remove("active");
+  }};
+  hitboxes.forEach((hitbox) => {{
+    hitbox.addEventListener("pointerenter", () => showPoint(hitbox));
+    hitbox.addEventListener("pointermove", () => showPoint(hitbox));
+    hitbox.addEventListener("focus", () => showPoint(hitbox));
+    hitbox.addEventListener("blur", hidePoint);
+  }});
+  svg.addEventListener("pointerleave", hidePoint);
 }});
 </script>
 </body></html>"""

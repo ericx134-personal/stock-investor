@@ -4,10 +4,53 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 
-from stock_investor.dashboard import _price_plan, _professional_plan, build_dashboard
+from stock_investor.dashboard import (
+    _kline_chart,
+    _price_plan,
+    _professional_plan,
+    build_dashboard,
+)
+from stock_investor.data import Price
 
 
 class DashboardTests(unittest.TestCase):
+    def test_kline_chart_exposes_crosshair_ohlcv_tooltips(self):
+        history = [
+            Price(
+                date=date(2026, 1, 1) + timedelta(days=index),
+                open=100 + index,
+                high=102 + index,
+                low=99 + index,
+                close=101 + index,
+                volume=1_000_000 + index,
+            )
+            for index in range(25)
+        ]
+        page = _kline_chart(
+            history,
+            {
+                "support_zone_low": 95,
+                "support_zone_high": 98,
+                "resistance_zone_low": 125,
+                "resistance_zone_high": 128,
+                "latest_close": 125,
+            },
+            "SELL",
+            "sell",
+            0.72,
+            {"low": 125, "high": 128, "midpoint": 126.5, "plan_class": "sell", "label": "Sell zone"},
+            average_cost=90,
+        )
+        self.assertIn('class="candle-hitbox"', page)
+        self.assertIn('data-date="2026-01-25"', page)
+        self.assertIn('data-open="$124.00"', page)
+        self.assertIn('data-high="$126.00"', page)
+        self.assertIn('data-low="$123.00"', page)
+        self.assertIn('data-close="$125.00"', page)
+        self.assertIn('data-chart-crosshair-x', page)
+        self.assertIn('data-chart-crosshair-y', page)
+        self.assertIn('class="chart-tooltip"', page)
+
     def test_price_plan_uses_structural_zone_and_refuses_wait(self):
         wave = {
             "support_zone_low": 90,

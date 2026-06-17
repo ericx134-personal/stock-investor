@@ -56,7 +56,6 @@ Near-term product goals:
 
 Current execution queue:
 
-- P1: M084 chart crosshair and OHLCV tooltips.
 - P1: M085 historical forecasts and matured outcomes on K-line charts.
 - P1: M086 selectable chart horizons.
 - P2: M017 symbol-change, merger, and delisting detection.
@@ -175,7 +174,7 @@ Current execution queue:
 - [x] M081 Add compact model-health and opportunity summaries.
 - [ ] M082 Add BUY/SELL/WAIT, sector, weight, and confidence filters.
 - [ ] M083 Add ticker search and probability sorting.
-- [ ] M084 Add chart crosshair and OHLCV tooltips.
+- [x] M084 Add chart crosshair and OHLCV tooltips.
 - [ ] M085 Mark historical forecasts and matured outcomes on K-line charts.
 - [ ] M086 Add selectable 6-month, 1-year, and 2-year horizons.
 - [ ] M087 Add relative-strength and volume annotations.

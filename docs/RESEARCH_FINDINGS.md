@@ -919,3 +919,12 @@ opportunity counts, and the current top BUY and SELL symbols.
 Decision rule: this is a comprehension surface only. It summarizes existing
 model-health, price-health, and directional-board evidence without changing any
 forecast, price zone, or portfolio action.
+
+## K-Line Crosshair And OHLCV Tooltip
+
+M084 adds an interactive crosshair and OHLCV tooltip to every rendered daily
+K-line chart. Each candle exposes date, open, high, low, close, and volume from
+the already-loaded local price artifact.
+
+Decision rule: this is a chart-readability feature only. It does not fetch new
+data, change price zones, alter model probabilities, or promote any signal.
