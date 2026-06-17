@@ -56,7 +56,6 @@ Near-term product goals:
 
 Current execution queue:
 
-- P1: M081 compact model-health and opportunity summaries.
 - P1: M084 chart crosshair and OHLCV tooltips.
 - P1: M085 historical forecasts and matured outcomes on K-line charts.
 - P1: M086 selectable chart horizons.
@@ -173,7 +172,7 @@ Current execution queue:
 
 ## Phase 9: Dashboard And User Comprehension
 
-- [ ] M081 Add compact model-health and opportunity summaries.
+- [x] M081 Add compact model-health and opportunity summaries.
 - [ ] M082 Add BUY/SELL/WAIT, sector, weight, and confidence filters.
 - [ ] M083 Add ticker search and probability sorting.
 - [ ] M084 Add chart crosshair and OHLCV tooltips.

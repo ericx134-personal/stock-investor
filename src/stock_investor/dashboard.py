@@ -1130,6 +1130,31 @@ def build_dashboard(
         ]
         for signal, signal_rows in board_rows.items()
     }
+    sorted_signal_tuples = {
+        signal: sorted(signal_rows, key=lambda row: (-row[0], -row[1], row[2]))
+        for signal, signal_rows in board_rows.items()
+    }
+    top_buy = sorted_signal_tuples["BUY"][0][2] if sorted_signal_tuples["BUY"] else "none"
+    top_sell = (
+        sorted_signal_tuples["SELL"][0][2] if sorted_signal_tuples["SELL"] else "none"
+    )
+    price_rows = (price_health or {}).get("symbols", [])
+    latest_price_date = max(
+        (str(row.get("latest_date")) for row in price_rows if row.get("latest_date")),
+        default="unknown",
+    )
+    poor_or_stale = sum(
+        1
+        for row in price_rows
+        if row.get("data_quality_status") != "GOOD" or row.get("status") != "FRESH"
+    )
+    model_status = str((model_health or {}).get("overall_status", "UNKNOWN"))
+    portfolio_pulse = f"""
+    <section class="portfolio-pulse" aria-label="Compact model and opportunity summary">
+      <div><small>Model health</small><b><span class="health-status {model_status.lower()}">{html.escape(model_status)}</span></b><span>{len((model_health or {}).get("failed_gates", []))} failed · {len((model_health or {}).get("pending_gates", []))} pending</span></div>
+      <div><small>Latest prices</small><b>{html.escape(latest_price_date)}</b><span>{poor_or_stale} stale or degraded symbols</span></div>
+      <div><small>Opportunities</small><b>{len(sorted_board_rows["BUY"])} buy · {len(sorted_board_rows["SELL"])} sell</b><span>Top: buy {html.escape(top_buy)} · sell {html.escape(top_sell)}</span></div>
+    </section>"""
     prioritized_board = f"""
     <section class="decision-board" aria-label="Prioritized directional signals">
       <section class="signal-column buy-column">
@@ -1470,6 +1495,10 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-board {{ margin:12px 0 24px }}
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
+.portfolio-pulse {{ display:grid; gap:10px; grid-template-columns:repeat(3,1fr); margin:14px 0 4px }}
+.portfolio-pulse div {{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 15px }}
+.portfolio-pulse small {{ color:var(--muted); display:block; font-size:10px; font-weight:800; letter-spacing:.4px; text-transform:uppercase }}
+.portfolio-pulse b {{ display:block; font-size:18px; margin-top:3px }} .portfolio-pulse span {{ color:var(--muted); display:block; font-size:12px; margin-top:3px }}
 .decision-board {{ align-items:start; display:grid; gap:12px; grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:16px }}
 .signal-column {{ background:var(--panel); border:1px solid var(--line); border-radius:10px; min-width:0; overflow:hidden }}
 .signal-column header,.signal-column summary {{ align-items:center; display:flex; justify-content:space-between; list-style:none; padding:14px 15px }}
@@ -1566,6 +1595,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 .note {{ color:var(--muted); font-size:13px }} @media(max-width:900px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
+  .portfolio-pulse {{ grid-template-columns:1fr }}
   .holding-row {{ grid-template-columns:80px 1fr; gap:10px }}
   .board-action {{ display:none }} .board-basics {{ grid-column:1 / -1; margin-top:3px }}
 }} @media(max-width:600px) {{
@@ -1587,7 +1617,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <section id="tab-portfolio" class="tab-view active" role="tabpanel">
 <div class="board-intro"><div><h2>Priority Board</h2><p>Robust directional events first · highest confidence at the top · click any row for details</p></div>
 <p>WAIT is folded by default. Portfolio actions remain in the detail panel.</p></div>
-<section class="portfolio-board">{prioritized_board}</section>
+<section class="portfolio-board">{portfolio_pulse}{prioritized_board}</section>
 </section>
 <section id="tab-research" class="tab-view" role="tabpanel" hidden>
 <section class="panel"><h2>Displayed Direction Forecast Validation</h2>

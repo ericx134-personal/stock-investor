@@ -909,3 +909,13 @@ stability, false-discovery control, and operational reliability. Rollback is
 mandatory for any write-action violation, private-data exposure, forecast
 rewrite, unsafe promotion, or BUY/SELL label emitted from blocked required
 price data.
+
+## Dashboard Compact Pulse
+
+M081 adds a compact Portfolio-tab pulse above the BUY/SELL/WAIT board. It shows
+model-health status, latest price date, stale/degraded symbol count, BUY/SELL
+opportunity counts, and the current top BUY and SELL symbols.
+
+Decision rule: this is a comprehension surface only. It summarizes existing
+model-health, price-health, and directional-board evidence without changing any
+forecast, price zone, or portfolio action.
