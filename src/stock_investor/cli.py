@@ -239,13 +239,30 @@ def _fetch_yahoo(
 ) -> int:
     symbols = [position.symbol for position in load_positions(positions_path)]
     symbols.extend(symbol.upper() for symbol in extra_symbols if symbol)
-    updates = fetch_yahoo_daily_bars(symbols, start, end)
+    failures = []
+    updates = fetch_yahoo_daily_bars(
+        symbols,
+        start,
+        end,
+        on_failure=failures.append,
+    )
     prices = (
-        merge_price_histories(load_prices(merge_existing_path), updates)
+        merge_price_histories(
+            load_prices(merge_existing_path, strict_ohlcv=False),
+            updates,
+        )
         if merge_existing_path and Path(merge_existing_path).exists()
         else updates
     )
     write_prices_csv(prices, output_path)
+    for failure in failures:
+        outcome = "retrying" if failure.will_retry else "final"
+        print(
+            f"Yahoo provider {outcome} failure for {failure.symbol}: "
+            f"{failure.failure_class}; attempt {failure.attempt}/{failure.max_attempts}; "
+            f"retryable={str(failure.retryable).lower()}; {failure.message}",
+            flush=True,
+        )
     missing = sorted(set(symbols) - set(updates))
     if missing:
         print(

@@ -75,3 +75,15 @@ class DataTests(unittest.TestCase):
                 )
                 with self.assertRaisesRegex(ValueError, message):
                     load_prices(path)
+
+    def test_load_prices_can_normalize_existing_provider_rows_for_merge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.write(
+                directory,
+                "prices.csv",
+                "date,symbol,close,open,high,low,volume\n"
+                "2026-01-01,ABC,10,12,11,9,100\n",
+            )
+            history = load_prices(path, strict_ohlcv=False)["ABC"]
+            self.assertEqual(history[0].high, 12)
+            self.assertEqual(history[0].low, 9)

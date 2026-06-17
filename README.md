@@ -371,6 +371,10 @@ The refresh service fetches two years of daily bars through Yahoo Finance chart
 data, merges those bars with the existing price file so unsupported or delisted
 symbols keep their last known history, atomically replaces the price input only
 after a successful fetch, then runs the production-safe evidence refresh. It
+uses bounded Yahoo provider retries and classifies provider failures in the
+refresh log as network, rate-limit, server/timeout, client, no-data, or
+invalid-response events. Retryable classes are retried before the existing
+merged history is used as stale fallback context. It
 also creates one credential-free private archive per day under
 `data/private/archives/` and retains 30 daily archives by default. It never
 deletes source ledgers or rewrites forecasts; only expired archive bundles are

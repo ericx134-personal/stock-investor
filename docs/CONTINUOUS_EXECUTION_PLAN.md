@@ -56,7 +56,6 @@ Near-term product goals:
 
 Current execution queue:
 
-- P0: M023 provider retries and failure classification.
 - P0: M045 time-period stability checks for the current wave candidate.
 - P0: M049 formal promotion, probation, retirement, and rollback gates.
 - P1: M081 compact model-health and opportunity summaries.
@@ -96,7 +95,7 @@ Current execution queue:
 
 - [x] M021 Add a production-safe read-only daily refresh command.
 - [x] M022 Add refresh locking to prevent overlapping runs.
-- [ ] M023 Add bounded retries and provider failure classification.
+- [x] M023 Add bounded retries and provider failure classification.
 - [x] M024 Persist refresh-run history, duration, and artifact sizes.
 - [x] M025 Alert when a scheduled refresh is stale or incomplete.
 - [x] M025A Keep the private Mac dashboard online and schedule market refreshes.

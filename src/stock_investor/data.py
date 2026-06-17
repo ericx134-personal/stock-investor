@@ -99,7 +99,11 @@ def load_positions(path: str | Path) -> list[Position]:
     return positions
 
 
-def load_prices(path: str | Path) -> dict[str, list[Price]]:
+def load_prices(
+    path: str | Path,
+    *,
+    strict_ohlcv: bool = True,
+) -> dict[str, list[Price]]:
     prices: dict[str, list[Price]] = {}
     with Path(path).open(newline="") as handle:
         reader = csv.DictReader(handle)
@@ -116,6 +120,8 @@ def load_prices(path: str | Path) -> dict[str, list[Price]]:
                 name: _parse_optional_float(row.get(name))
                 for name in ("open", "high", "low", "volume")
             }
+            if not strict_ohlcv:
+                optional = _normalize_ohlcv(close, optional)
             for name in ("open", "high", "low"):
                 if optional[name] is not None and optional[name] <= 0:
                     raise ValueError(f"{symbol} has non-positive {name}")
@@ -144,3 +150,25 @@ def load_prices(path: str | Path) -> dict[str, list[Price]]:
         if len({item.date for item in history}) != len(history):
             raise ValueError(f"{symbol} has duplicate price dates")
     return prices
+
+
+def _normalize_ohlcv(
+    close: float,
+    optional: dict[str, float | None],
+) -> dict[str, float | None]:
+    normalized = dict(optional)
+    price_points = [
+        value
+        for value in (
+            close,
+            normalized.get("open"),
+            normalized.get("high"),
+            normalized.get("low"),
+        )
+        if value is not None
+    ]
+    if normalized.get("high") is not None:
+        normalized["high"] = max(price_points)
+    if normalized.get("low") is not None:
+        normalized["low"] = min(price_points)
+    return normalized

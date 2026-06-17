@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timezone
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 
 from stock_investor.data import Price
@@ -48,6 +49,34 @@ class YahooProviderTests(unittest.TestCase):
         self.assertEqual([item.close for item in prices["HOOD"]], [98.12, 96.17])
         self.assertEqual(prices["HOOD"][0].volume, 1000)
 
+    def test_fetch_daily_bars_normalizes_implausible_yahoo_envelopes(self):
+        prices = fetch_yahoo_daily_bars(
+            ["PLTR"],
+            "2026-06-01",
+            "2026-06-17",
+            transport=lambda url: {
+                "chart": {
+                    "result": [
+                        {
+                            "timestamp": [ts("2026-06-16")],
+                            "indicators": {
+                                "quote": [
+                                    {
+                                        "close": [133.25],
+                                        "open": [134.59],
+                                        "high": [134.50],
+                                        "low": [129.62],
+                                    }
+                                ]
+                            },
+                        }
+                    ]
+                }
+            },
+        )
+        self.assertEqual(prices["PLTR"][0].high, 134.59)
+        self.assertEqual(prices["PLTR"][0].low, 129.62)
+
     def test_fetch_daily_bars_skips_missing_symbols(self):
         prices = fetch_yahoo_daily_bars(
             ["MISSING"],
@@ -56,6 +85,86 @@ class YahooProviderTests(unittest.TestCase):
             transport=lambda url: {"chart": {"result": None}},
         )
         self.assertEqual(prices, {})
+
+    def test_fetch_daily_bars_retries_retryable_network_failures(self):
+        calls = []
+        sleeps = []
+        failures = []
+
+        def transport(url):
+            calls.append(url)
+            if len(calls) == 1:
+                raise URLError("temporary DNS failure")
+            return {
+                "chart": {
+                    "result": [
+                        {
+                            "timestamp": [ts("2026-06-16")],
+                            "indicators": {"quote": [{"close": [96.17]}]},
+                        }
+                    ]
+                }
+            }
+
+        prices = fetch_yahoo_daily_bars(
+            ["HOOD"],
+            "2026-06-01",
+            "2026-06-17",
+            transport=transport,
+            retry_delays=(0.0,),
+            sleep=sleeps.append,
+            on_failure=failures.append,
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(sleeps, [0.0])
+        self.assertEqual(prices["HOOD"][0].close, 96.17)
+        self.assertEqual(failures[0].failure_class, "network")
+        self.assertTrue(failures[0].will_retry)
+
+    def test_fetch_daily_bars_classifies_exhausted_rate_limits(self):
+        failures = []
+
+        def transport(url):
+            raise HTTPError(url, 429, "Too Many Requests", {}, None)
+
+        prices = fetch_yahoo_daily_bars(
+            ["HOOD"],
+            "2026-06-01",
+            "2026-06-17",
+            transport=transport,
+            retry_delays=(0.0, 0.0),
+            sleep=lambda seconds: None,
+            on_failure=failures.append,
+        )
+        self.assertEqual(prices, {})
+        self.assertEqual([failure.failure_class for failure in failures], ["rate_limited"] * 3)
+        self.assertEqual([failure.will_retry for failure in failures], [True, True, False])
+
+    def test_fetch_daily_bars_classifies_non_retryable_chart_errors(self):
+        failures = []
+
+        prices = fetch_yahoo_daily_bars(
+            ["OLD"],
+            "2026-06-01",
+            "2026-06-17",
+            transport=lambda url: {
+                "chart": {
+                    "result": None,
+                    "error": {
+                        "code": "Not Found",
+                        "description": "No data found for symbol",
+                    },
+                }
+            },
+            retry_delays=(0.0, 0.0),
+            sleep=lambda seconds: None,
+            on_failure=failures.append,
+        )
+        self.assertEqual(prices, {})
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0].failure_class, "no_data")
+        self.assertFalse(failures[0].retryable)
+        self.assertFalse(failures[0].will_retry)
 
     def test_merge_price_histories_preserves_old_unavailable_symbols(self):
         existing = {
