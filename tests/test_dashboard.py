@@ -53,7 +53,9 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('class="chart-tooltip"', page)
         self.assertIn('Pressure $125.00–$128.00', page)
         self.assertIn('class="zone-label pressure-label"', page)
-        self.assertIn("Pinch or scroll on the chart to zoom time", page)
+        self.assertIn("Pinch or scroll on the chart to zoom its scale", page)
+        self.assertIn('class="chart-range-tabs"', page)
+        self.assertIn('data-chart-range="21">1M</button>', page)
 
     def test_kline_chart_keeps_far_cost_basis_out_of_price_scale(self):
         history = [
@@ -343,11 +345,14 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("16.7%", page)
         self.assertIn('value="today-desc" selected>Today return</option>', page)
         self.assertIn('class="today-pill positive"', page)
-        self.assertIn('data-label="Today"><b>+$50</b><small>5.0%</small>', page)
+        self.assertIn('data-label="Today %"><b>5.0%</b>', page)
+        self.assertIn('data-label="Today $"><b>+$50</b>', page)
         self.assertIn('data-label="Price"><b>$105.00</b>', page)
         self.assertIn('class="mini-sparkline', page)
+        self.assertIn("<span>Today %</span><span>Today $</span>", page)
         self.assertIn("<span>Portfolio %</span><span>Prediction</span>", page)
         self.assertIn("<div><small>Shares</small><b>10</b></div>", page)
+        self.assertIn("<small>10 shares</small>", page)
         self.assertNotIn("<span>More</span>", page)
 
     def test_dashboard_does_not_blend_evidence_across_model_versions(self):
@@ -846,7 +851,9 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Conditional age/magnitude evidence used", page)
         self.assertIn("direction gate <b>BUY</b>", page)
         self.assertIn('class="kline-chart"', page)
-        self.assertIn("126-session daily K-line", page)
+        self.assertIn("252-session daily K-line", page)
+        self.assertIn('data-chart-range="5">1D</button>', page)
+        self.assertNotIn(">Advanced</button>", page)
         self.assertIn("Support zone", page)
         self.assertIn("Your position", page)
         self.assertIn("Average cost", page)

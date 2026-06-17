@@ -427,7 +427,7 @@ def _kline_chart(
 ) -> str:
     if data_quality_status == "POOR":
         return '<div class="chart-unavailable">K-line chart blocked by the data-quality gate.</div>'
-    visible_sessions = 126
+    visible_sessions = 252
     candles = [
         item
         for item in history[-visible_sessions:]
@@ -619,7 +619,7 @@ def _kline_chart(
     return f"""<section class="kline-chart-card">
       <div class="chart-heading"><div><small>{visible_sessions}-session daily K-line</small><h3>Price wave in context</h3></div>
       <span class="chart-signal {signal_class}">{html.escape(signal_label)} {signal_probability}</span></div>
-      <svg class="kline-chart" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(signal_label)} evidence on daily candlestick chart">
+      <svg class="kline-chart" viewBox="0 0 {width} {height}" data-plot-left="{left}" data-plot-top="{top}" data-plot-width="{plot_width:.1f}" data-plot-height="{volume_bottom - top:.1f}" data-candle-count="{len(candles)}" role="img" aria-label="{html.escape(signal_label)} evidence on daily candlestick chart">
         {''.join(grid)}{''.join(zones)}{target_zone}{cost_line}{''.join(candle_shapes)}{pivot_line}
         <line class="volume-divider" x1="{left}" y1="{volume_top - 5}" x2="{left + plot_width}" y2="{volume_top - 5}"/>
         {date_labels}
@@ -628,7 +628,15 @@ def _kline_chart(
         {''.join(candle_hitboxes)}
       </svg>
       <div class="chart-tooltip" aria-live="polite" hidden></div>
-      <small class="chart-zoom-hint">Pinch or scroll on the chart to zoom time. Double-click resets.</small>
+      <div class="chart-range-tabs" aria-label="Chart time range">
+        <button type="button" data-chart-range="5">1D</button>
+        <button type="button" data-chart-range="7">1W</button>
+        <button type="button" data-chart-range="21">1M</button>
+        <button type="button" data-chart-range="63">3M</button>
+        <button type="button" data-chart-range="126" class="active">YTD</button>
+        <button type="button" data-chart-range="252">1Y</button>
+      </div>
+      <small class="chart-zoom-hint">Pinch or scroll on the chart to zoom its scale. Double-click resets.</small>
       <div class="chart-legend"><span class="support-key">Support zone</span><span class="resistance-key">Resistance zone</span><span class="cost-key">Average cost</span><span class="wave-key">Active wave</span><span>Volume</span></div>
     </section>"""
 
@@ -1384,8 +1392,10 @@ def build_dashboard(
               data-sort-recent="{float(recent_momentum or 0):.6f}"
               data-sort-confidence="{confidence_sort:.6f}"
               data-sort-signal="{signal_rank}">
-              <span class="holding-identity" data-label="Symbol" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong></span>
-              <span class="today-pill {today_return_class}" data-label="Today"><b>{_signed_compact_money(today_dollars)}</b><small>{_optional_percent(today_return)}</small>{mini_sparkline}</span>
+              <span class="holding-identity" data-label="Symbol" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
+              <span class="holding-spark" data-label="Trend">{mini_sparkline}</span>
+              <span class="today-pill {today_return_class}" data-label="Today %"><b>{_optional_percent(today_return)}</b></span>
+              <span class="holding-today-cash {today_return_class}" data-label="Today $"><b>{_signed_compact_money(today_dollars)}</b></span>
               <span class="holding-current {today_return_class}" data-label="Price"><b>${display_price:,.2f}</b></span>
               <span class="{display_return_class}" data-label="Gain"><b>{_optional_percent(display_unrealized_return)}</b></span>
               <span data-label="Portfolio"><b>{_percent(record.get("portfolio_weight"))}</b></span>
@@ -1500,8 +1510,8 @@ def build_dashboard(
         </label>
       </div>
       <div class="portfolio-holdings-header" aria-hidden="true">
-        <span>Symbol</span><span>Today return</span><span>Current price</span>
-        <span>Gain %</span><span>Portfolio %</span><span>Prediction</span>
+        <span>Symbol</span><span>Trend</span><span>Today %</span><span>Today $</span>
+        <span>Current price</span><span>Gain %</span><span>Portfolio %</span><span>Prediction</span>
       </div>
       <div class="portfolio-holdings-list" data-portfolio-holdings>
         {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
@@ -1857,22 +1867,24 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
-.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:72px 154px 112px 72px 82px 118px; gap:12px; align-items:center }}
+.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:82px 88px 86px 76px 104px 70px 78px 112px; gap:12px; align-items:center }}
 .portfolio-holdings-header {{ background:#080808; border-bottom:1px solid var(--line); color:var(--muted); font-size:9px; font-weight:800; letter-spacing:.28px; padding:5px 10px; text-transform:uppercase }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ display:grid }}
 .portfolio-holding-card {{ background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; font:inherit; min-height:48px; padding:8px 10px; text-align:left; width:100% }}
 .portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
-.portfolio-holding-card strong {{ font-size:16px }} .portfolio-holding-card small {{ color:var(--muted); display:block; font-size:10px; line-height:1.1 }} .portfolio-holding-card b {{ display:block; font-size:13px; white-space:nowrap }}
+.portfolio-holding-card strong {{ font-size:17px }} .portfolio-holding-card small {{ color:#9aa0a6; display:block; font-size:12px; line-height:1.18; margin-top:2px }} .portfolio-holding-card b {{ display:block; font-size:13px; white-space:nowrap }}
 .portfolio-holding-card>span {{ min-width:0; white-space:nowrap }}
 .portfolio-holding-card>span::before {{ color:var(--muted); content:attr(data-label); display:none; font-size:9px; font-weight:700; letter-spacing:.18px; margin-bottom:2px }}
 .holding-current b {{ font-size:17px; font-weight:850; letter-spacing:-.25px }} .holding-current.positive b {{ color:var(--green) }} .holding-current.negative b {{ color:var(--red) }}
 .holding-return.positive b,.positive b {{ color:var(--green) }} .holding-return.negative b,.negative b {{ color:var(--red) }}
-.today-pill {{ align-items:center; border:1px solid #333; border-radius:9px; display:grid; gap:1px 7px; grid-template-columns:58px 76px; padding:5px 6px }}
-.today-pill.positive {{ background:rgba(0,200,5,.12); border-color:#006b24; color:var(--green) }} .today-pill.negative {{ background:rgba(255,90,95,.14); border-color:#733035; color:var(--red) }}
-.today-pill b {{ font-size:13px; text-align:right }} .today-pill small {{ color:currentColor; font-size:10px; grid-column:1; opacity:.9; text-align:right }}
-.mini-sparkline {{ display:block; height:22px; width:70px }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2 }}
-.today-pill .mini-sparkline {{ grid-column:2; grid-row:1 / span 2 }}
+.holding-spark {{ align-items:center; color:#7f858c; display:flex; gap:10px }}
+.holding-spark::after {{ border-top:2px dotted #555; content:""; flex:1; min-width:24px }}
+.holding-today-cash.positive b {{ color:var(--green) }} .holding-today-cash.negative b {{ color:var(--red) }}
+.today-pill {{ align-items:center; border:1px solid currentColor; border-radius:10px; display:flex; justify-content:center; min-height:34px; padding:5px 9px }}
+.today-pill.positive {{ background:var(--green); border-color:var(--green); color:#001f08 }} .today-pill.negative {{ background:#ff5000; border-color:#ff5000; color:#050505 }}
+.today-pill b {{ color:inherit; font-size:16px; font-weight:650; text-align:center }}
+.mini-sparkline {{ display:block; height:28px; width:74px }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }}
 .portfolio-holding-card .decision-signal {{ align-items:center; border-radius:6px; display:grid; grid-template-columns:auto 1fr; padding:5px 7px }} .portfolio-holding-card .decision-signal strong {{ font-size:11px }} .portfolio-holding-card .decision-signal b {{ font-size:14px }}
 .portfolio-holding-card .decision-signal small {{ font-size:8.5px; line-height:1.1 }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
@@ -1912,7 +1924,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .health-status.fresh {{ background:var(--green-dim); color:var(--green) }} .health-status.stale,.health-status.missing {{ background:#321214; color:var(--red) }}
 .health-status.good {{ background:var(--green-dim); color:var(--green) }} .health-status.review {{ background:#2b240f; color:var(--amber) }} .health-status.poor {{ background:#321214; color:var(--red) }}
 .health-status.low {{ background:var(--green-dim); color:var(--green) }} .health-status.medium {{ background:#2b240f; color:var(--amber) }} .health-status.high {{ background:#321214; color:var(--red) }}
-.board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }}
+.board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }} .today-pill.positive b,.today-pill.negative b {{ color:inherit }}
 .drawer-backdrop {{ background:rgba(0,0,0,.78); display:none; inset:0; position:fixed; z-index:20 }} .drawer-backdrop.open {{ display:block }}
 .drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:1040px; overflow:auto; padding:24px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .2s ease; width:min(96vw,1040px); z-index:30 }}
 .drawer.open {{ transform:translateX(0) }} .drawer-close {{ background:#171717; border:1px solid var(--line); border-radius:999px; color:var(--text); cursor:pointer; display:block; font:inherit; margin-left:auto; padding:7px 12px; position:sticky; top:0; z-index:2 }}
@@ -1963,7 +1975,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .chart-crosshair {{ display:none; pointer-events:none; stroke:#e6e6e6; stroke-dasharray:3 3; stroke-width:.9; opacity:.7 }} .chart-crosshair.active {{ display:block }}
 .chart-tooltip {{ background:#050505; border:1px solid #555; border-radius:8px; box-shadow:0 10px 28px rgba(0,0,0,.45); color:var(--text); font-size:11px; left:12px; min-width:190px; padding:8px 10px; pointer-events:none; position:absolute; top:50px; z-index:4 }}
 .chart-tooltip b,.chart-tooltip span {{ display:block }} .chart-tooltip span {{ color:var(--muted); margin-top:2px }}
-.volume-divider {{ stroke:#333; stroke-width:1 }} .chart-zoom-hint {{ color:var(--muted); display:block; font-size:10px; margin:4px 0 5px }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
+.volume-divider {{ stroke:#333; stroke-width:1 }} .chart-range-tabs {{ align-items:center; display:flex; gap:22px; justify-content:center; margin:11px 0 8px }} .chart-range-tabs button {{ background:transparent; border:0; border-radius:8px; color:var(--green); cursor:pointer; font:inherit; font-size:13px; font-weight:800; padding:7px 10px }} .chart-range-tabs button.active {{ background:var(--green); color:#001f08 }} .chart-zoom-hint {{ color:var(--muted); display:block; font-size:10px; margin:4px 0 5px; text-align:center }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
 .chart-legend .support-key::before {{ background:var(--green) }} .chart-legend .resistance-key::before {{ background:var(--red) }} .chart-legend .wave-key::before {{ background:var(--amber) }} .chart-legend .cost-key::before {{ background:#e6e6e6 }}
 .chart-unavailable {{ background:#111; border-radius:7px; color:var(--muted); margin-bottom:12px; padding:18px }}
 .advanced-details {{ border-top:1px solid var(--line); margin-top:12px; padding-top:8px }} .advanced-details summary {{ color:var(--muted); cursor:pointer; font-weight:650; padding:8px 0 }} .advanced-details[open] summary {{ color:var(--text) }}
@@ -1985,19 +1997,25 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .portfolio-holdings-list::before {{ background:var(--line); bottom:0; content:""; left:50%; position:absolute; top:0; width:1px }}
   .portfolio-holding-card {{ background:#050505; border-bottom:1px solid var(--line); min-height:64px; padding:10px 14px }}
   .portfolio-holding-card>span::before {{ display:block }}
-  .today-pill::before {{ grid-column:1 / -1; text-align:left }}
 }} @media(max-width:900px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
   .portfolio-pulse {{ grid-template-columns:1fr }}
-  .portfolio-holding-card {{ grid-template-columns:1fr 1fr }} .portfolio-holding-card .decision-signal {{ grid-row:auto }}
+  .portfolio-holdings-header {{ display:none }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) minmax(110px,1.25fr) 112px; min-height:76px; padding:14px 10px }}
+  .holding-current,.holding-today-cash,.portfolio-holding-card>span[data-label="Gain"],.portfolio-holding-card>span[data-label="Portfolio"],.portfolio-holding-card .decision-signal {{ display:none }}
+  .portfolio-holding-card>span::before {{ display:none }}
+  .holding-spark .mini-sparkline {{ height:44px; width:92px }}
+  .today-pill {{ justify-self:end; min-width:92px }}
   .holding-row {{ grid-template-columns:80px 1fr; gap:10px }}
   .board-action {{ display:none }} .board-basics {{ grid-column:1 / -1; margin-top:3px }}
 }} @media(max-width:600px) {{
   main {{ padding:24px 12px 60px }} .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr }}
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
-  .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }} .portfolio-holding-card {{ grid-template-columns:1fr }}
+  .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }} .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) minmax(92px,1.05fr) 104px }}
+  .portfolio-pulse {{ display:none }} .board-intro p {{ display:none }}
+  .chart-range-tabs {{ gap:9px; justify-content:space-between }} .chart-range-tabs button {{ font-size:12px; padding:6px 7px }}
   .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
 }}
 </style>
@@ -2172,34 +2190,66 @@ document.querySelectorAll(".kline-chart-card").forEach((card) => {{
   const vertical = card.querySelector("[data-chart-crosshair-x]");
   const horizontal = card.querySelector("[data-chart-crosshair-y]");
   const hitboxes = [...card.querySelectorAll(".candle-hitbox")];
+  const rangeButtons = [...card.querySelectorAll("[data-chart-range]")];
   if (!svg || !tooltip || !vertical || !horizontal || hitboxes.length === 0) return;
   const viewBox = svg.viewBox.baseVal;
   const baseViewBox = {{ x: viewBox.x, y: viewBox.y, width: viewBox.width, height: viewBox.height }};
-  let zoomLevel = 1;
-  const applyViewBox = (nextX, nextWidth) => {{
-    svg.setAttribute("viewBox", `${{nextX.toFixed(1)}} ${{baseViewBox.y.toFixed(1)}} ${{nextWidth.toFixed(1)}} ${{baseViewBox.height.toFixed(1)}}`);
+  const plotLeft = Number(svg.dataset.plotLeft || 18);
+  const plotTop = Number(svg.dataset.plotTop || 28);
+  const plotWidth = Number(svg.dataset.plotWidth || 778);
+  const plotHeight = Number(svg.dataset.plotHeight || 362);
+  const candleCount = Number(svg.dataset.candleCount || hitboxes.length || 1);
+  const minWidth = Math.max(plotWidth / candleCount * 5, 90);
+  const minHeight = 110;
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+  const applyViewBox = (nextX, nextY, nextWidth, nextHeight) => {{
+    svg.setAttribute("viewBox", `${{nextX.toFixed(1)}} ${{nextY.toFixed(1)}} ${{nextWidth.toFixed(1)}} ${{nextHeight.toFixed(1)}}`);
+  }};
+  const applyRange = (sessions) => {{
+    const wanted = Math.min(candleCount, Number(sessions || candleCount));
+    const xStep = plotWidth / candleCount;
+    const nextWidth = clamp(wanted * xStep + 90, minWidth, baseViewBox.width);
+    const rightEdge = plotLeft + plotWidth + 70;
+    const nextX = clamp(rightEdge - nextWidth, baseViewBox.x, baseViewBox.x + baseViewBox.width - nextWidth);
+    applyViewBox(nextX, baseViewBox.y, nextWidth, baseViewBox.height);
   }};
   const resetZoom = () => {{
-    zoomLevel = 1;
-    applyViewBox(baseViewBox.x, baseViewBox.width);
+    applyRange(126);
   }};
   card.addEventListener("wheel", (event) => {{
     const rect = svg.getBoundingClientRect();
     if (!rect.width) return;
     event.preventDefault();
+    event.stopPropagation();
     const oldWidth = svg.viewBox.baseVal.width || baseViewBox.width;
     const oldX = svg.viewBox.baseVal.x || baseViewBox.x;
-    const pointerRatio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    const direction = event.deltaY > 0 ? -1 : 1;
-    zoomLevel = Math.min(4, Math.max(1, zoomLevel + direction * 0.22));
-    const nextWidth = baseViewBox.width / zoomLevel;
+    const oldHeight = svg.viewBox.baseVal.height || baseViewBox.height;
+    const oldY = svg.viewBox.baseVal.y || baseViewBox.y;
+    const pointerRatio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const pointerYRatio = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+    const factor = event.deltaY > 0 ? 1.14 : 0.86;
+    const nextWidth = clamp(oldWidth * factor, minWidth, baseViewBox.width);
+    const nextHeight = clamp(oldHeight * factor, minHeight, baseViewBox.height);
     const pointerValue = oldX + oldWidth * pointerRatio;
-    const minX = baseViewBox.x;
-    const maxX = baseViewBox.x + baseViewBox.width - nextWidth;
-    const nextX = Math.min(maxX, Math.max(minX, pointerValue - nextWidth * pointerRatio));
-    applyViewBox(nextX, nextWidth);
+    const pointerYValue = oldY + oldHeight * pointerYRatio;
+    const nextX = clamp(pointerValue - nextWidth * pointerRatio, baseViewBox.x, baseViewBox.x + baseViewBox.width - nextWidth);
+    const nextY = clamp(pointerYValue - nextHeight * pointerYRatio, baseViewBox.y, baseViewBox.y + baseViewBox.height - nextHeight);
+    applyViewBox(nextX, nextY, nextWidth, nextHeight);
   }}, {{ passive:false }});
+  ["gesturestart", "gesturechange", "gestureend"].forEach((eventName) => {{
+    card.addEventListener(eventName, (event) => {{
+      event.preventDefault();
+      event.stopPropagation();
+    }}, {{ passive:false }});
+  }});
+  rangeButtons.forEach((button) => {{
+    button.addEventListener("click", () => {{
+      rangeButtons.forEach((item) => item.classList.toggle("active", item === button));
+      applyRange(button.dataset.chartRange);
+    }});
+  }});
   card.addEventListener("dblclick", resetZoom);
+  resetZoom();
   const showPoint = (hitbox) => {{
     const x = Number(hitbox.dataset.x);
     const y = Number(hitbox.dataset.closeY);
