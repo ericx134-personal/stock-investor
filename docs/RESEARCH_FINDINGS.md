@@ -928,3 +928,18 @@ the already-loaded local price artifact.
 
 Decision rule: this is a chart-readability feature only. It does not fetch new
 data, change price zones, alter model probabilities, or promote any signal.
+
+## Robinhood-Style Portfolio Board
+
+The Portfolio tab now prioritizes a holdings-first view: each row shows market
+value, shares, close, total gain/loss, portfolio weight, average cost, 12-to-1
+momentum, next pressure, support, and the current BUY/SELL/WAIT prediction. The
+old BUY/SELL/WAIT columns remain available as a folded secondary grouping.
+
+Displayed confidence now includes row-level evidence context such as sample
+size and raw directional analog rate. This makes repeated displayed values,
+such as multiple SELL rows at 64%, traceable to the same shared wave bucket
+rather than implying independent per-symbol precision.
+
+Decision rule: this is a comprehension and sorting surface only. It does not
+change model output, confidence calibration, or any trading action.

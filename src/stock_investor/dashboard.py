@@ -146,6 +146,25 @@ def _position_summary(record: dict) -> str:
     </section>"""
 
 
+def _unrealized_dollars(record: dict) -> float | None:
+    market_value = float(record.get("market_value") or 0)
+    cost_basis = record.get("cost_basis")
+    unrealized_return = record.get("unrealized_return")
+    if cost_basis is not None:
+        return market_value - float(cost_basis)
+    if unrealized_return is not None and float(unrealized_return) != -1:
+        inferred_cost = market_value / (1 + float(unrealized_return))
+        return market_value - inferred_cost
+    return None
+
+
+def _signed_money(value: float | None) -> str:
+    if value is None:
+        return "pending"
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}${abs(value):,.2f}"
+
+
 def _holding_stage(record: dict) -> tuple[str, str]:
     shares = float(record.get("shares") or 0)
     unrealized = record.get("unrealized_return")
@@ -390,17 +409,21 @@ def _kline_chart(
 
     zones = []
     for label, low_key, high_key, css_class in (
-        ("Resistance", "resistance_zone_low", "resistance_zone_high", "resistance-zone"),
+        ("Pressure", "resistance_zone_low", "resistance_zone_high", "resistance-zone"),
         ("Support", "support_zone_low", "support_zone_high", "support-zone"),
     ):
         if wave.get(low_key) is None or wave.get(high_key) is None:
             continue
+        low_value = float(wave[low_key])
+        high_value = float(wave[high_key])
         zone_top = y(float(wave[high_key]))
         zone_bottom = y(float(wave[low_key]))
+        label_class = "pressure-label" if label == "Pressure" else "support-label"
+        label_text = f"{label} ${low_value:.2f}–${high_value:.2f}"
         zones.append(
             f'<rect class="{css_class}" x="{left:.1f}" y="{zone_top:.1f}" '
             f'width="{plot_width:.1f}" height="{max(1, zone_bottom - zone_top):.1f}"/>'
-            f'<text class="zone-label" x="{left + 4:.1f}" y="{zone_top + 11:.1f}">{label}</text>'
+            f'<text class="zone-label {label_class}" x="{left + 6:.1f}" y="{zone_top + 13:.1f}">{html.escape(label_text)}</text>'
         )
     target_zone = ""
     if price_plan:
@@ -938,6 +961,7 @@ def build_dashboard(
         "SELL": [],
         "WAIT": [],
     }
+    portfolio_rows = []
     detail_panels = []
     for index, record in enumerate(records):
         alert = record.get("alert", {})
@@ -1080,6 +1104,58 @@ def build_dashboard(
             else '<div class="kline">Full K-line OHLCV evidence unavailable.</div>'
         )
         detail_id = f"holding-detail-{index}"
+        market_value = float(record.get("market_value") or 0)
+        gain_dollars = _unrealized_dollars(record)
+        recent_momentum = technicals.get("return_12_to_1")
+        confidence_sort = float(signal_probability or 0)
+        signal_rank = {"BUY": 3, "SELL": 2, "WAIT": 1}.get(signal_label, 0)
+        signal_source = "no promoted analog"
+        if (
+            signal_label in {"BUY", "SELL"}
+            and historical_wave
+            and historical_wave.get("positive_rate") is not None
+        ):
+            raw_direction_rate = _directional_rate(
+                historical_wave, signal_label, "positive_rate"
+            )
+            signal_source = (
+                f"{wave.get('regime', 'wave')} · n={int(historical_wave.get('observations', 0))}"
+                f" · raw {signal_label} {_optional_percent(raw_direction_rate)}"
+            )
+        pressure_summary = (
+            f"{_optional_money(wave.get('resistance_zone_low'))}–{_optional_money(wave.get('resistance_zone_high'))}"
+            if wave.get("resistance_zone_low") is not None
+            and wave.get("resistance_zone_high") is not None
+            else "pending"
+        )
+        support_summary = (
+            f"{_optional_money(wave.get('support_zone_low'))}–{_optional_money(wave.get('support_zone_high'))}"
+            if wave.get("support_zone_low") is not None
+            and wave.get("support_zone_high") is not None
+            else "pending"
+        )
+        portfolio_rows.append(
+            f"""
+            <button type="button" class="portfolio-holding-card signal-{signal_class}" data-detail-target="{detail_id}"
+              data-sort-symbol="{html.escape(str(record.get("symbol", "")))}"
+              data-sort-value="{market_value:.6f}"
+              data-sort-gain="{float(unrealized_return or 0):.6f}"
+              data-sort-gain-dollars="{float(gain_dollars or 0):.6f}"
+              data-sort-weight="{float(record.get("portfolio_weight") or 0):.6f}"
+              data-sort-recent="{float(recent_momentum or 0):.6f}"
+              data-sort-confidence="{confidence_sort:.6f}"
+              data-sort-signal="{signal_rank}">
+              <span class="holding-identity"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
+              <span class="holding-value"><b>${market_value:,.2f}</b><small>Close ${float(record.get("latest_close") or 0):,.2f}</small></span>
+              <span class="holding-return {return_class}"><b>{_signed_money(gain_dollars)}</b><small>{_optional_percent(unrealized_return)} total</small></span>
+              <span class="decision-signal {signal_class}"><strong>{signal_label}</strong><b>{signal_percent}</b><small>{html.escape(signal_source)}</small></span>
+              <span class="holding-mini"><small>Avg cost</small><b>{_optional_money(record.get("average_cost"))}</b></span>
+              <span class="holding-mini"><small>Weight</small><b>{_percent(record.get("portfolio_weight"))}</b></span>
+              <span class="holding-mini"><small>12-1 momentum</small><b>{_optional_percent(recent_momentum)}</b></span>
+              <span class="holding-mini pressure-mini"><small>Next pressure</small><b>{pressure_summary}</b></span>
+              <span class="holding-mini"><small>Support</small><b>{support_summary}</b></span>
+            </button>"""
+        )
         board_rows[signal_label].append(
             (
                 signal_probability or 0,
@@ -1169,7 +1245,30 @@ def build_dashboard(
       <div><small>Latest prices</small><b>{html.escape(latest_price_date)}</b><span>{poor_or_stale} stale or degraded symbols</span></div>
       <div><small>Opportunities</small><b>{len(sorted_board_rows["BUY"])} buy · {len(sorted_board_rows["SELL"])} sell</b><span>Top: buy {html.escape(top_buy)} · sell {html.escape(top_sell)}</span></div>
     </section>"""
+    portfolio_holdings = f"""
+    <section class="portfolio-holdings-panel" aria-label="All portfolio holdings">
+      <div class="holdings-toolbar">
+        <div><small>Your holdings</small><h3>Portfolio</h3></div>
+        <label>Sort
+          <select id="portfolio-sort" aria-label="Sort portfolio holdings">
+            <option value="value-desc">Market value</option>
+            <option value="gain-desc">Total return %</option>
+            <option value="gain-dollars-desc">Total return $</option>
+            <option value="recent-desc">12-1 momentum</option>
+            <option value="weight-desc">Portfolio weight</option>
+            <option value="confidence-desc">Signal confidence</option>
+            <option value="signal-desc">Signal type</option>
+            <option value="symbol-asc">Symbol A-Z</option>
+          </select>
+        </label>
+      </div>
+      <div class="portfolio-holdings-list" data-portfolio-holdings>
+        {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
+      </div>
+    </section>"""
     prioritized_board = f"""
+    <details class="priority-board-panel">
+      <summary><span>Prediction groups</span><small>BUY / SELL / WAIT grouped by confidence</small></summary>
     <section class="decision-board" aria-label="Prioritized directional signals">
       <section class="signal-column buy-column">
         <header><div><small>Highest confidence first</small><h3>BUY</h3></div><b>{len(sorted_board_rows["BUY"])}</b></header>
@@ -1183,7 +1282,7 @@ def build_dashboard(
         <summary><div><small>Direction not proven</small><h3>WAIT</h3></div><b>{len(sorted_board_rows["WAIT"])}</b></summary>
         <div class="signal-stack">{''.join(sorted_board_rows["WAIT"]) or '<p class="empty-state">No holdings are waiting.</p>'}</div>
       </details>
-    </section>"""
+    </section></details>"""
 
     current_analogs = []
     for record in records:
@@ -1513,6 +1612,20 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-pulse div {{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 15px }}
 .portfolio-pulse small {{ color:var(--muted); display:block; font-size:10px; font-weight:800; letter-spacing:.4px; text-transform:uppercase }}
 .portfolio-pulse b {{ display:block; font-size:18px; margin-top:3px }} .portfolio-pulse span {{ color:var(--muted); display:block; font-size:12px; margin-top:3px }}
+.portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px 0 18px; overflow:hidden }}
+.holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
+.holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
+.holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
+.portfolio-holdings-list {{ display:grid }}
+.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; display:grid; font:inherit; gap:8px 14px; grid-template-columns:90px 1.05fr 1fr 142px; padding:14px 16px; text-align:left; width:100% }}
+.portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
+.portfolio-holding-card strong {{ font-size:20px }} .portfolio-holding-card small {{ color:var(--muted); display:block; font-size:11px }} .portfolio-holding-card b {{ display:block; white-space:nowrap }}
+.holding-value b,.holding-return b {{ font-size:17px }} .holding-return.positive b {{ color:var(--green) }} .holding-return.negative b {{ color:var(--red) }}
+.portfolio-holding-card .decision-signal {{ grid-row:span 2; padding:8px 10px }} .portfolio-holding-card .decision-signal strong {{ font-size:12px }} .portfolio-holding-card .decision-signal b {{ font-size:18px }}
+.holding-mini {{ background:#0d0d0d; border-radius:8px; min-width:0; padding:8px 9px }} .holding-mini b {{ font-size:12px; overflow:hidden; text-overflow:ellipsis }}
+.pressure-mini b {{ color:var(--red) }}
+.priority-board-panel {{ margin-top:16px }} .priority-board-panel>summary {{ align-items:center; background:#0b0b0b; border:1px solid var(--line); border-radius:10px; cursor:pointer; display:flex; justify-content:space-between; list-style:none; padding:13px 15px }}
+.priority-board-panel>summary::-webkit-details-marker {{ display:none }} .priority-board-panel>summary span {{ color:var(--text); font-weight:800 }} .priority-board-panel>summary small {{ color:var(--muted) }}
 .decision-board {{ align-items:start; display:grid; gap:12px; grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:16px }}
 .signal-column {{ background:var(--panel); border:1px solid var(--line); border-radius:10px; min-width:0; overflow:hidden }}
 .signal-column header,.signal-column summary {{ align-items:center; display:flex; justify-content:space-between; list-style:none; padding:14px 15px }}
@@ -1583,7 +1696,8 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ font-size:17px; margin:1px 0 0 }}
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
 .kline-chart {{ display:block; height:auto; overflow:visible; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
-.support-zone {{ fill:rgba(0,200,5,.10) }} .resistance-zone {{ fill:rgba(255,90,95,.10) }} .zone-label {{ fill:#999; font-size:8px; text-transform:uppercase }}
+.support-zone {{ fill:rgba(0,200,5,.14); stroke:rgba(0,200,5,.42); stroke-width:.8 }} .resistance-zone {{ fill:rgba(255,90,95,.25); stroke:rgba(255,90,95,.72); stroke-width:1.1 }}
+.zone-label {{ fill:#ddd; font-size:9px; font-weight:850; paint-order:stroke; stroke:#050505; stroke-width:2px; text-transform:uppercase }} .pressure-label {{ fill:var(--red) }} .support-label {{ fill:var(--green) }}
 .target-zone.buy {{ fill:rgba(0,200,5,.22); stroke:var(--green); stroke-width:1 }} .target-zone.sell {{ fill:rgba(255,90,95,.22); stroke:var(--red); stroke-width:1 }} .target-zone.breakout {{ fill:rgba(0,200,5,.16); stroke:var(--green); stroke-dasharray:5 3; stroke-width:1.4 }}
 .target-mid {{ stroke-width:1.7; stroke-dasharray:4 3 }} .target-mid.buy {{ stroke:var(--green) }} .target-mid.sell {{ stroke:var(--red) }} .target-mid.breakout {{ stroke:var(--green) }}
 .target-label-bg.buy {{ fill:#006b22 }} .target-label-bg.sell {{ fill:#8b252a }} .target-label-bg.breakout {{ fill:#006b22 }} .target-label {{ fill:#fff; font-size:8px; font-weight:800 }}
@@ -1614,12 +1728,14 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
   .portfolio-pulse {{ grid-template-columns:1fr }}
+  .portfolio-holding-card {{ grid-template-columns:1fr 1fr }} .portfolio-holding-card .decision-signal {{ grid-row:auto }}
   .holding-row {{ grid-template-columns:80px 1fr; gap:10px }}
   .board-action {{ display:none }} .board-basics {{ grid-column:1 / -1; margin-top:3px }}
 }} @media(max-width:600px) {{
   main {{ padding:24px 12px 60px }} .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr }}
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
+  .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }} .portfolio-holding-card {{ grid-template-columns:1fr }}
   .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
 }}
 </style>
@@ -1633,9 +1749,9 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   <button type="button" class="tab-button" data-tab-target="health" role="tab" aria-selected="false">Health &amp; Risk</button>
 </nav>
 <section id="tab-portfolio" class="tab-view active" role="tabpanel">
-<div class="board-intro"><div><h2>Priority Board</h2><p>Robust directional events first · highest confidence at the top · click any row for details</p></div>
-<p>WAIT is folded by default. Portfolio actions remain in the detail panel.</p></div>
-<section class="portfolio-board">{portfolio_pulse}{prioritized_board}</section>
+<div class="board-intro"><div><h2>Portfolio Board</h2><p>Robinhood-style holdings first · prediction shown on every stock · click any row for details</p></div>
+<p>Our edge is prediction quality: confidence is visible on the row, evidence stays in details.</p></div>
+<section class="portfolio-board">{portfolio_pulse}{portfolio_holdings}{prioritized_board}</section>
 </section>
 <section id="tab-research" class="tab-view" role="tabpanel" hidden>
 <section class="panel"><h2>Displayed Direction Forecast Validation</h2>
@@ -1736,6 +1852,35 @@ tabButtons.forEach((button) => button.addEventListener("click", () => {{
     view.hidden = !active;
   }});
 }}));
+
+const portfolioSort = document.getElementById("portfolio-sort");
+const portfolioList = document.querySelector("[data-portfolio-holdings]");
+const sortHoldings = () => {{
+  if (!portfolioSort || !portfolioList) return;
+  const [field, direction] = portfolioSort.value.split("-");
+  const datasetKey = {{
+    value: "sortValue",
+    gain: "sortGain",
+    "gain-dollars": "sortGainDollars",
+    recent: "sortRecent",
+    weight: "sortWeight",
+    confidence: "sortConfidence",
+    signal: "sortSignal",
+    symbol: "sortSymbol",
+  }}[field];
+  const rows = [...portfolioList.querySelectorAll(".portfolio-holding-card")];
+  rows.sort((left, right) => {{
+    if (field === "symbol") {{
+      return (left.dataset[datasetKey] || "").localeCompare(right.dataset[datasetKey] || "");
+    }}
+    const leftValue = Number(left.dataset[datasetKey] || 0);
+    const rightValue = Number(right.dataset[datasetKey] || 0);
+    return direction === "asc" ? leftValue - rightValue : rightValue - leftValue;
+  }});
+  rows.forEach((row) => portfolioList.appendChild(row));
+}};
+portfolioSort?.addEventListener("change", sortHoldings);
+sortHoldings();
 
 const drawer = document.getElementById("holding-drawer");
 const backdrop = document.querySelector(".drawer-backdrop");
