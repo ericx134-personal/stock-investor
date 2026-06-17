@@ -953,6 +953,10 @@ endpoint without credentials, then still keeps historical model inputs on the
 daily OHLCV price file. This separates "what the user sees right now" from
 "what the model was trained and scored on."
 
+The quote payload also preserves a bounded intraday path for compact
+Robinhood-style sparklines. These sparklines are display context only; the
+model still uses preserved daily OHLCV inputs and scored forward outcomes.
+
 Decision rule: latest quotes may update visible current price, market value,
 today return, and unrealized gain/loss. They must not rewrite historical bars,
 change preserved forecasts, or create a trading action. Robinhood MCP read-only
@@ -960,6 +964,18 @@ data can be added later as an optional foreground/manual source, but the macOS
 LaunchAgent refresh cannot depend on MCP session credentials. Credentialed
 providers should not be introduced without an explicit product reason and user
 approval.
+
+## Overhead Pressure After Breakout
+
+When price clears the prior structural resistance zone, the dashboard now looks
+for the next overhead pressure area using recent historical highs above the
+current price. If a nearby historical cluster exists, it is drawn as an "Upper
+pressure" zone on the K-line chart. If there is no cluster, the chart falls
+back to a conservative volatility-extension band.
+
+Decision rule: upper pressure is a visual review zone, not a prediction that
+price must reverse there. It prevents the dashboard from showing only an
+already-invalidated lower sell zone after a breakout.
 
 ## 12-1 Momentum Display
 

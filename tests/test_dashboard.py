@@ -6,6 +6,7 @@ from pathlib import Path
 
 from stock_investor.dashboard import (
     _kline_chart,
+    _next_resistance_zone,
     _price_plan,
     _professional_plan,
     build_dashboard,
@@ -72,6 +73,28 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("invalidated", breakout["interpretation"])
         self.assertIn("below the current price", breakout["proximity"])
         self.assertIsNone(_price_plan("WAIT", wave, 100))
+
+    def test_price_plan_prefers_upper_pressure_after_breakout(self):
+        wave = {
+            "resistance_zone_low": 108,
+            "resistance_zone_high": 112,
+            "next_resistance_zone_low": 124,
+            "next_resistance_zone_high": 130,
+            "next_resistance_source": "nearest historical overhead cluster",
+        }
+        sell = _price_plan("SELL", wave, 118)
+        self.assertEqual(sell["label"], "Upper sell zone")
+        self.assertEqual((sell["low"], sell["high"]), (124, 130))
+        self.assertIn("above the current price", sell["proximity"])
+
+    def test_next_resistance_zone_uses_history_above_current_price(self):
+        history = [
+            Price(date(2026, 1, 1) + timedelta(days=index), 100 + index, high=100 + index)
+            for index in range(35)
+        ]
+        zone = _next_resistance_zone(history, 120, 118)
+        self.assertGreater(zone["next_resistance_zone_low"], 120)
+        self.assertIn("historical overhead", zone["next_resistance_source"])
 
     def test_professional_plan_distinguishes_sell_management_modes(self):
         wave = {
@@ -286,7 +309,9 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("$1,050.00", page)
         self.assertIn("+$150.00", page)
         self.assertIn("16.7%", page)
-        self.assertIn('value="today-desc">Today return</option>', page)
+        self.assertIn('value="today-desc" selected>Today return</option>', page)
+        self.assertIn('class="today-pill positive"', page)
+        self.assertIn('class="mini-sparkline', page)
 
     def test_dashboard_does_not_blend_evidence_across_model_versions(self):
         with tempfile.TemporaryDirectory() as directory:

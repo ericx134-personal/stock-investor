@@ -70,6 +70,44 @@ def _optional_money(value: object) -> str:
     return "pending" if value is None else f"${float(value):,.2f}"
 
 
+def _mini_sparkline(
+    points: list[object],
+    fallback_history: list[Price],
+    css_class: str,
+) -> str:
+    values = []
+    for point in points or []:
+        if isinstance(point, dict):
+            value = point.get("price")
+        else:
+            value = point
+        if value is not None and float(value) > 0:
+            values.append(float(value))
+    if len(values) < 2:
+        values = [
+            float(item.close)
+            for item in fallback_history[-20:]
+            if item.close is not None and float(item.close) > 0
+        ]
+    if len(values) < 2:
+        return '<svg class="mini-sparkline empty" viewBox="0 0 70 22" aria-hidden="true"></svg>'
+    width, height, pad = 70, 22, 2
+    low, high = min(values), max(values)
+    span = high - low or max(high * 0.01, 1)
+    step = (width - pad * 2) / (len(values) - 1)
+    coords = []
+    for index, value in enumerate(values):
+        x = pad + index * step
+        y = pad + (high - value) / span * (height - pad * 2)
+        coords.append(f"{x:.1f},{y:.1f}")
+    return (
+        f'<svg class="mini-sparkline {html.escape(css_class)}" viewBox="0 0 {width} {height}" '
+        'aria-hidden="true"><polyline points="'
+        + " ".join(coords)
+        + '"/></svg>'
+    )
+
+
 def _health_value(value: object) -> str:
     if isinstance(value, bool):
         return "Yes" if value else "No"
@@ -394,6 +432,8 @@ def _kline_chart(
         "support_zone_high",
         "resistance_zone_low",
         "resistance_zone_high",
+        "next_resistance_zone_low",
+        "next_resistance_zone_high",
         "last_pivot_price",
         "latest_close",
     ):
@@ -417,6 +457,12 @@ def _kline_chart(
     zones = []
     for label, low_key, high_key, css_class in (
         ("Pressure", "resistance_zone_low", "resistance_zone_high", "resistance-zone"),
+        (
+            "Upper pressure",
+            "next_resistance_zone_low",
+            "next_resistance_zone_high",
+            "upper-resistance-zone",
+        ),
         ("Support", "support_zone_low", "support_zone_high", "support-zone"),
     ):
         if wave.get(low_key) is None or wave.get(high_key) is None:
@@ -650,9 +696,32 @@ def _price_plan(signal_label: str, wave: dict, current_price: object) -> dict | 
     low, high = sorted((float(wave[low_key]), float(wave[high_key])))
     if low <= 0 or high <= 0:
         return None
-    midpoint = (low + high) / 2
     current = float(current_price or wave.get("latest_close") or 0)
-    if signal_label == "SELL" and current > high:
+    if (
+        signal_label == "SELL"
+        and current > high
+        and wave.get("next_resistance_zone_low") is not None
+        and wave.get("next_resistance_zone_high") is not None
+    ):
+        low, high = sorted(
+            (
+                float(wave["next_resistance_zone_low"]),
+                float(wave["next_resistance_zone_high"]),
+            )
+        )
+        label = "Upper sell zone"
+        source = str(wave.get("next_resistance_source") or "next overhead resistance")
+        plan_class = "sell"
+        interpretation = (
+            "Price cleared the old resistance; the next review area is the nearest "
+            "overhead pressure cluster, not the invalidated lower zone."
+        )
+    midpoint = (low + high) / 2
+    if (
+        signal_label == "SELL"
+        and current > high
+        and wave.get("next_resistance_zone_low") is None
+    ):
         label = "Breakout retest zone"
         source = "former structural resistance"
         plan_class = "breakout"
@@ -684,6 +753,48 @@ def _price_plan(signal_label: str, wave: dict, current_price: object) -> dict | 
         "interpretation": interpretation,
         "proximity": proximity,
     }
+
+
+def _next_resistance_zone(
+    history: list[Price], current_price: object, existing_high: object = None
+) -> dict:
+    current = float(current_price or 0)
+    if current <= 0:
+        return {}
+    floor = max(current * 1.005, float(existing_high or 0) * 1.005)
+    candidates = sorted(
+        {
+            round(float(value), 4)
+            for item in history[-252:]
+            for value in (item.high, item.close)
+            if value is not None and float(value) > floor
+        }
+    )
+    if len(candidates) >= 3:
+        nearest = candidates[0]
+        band_limit = max(nearest * 1.045, nearest + current * 0.025)
+        cluster = [value for value in candidates if value <= band_limit][:10]
+        if len(cluster) >= 3:
+            return {
+                "next_resistance_zone_low": min(cluster),
+                "next_resistance_zone_high": max(cluster),
+                "next_resistance_source": "nearest historical overhead cluster",
+            }
+    recent_ranges = [
+        float(item.high) - float(item.low)
+        for item in history[-20:]
+        if item.high is not None and item.low is not None and float(item.high) >= float(item.low)
+    ]
+    if recent_ranges:
+        average_range = sum(recent_ranges) / len(recent_ranges)
+        low = current + max(average_range, current * 0.025)
+        high = low + max(average_range * 1.5, current * 0.035)
+        return {
+            "next_resistance_zone_low": low,
+            "next_resistance_zone_high": high,
+            "next_resistance_source": "projected volatility extension",
+        }
+    return {}
 
 
 def _price_plan_card(plan: dict | None, signal_class: str) -> str:
@@ -991,7 +1102,49 @@ def build_dashboard(
             f"<li>{html.escape(reason)}</li>" for reason in alert.get("reasons", [])
         )
         technicals = record.get("technicals") or {}
-        wave = wave_snapshot.get(record.get("symbol", ""), {})
+        symbol = str(record.get("symbol", "")).upper()
+        quote = latest_quotes.get(symbol, {})
+        display_price = float(quote.get("price") or record.get("latest_close") or 0)
+        shares = float(record.get("shares") or 0)
+        market_value = shares * display_price if shares > 0 else float(record.get("market_value") or 0)
+        gain_dollars = (
+            market_value - float(record.get("cost_basis"))
+            if record.get("cost_basis") is not None
+            else _unrealized_dollars(record)
+        )
+        unrealized_return = record.get("unrealized_return")
+        display_unrealized_return = (
+            gain_dollars / float(record.get("cost_basis"))
+            if gain_dollars is not None
+            and record.get("cost_basis") is not None
+            and float(record.get("cost_basis")) > 0
+            else unrealized_return
+        )
+        display_return_class = (
+            "positive"
+            if display_unrealized_return is not None
+            and float(display_unrealized_return) >= 0
+            else "negative"
+        )
+        symbol_history = chart_prices.get(record.get("symbol", ""), [])
+        today_return = quote.get("today_return")
+        if today_return is None:
+            today_return = _latest_daily_return(symbol_history)
+        today_return_class = (
+            "positive"
+            if today_return is not None and float(today_return) >= 0
+            else "negative"
+        )
+        wave = {
+            **wave_snapshot.get(record.get("symbol", ""), {}),
+            **_next_resistance_zone(
+                symbol_history,
+                display_price or record.get("latest_close"),
+                (wave_snapshot.get(record.get("symbol", ""), {}) or {}).get(
+                    "resistance_zone_high"
+                ),
+            ),
+        }
         broad_historical_wave = _select_historical_wave(wave, historical_wave_evidence)
         conditional_wave = _select_conditional_wave(
             wave,
@@ -1022,7 +1175,7 @@ def build_dashboard(
         price_plan = _price_plan(
             signal_label,
             wave,
-            record.get("latest_close") or wave.get("latest_close"),
+            display_price or record.get("latest_close") or wave.get("latest_close"),
         )
         professional_plan = _professional_plan(
             signal_label,
@@ -1034,7 +1187,7 @@ def build_dashboard(
             historical_wave, wave, signal_label, signal_class
         )
         kline_chart = _kline_chart(
-            chart_prices.get(record.get("symbol", ""), []),
+            symbol_history,
             wave,
             signal_label,
             signal_class,
@@ -1045,7 +1198,6 @@ def build_dashboard(
             ),
             record.get("average_cost"),
         )
-        unrealized_return = record.get("unrealized_return")
         return_class = (
             "positive"
             if unrealized_return is not None and float(unrealized_return) >= 0
@@ -1117,38 +1269,7 @@ def build_dashboard(
             else '<div class="kline">Full K-line OHLCV evidence unavailable.</div>'
         )
         detail_id = f"holding-detail-{index}"
-        quote = latest_quotes.get(str(record.get("symbol", "")).upper(), {})
-        display_price = float(quote.get("price") or record.get("latest_close") or 0)
-        shares = float(record.get("shares") or 0)
-        market_value = shares * display_price if shares > 0 else float(record.get("market_value") or 0)
-        gain_dollars = (
-            market_value - float(record.get("cost_basis"))
-            if record.get("cost_basis") is not None
-            else _unrealized_dollars(record)
-        )
-        display_unrealized_return = (
-            gain_dollars / float(record.get("cost_basis"))
-            if gain_dollars is not None
-            and record.get("cost_basis") is not None
-            and float(record.get("cost_basis")) > 0
-            else unrealized_return
-        )
-        display_return_class = (
-            "positive"
-            if display_unrealized_return is not None
-            and float(display_unrealized_return) >= 0
-            else "negative"
-        )
         recent_momentum = technicals.get("return_12_to_1")
-        symbol_history = chart_prices.get(record.get("symbol", ""), [])
-        today_return = quote.get("today_return")
-        if today_return is None:
-            today_return = _latest_daily_return(symbol_history)
-        today_return_class = (
-            "positive"
-            if today_return is not None and float(today_return) >= 0
-            else "negative"
-        )
         confidence_sort = float(signal_probability or 0)
         signal_rank = {"BUY": 3, "SELL": 2, "WAIT": 1}.get(signal_label, 0)
         signal_source = "no promoted analog"
@@ -1176,6 +1297,16 @@ def build_dashboard(
             and wave.get("support_zone_high") is not None
             else "pending"
         )
+        more_summary = (
+            f"Value ${market_value:,.2f} · Avg cost {_optional_money(record.get('average_cost'))} · "
+            f"Shares {_optional_number(record.get('shares'))} · Gain {_signed_money(gain_dollars)} · "
+            f"12-1 mom {_optional_percent(recent_momentum)} · Pressure {pressure_summary} · Support {support_summary}"
+        )
+        mini_sparkline = _mini_sparkline(
+            quote.get("intraday_path") or [],
+            symbol_history,
+            today_return_class,
+        )
         portfolio_rows.append(
             f"""
             <button type="button" class="portfolio-holding-card signal-{signal_class}" data-detail-target="{detail_id}"
@@ -1189,18 +1320,12 @@ def build_dashboard(
               data-sort-confidence="{confidence_sort:.6f}"
               data-sort-signal="{signal_rank}">
               <span class="holding-identity" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong></span>
+              <span class="today-pill {today_return_class}"><b>{_optional_percent(today_return)}</b>{mini_sparkline}</span>
               <span class="decision-signal {signal_class}" title="{html.escape(signal_source)}"><strong>{signal_label}</strong><b>{signal_percent}</b></span>
               <span class="holding-current"><b>${display_price:,.2f}</b></span>
-              <span class="{today_return_class}"><b>{_optional_percent(today_return)}</b></span>
-              <span><b>${market_value:,.2f}</b></span>
-              <span><b>{_optional_money(record.get("average_cost"))}</b></span>
-              <span><b>{_optional_number(record.get("shares"))}</b></span>
-              <span class="{display_return_class}"><b>{_signed_money(gain_dollars)}</b></span>
               <span class="{display_return_class}"><b>{_optional_percent(display_unrealized_return)}</b></span>
               <span><b>{_percent(record.get("portfolio_weight"))}</b></span>
-              <span><b>{_optional_percent(recent_momentum)}</b></span>
-              <span class="pressure-mini"><b>{pressure_summary}</b></span>
-              <span><b>{support_summary}</b></span>
+              <span class="holding-more" title="{html.escape(more_summary)}"><b>More</b><small>details</small></span>
             </button>"""
         )
         board_rows[signal_label].append(
@@ -1231,11 +1356,11 @@ def build_dashboard(
                 <div><h2>{html.escape(record.get("symbol", ""))}</h2><span class="decision-signal {signal_class}"><strong>{signal_label}</strong><b>{signal_percent}</b></span></div>
                 <span class="board-action">{html.escape(action.replace("_", " "))}</span>
               </div>
+                {kline_chart}
                 {_position_summary(record)}
                 {_professional_plan_card(professional_plan)}
                 {evidence_graphics}
                 {_price_plan_card(price_plan, signal_class) if signal_label in {"BUY", "SELL"} else ""}
-                {kline_chart}
                 <details class="advanced-details">
                   <summary>Advanced details</summary>
                 <div class="detail-title">
@@ -1298,8 +1423,8 @@ def build_dashboard(
         <div><small>Your holdings</small><h3>Portfolio</h3></div>
         <label>Sort
           <select id="portfolio-sort" aria-label="Sort portfolio holdings">
+            <option value="today-desc" selected>Today return</option>
             <option value="value-desc">Market value</option>
-            <option value="today-desc">Today return</option>
             <option value="gain-desc">Total return %</option>
             <option value="gain-dollars-desc">Total return $</option>
             <option value="recent-desc">12-1 momentum</option>
@@ -1311,9 +1436,8 @@ def build_dashboard(
         </label>
       </div>
       <div class="portfolio-holdings-header" aria-hidden="true">
-        <span>Symbol</span><span>Prediction</span><span>Current price</span><span>Today</span>
-        <span>Value</span><span>Avg cost</span><span>Shares</span><span>Gain $</span>
-        <span>Gain %</span><span>Weight</span><span>12-1 mom <abbr class="inline-info" title="12-1 momentum means price performance from about 12 months ago to 1 month ago. It skips the most recent month so short-term noise does not dominate.">i</abbr></span><span>Pressure</span><span>Support</span>
+        <span>Symbol</span><span>Today</span><span>Prediction</span><span>Current price</span>
+        <span>Gain %</span><span>Portfolio %</span><span>More</span>
       </div>
       <div class="portfolio-holdings-list" data-portfolio-holdings>
         {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
@@ -1669,7 +1793,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
-.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:64px 118px 96px 66px 94px 76px 78px 88px 66px 58px 72px minmax(112px,1fr) minmax(112px,1fr); gap:7px; align-items:center }}
+.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:72px 132px 118px 104px 72px 82px 68px; gap:8px; align-items:center }}
 .portfolio-holdings-header {{ background:#080808; border-bottom:1px solid var(--line); color:var(--muted); font-size:9px; font-weight:800; letter-spacing:.28px; padding:5px 10px; text-transform:uppercase }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ display:grid }}
@@ -1679,6 +1803,11 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-holding-card>span {{ min-width:0; white-space:nowrap }}
 .holding-current b {{ color:var(--text); font-size:18px; font-weight:850; letter-spacing:-.35px }}
 .holding-return.positive b,.positive b {{ color:var(--green) }} .holding-return.negative b,.negative b {{ color:var(--red) }}
+.today-pill {{ align-items:center; border:1px solid #333; border-radius:8px; display:grid; gap:6px; grid-template-columns:44px 70px; padding:3px 5px }}
+.today-pill.positive {{ background:rgba(0,200,5,.12); border-color:#006b24; color:var(--green) }} .today-pill.negative {{ background:rgba(255,90,95,.14); border-color:#733035; color:var(--red) }}
+.today-pill b {{ font-size:12px; text-align:right }}
+.mini-sparkline {{ display:block; height:22px; width:70px }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2 }}
+.holding-more {{ color:var(--muted); text-align:right }} .holding-more b {{ color:var(--text); font-size:11px }} .holding-more small {{ font-size:8px }}
 .portfolio-holding-card .decision-signal {{ align-items:center; border-radius:6px; display:grid; grid-template-columns:auto 1fr; padding:4px 6px }} .portfolio-holding-card .decision-signal strong {{ font-size:10px }} .portfolio-holding-card .decision-signal b {{ font-size:14px }}
 .portfolio-holding-card .decision-signal small {{ font-size:8.5px; line-height:1.1 }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
@@ -1755,7 +1884,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ font-size:17px; margin:1px 0 0 }}
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
 .kline-chart {{ display:block; height:auto; overflow:visible; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
-.support-zone {{ fill:rgba(0,200,5,.14); stroke:rgba(0,200,5,.42); stroke-width:.8 }} .resistance-zone {{ fill:rgba(255,90,95,.25); stroke:rgba(255,90,95,.72); stroke-width:1.1 }}
+.support-zone {{ fill:rgba(0,200,5,.14); stroke:rgba(0,200,5,.42); stroke-width:.8 }} .resistance-zone {{ fill:rgba(255,90,95,.25); stroke:rgba(255,90,95,.72); stroke-width:1.1 }} .upper-resistance-zone {{ fill:rgba(255,90,95,.16); stroke:rgba(255,90,95,.8); stroke-dasharray:5 4; stroke-width:1.1 }}
 .zone-label {{ fill:#ddd; font-size:9px; font-weight:850; paint-order:stroke; stroke:#050505; stroke-width:2px; text-transform:uppercase }} .pressure-label {{ fill:var(--red) }} .support-label {{ fill:var(--green) }}
 .target-zone.buy {{ fill:rgba(0,200,5,.22); stroke:var(--green); stroke-width:1 }} .target-zone.sell {{ fill:rgba(255,90,95,.22); stroke:var(--red); stroke-width:1 }} .target-zone.breakout {{ fill:rgba(0,200,5,.16); stroke:var(--green); stroke-dasharray:5 3; stroke-width:1.4 }}
 .target-mid {{ stroke-width:1.7; stroke-dasharray:4 3 }} .target-mid.buy {{ stroke:var(--green) }} .target-mid.sell {{ stroke:var(--red) }} .target-mid.breakout {{ stroke:var(--green) }}

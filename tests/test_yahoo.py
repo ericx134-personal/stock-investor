@@ -65,8 +65,8 @@ class YahooProviderTests(unittest.TestCase):
                                 "regularMarketTime": 1780000000,
                                 "exchangeTimezoneName": "America/New_York",
                             },
-                            "timestamp": [1780000000],
-                            "indicators": {"quote": [{"close": [101.5]}]},
+                            "timestamp": [1780000000, 1780000060],
+                            "indicators": {"quote": [{"close": [100.5, 101.5]}]},
                         }
                     ]
                 }
@@ -79,6 +79,13 @@ class YahooProviderTests(unittest.TestCase):
         self.assertEqual(quotes["HOOD"]["price"], 101.5)
         self.assertEqual(quotes["HOOD"]["previous_close"], 100.0)
         self.assertAlmostEqual(quotes["HOOD"]["today_return"], 0.015)
+        self.assertEqual(
+            quotes["HOOD"]["intraday_path"],
+            [
+                {"time": 1780000000, "price": 100.5},
+                {"time": 1780000060, "price": 101.5},
+            ],
+        )
         self.assertEqual(quotes["HOOD"]["source"], "Yahoo Finance chart quote")
 
     def test_fetch_daily_bars_normalizes_implausible_yahoo_envelopes(self):

@@ -133,6 +133,14 @@ def fetch_yahoo_latest_quotes(
                 or []
             )
             price = next((value for value in reversed(closes) if value is not None), None)
+        quote = (result.get("indicators", {}).get("quote") or [{}])[0]
+        closes = quote.get("close") or []
+        timestamps = result.get("timestamp") or []
+        intraday_path = [
+            {"time": int(timestamp), "price": float(close)}
+            for timestamp, close in zip(timestamps, closes)
+            if close is not None and float(close) > 0
+        ][-120:]
         if price is None or float(price) <= 0:
             continue
         today_return = (
@@ -145,6 +153,7 @@ def fetch_yahoo_latest_quotes(
             "price": float(price),
             "previous_close": float(previous_close) if previous_close is not None else None,
             "today_return": today_return,
+            "intraday_path": intraday_path,
             "regular_market_time": meta.get("regularMarketTime"),
             "exchange_timezone": meta.get("exchangeTimezoneName"),
             "source": "Yahoo Finance chart quote",
