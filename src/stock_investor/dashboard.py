@@ -203,6 +203,18 @@ def _signed_money(value: float | None) -> str:
     return f"{sign}${abs(value):,.2f}"
 
 
+def _signed_compact_money(value: float | None) -> str:
+    if value is None:
+        return "pending"
+    sign = "+" if value >= 0 else "-"
+    absolute = abs(float(value))
+    if absolute >= 1_000_000:
+        return f"{sign}${absolute / 1_000_000:.1f}M"
+    if absolute >= 1_000:
+        return f"{sign}${absolute / 1_000:.1f}K"
+    return f"{sign}${absolute:.0f}"
+
+
 def _latest_daily_return(history: list[Price]) -> float | None:
     closes = [float(item.close) for item in history if item.close is not None]
     if len(closes) < 2 or closes[-2] <= 0:
@@ -455,7 +467,7 @@ def _kline_chart(
         return top + (price_high - value) / price_span * plot_height
 
     zones = []
-    for label, low_key, high_key, css_class in (
+    zone_definitions = (
         ("Pressure", "resistance_zone_low", "resistance_zone_high", "resistance-zone"),
         (
             "Upper pressure",
@@ -464,19 +476,30 @@ def _kline_chart(
             "upper-resistance-zone",
         ),
         ("Support", "support_zone_low", "support_zone_high", "support-zone"),
-    ):
+    )
+    zone_label_count = 0
+    for label, low_key, high_key, css_class in zone_definitions:
         if wave.get(low_key) is None or wave.get(high_key) is None:
             continue
         low_value = float(wave[low_key])
         high_value = float(wave[high_key])
         zone_top = y(float(wave[high_key]))
         zone_bottom = y(float(wave[low_key]))
-        label_class = "pressure-label" if label == "Pressure" else "support-label"
+        zone_mid = (zone_top + zone_bottom) / 2
+        label_y = min(
+            max(zone_mid + (zone_label_count % 3 - 1) * 14, top + 14),
+            price_bottom - 8,
+        )
+        zone_label_count += 1
+        label_class = "pressure-label" if "pressure" in label.lower() else "support-label"
         label_text = f"{label} ${low_value:.2f}–${high_value:.2f}"
         zones.append(
             f'<rect class="{css_class}" x="{left:.1f}" y="{zone_top:.1f}" '
             f'width="{plot_width:.1f}" height="{max(1, zone_bottom - zone_top):.1f}"/>'
-            f'<text class="zone-label {label_class}" x="{left + 6:.1f}" y="{zone_top + 13:.1f}">{html.escape(label_text)}</text>'
+            f'<line class="zone-leader {label_class}" x1="{left + plot_width - 42:.1f}" y1="{zone_mid:.1f}" '
+            f'x2="{left + plot_width - 174:.1f}" y2="{label_y:.1f}"/>'
+            f'<rect class="zone-label-bg {label_class}" x="{left + plot_width - 342:.1f}" y="{label_y - 11:.1f}" width="166" height="16" rx="4"/>'
+            f'<text class="zone-label {label_class}" x="{left + plot_width - 336:.1f}" y="{label_y:.1f}">{html.escape(label_text)}</text>'
         )
     target_zone = ""
     if price_plan:
@@ -493,10 +516,12 @@ def _kline_chart(
             f'width="{plot_width:.1f}" height="{max(1, target_bottom - target_top):.1f}"/>'
             f'<line class="target-mid {zone_class}" x1="{left:.1f}" y1="{target_mid:.1f}" '
             f'x2="{left + plot_width:.1f}" y2="{target_mid:.1f}"/>'
-            f'<rect class="target-label-bg {zone_class}" x="{left + 5:.1f}" '
-            f'y="{max(top + 2, target_top + 3):.1f}" width="148" height="17" rx="4"/>'
-            f'<text class="target-label" x="{left + 11:.1f}" '
-            f'y="{max(top + 14, target_top + 15):.1f}">{html.escape(target_label)}</text>'
+            f'<line class="target-label-leader {zone_class}" x1="{left + plot_width - 26:.1f}" y1="{target_mid:.1f}" '
+            f'x2="{left + plot_width - 150:.1f}" y2="{max(top + 18, target_mid - 18):.1f}"/>'
+            f'<rect class="target-label-bg {zone_class}" x="{left + plot_width - 300:.1f}" '
+            f'y="{max(top + 4, target_mid - 30):.1f}" width="148" height="17" rx="4"/>'
+            f'<text class="target-label" x="{left + plot_width - 294:.1f}" '
+            f'y="{max(top + 16, target_mid - 18):.1f}">{html.escape(target_label)}</text>'
         )
     cost_line = ""
     if average_cost is not None and float(average_cost) > 0:
@@ -1135,6 +1160,19 @@ def build_dashboard(
             if today_return is not None and float(today_return) >= 0
             else "negative"
         )
+        previous_close = quote.get("previous_close")
+        if previous_close is None:
+            daily_closes = [
+                float(item.close)
+                for item in symbol_history
+                if item.close is not None and float(item.close) > 0
+            ]
+            previous_close = daily_closes[-2] if len(daily_closes) >= 2 else None
+        today_dollars = (
+            shares * (display_price - float(previous_close))
+            if previous_close is not None and shares > 0
+            else None
+        )
         wave = {
             **wave_snapshot.get(record.get("symbol", ""), {}),
             **_next_resistance_zone(
@@ -1309,23 +1347,23 @@ def build_dashboard(
         )
         portfolio_rows.append(
             f"""
-            <button type="button" class="portfolio-holding-card signal-{signal_class}" data-detail-target="{detail_id}"
+            <button type="button" class="portfolio-holding-card signal-{signal_class}" data-detail-target="{detail_id}" title="{html.escape(more_summary)}"
               data-sort-symbol="{html.escape(str(record.get("symbol", "")))}"
               data-sort-value="{market_value:.6f}"
               data-sort-gain="{float(display_unrealized_return or 0):.6f}"
               data-sort-gain-dollars="{float(gain_dollars or 0):.6f}"
               data-sort-today="{float(today_return or 0):.6f}"
+              data-sort-today-dollars="{float(today_dollars or 0):.6f}"
               data-sort-weight="{float(record.get("portfolio_weight") or 0):.6f}"
               data-sort-recent="{float(recent_momentum or 0):.6f}"
               data-sort-confidence="{confidence_sort:.6f}"
               data-sort-signal="{signal_rank}">
               <span class="holding-identity" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong></span>
-              <span class="today-pill {today_return_class}"><b>{_optional_percent(today_return)}</b>{mini_sparkline}</span>
-              <span class="decision-signal {signal_class}" title="{html.escape(signal_source)}"><strong>{signal_label}</strong><b>{signal_percent}</b></span>
-              <span class="holding-current"><b>${display_price:,.2f}</b></span>
+              <span class="today-pill {today_return_class}"><b>{_optional_percent(today_return)}</b><small>{_signed_compact_money(today_dollars)}</small>{mini_sparkline}</span>
+              <span class="holding-current {today_return_class}"><b>${display_price:,.2f}</b></span>
               <span class="{display_return_class}"><b>{_optional_percent(display_unrealized_return)}</b></span>
               <span><b>{_percent(record.get("portfolio_weight"))}</b></span>
-              <span class="holding-more" title="{html.escape(more_summary)}"><b>More</b><small>details</small></span>
+              <span class="decision-signal {signal_class}" title="{html.escape(signal_source)}"><strong>{signal_label}</strong><b>{signal_percent}</b></span>
             </button>"""
         )
         board_rows[signal_label].append(
@@ -1423,7 +1461,7 @@ def build_dashboard(
         <div><small>Your holdings</small><h3>Portfolio</h3></div>
         <label>Sort
           <select id="portfolio-sort" aria-label="Sort portfolio holdings">
-            <option value="today-desc" selected>Today return</option>
+            <option value="today-desc" selected>Today return $/%</option>
             <option value="value-desc">Market value</option>
             <option value="gain-desc">Total return %</option>
             <option value="gain-dollars-desc">Total return $</option>
@@ -1436,8 +1474,8 @@ def build_dashboard(
         </label>
       </div>
       <div class="portfolio-holdings-header" aria-hidden="true">
-        <span>Symbol</span><span>Today</span><span>Prediction</span><span>Current price</span>
-        <span>Gain %</span><span>Portfolio %</span><span>More</span>
+        <span>Symbol</span><span>Today $/%</span><span>Current price</span>
+        <span>Gain %</span><span>Portfolio %</span><span>Prediction</span>
       </div>
       <div class="portfolio-holdings-list" data-portfolio-holdings>
         {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
@@ -1793,22 +1831,22 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
-.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:72px 132px 118px 104px 72px 82px 68px; gap:8px; align-items:center }}
+.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:72px 150px 112px 72px 82px 118px; gap:12px; align-items:center }}
 .portfolio-holdings-header {{ background:#080808; border-bottom:1px solid var(--line); color:var(--muted); font-size:9px; font-weight:800; letter-spacing:.28px; padding:5px 10px; text-transform:uppercase }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ display:grid }}
-.portfolio-holding-card {{ background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; font:inherit; min-height:38px; padding:5px 10px; text-align:left; width:100% }}
+.portfolio-holding-card {{ background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; font:inherit; min-height:48px; padding:8px 10px; text-align:left; width:100% }}
 .portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
-.portfolio-holding-card strong {{ font-size:16px }} .portfolio-holding-card small {{ color:var(--muted); display:block; font-size:9px; line-height:1.1 }} .portfolio-holding-card b {{ display:block; font-size:11.5px; white-space:nowrap }}
+.portfolio-holding-card strong {{ font-size:16px }} .portfolio-holding-card small {{ color:var(--muted); display:block; font-size:10px; line-height:1.1 }} .portfolio-holding-card b {{ display:block; font-size:13px; white-space:nowrap }}
 .portfolio-holding-card>span {{ min-width:0; white-space:nowrap }}
-.holding-current b {{ color:var(--text); font-size:18px; font-weight:850; letter-spacing:-.35px }}
+.holding-current b {{ font-size:16px; font-weight:850; letter-spacing:-.25px }} .holding-current.positive b {{ color:var(--green) }} .holding-current.negative b {{ color:var(--red) }}
 .holding-return.positive b,.positive b {{ color:var(--green) }} .holding-return.negative b,.negative b {{ color:var(--red) }}
-.today-pill {{ align-items:center; border:1px solid #333; border-radius:8px; display:grid; gap:6px; grid-template-columns:44px 70px; padding:3px 5px }}
+.today-pill {{ align-items:center; border:1px solid #333; border-radius:9px; display:grid; gap:1px 7px; grid-template-columns:50px 76px; padding:5px 6px }}
 .today-pill.positive {{ background:rgba(0,200,5,.12); border-color:#006b24; color:var(--green) }} .today-pill.negative {{ background:rgba(255,90,95,.14); border-color:#733035; color:var(--red) }}
-.today-pill b {{ font-size:12px; text-align:right }}
+.today-pill b {{ font-size:13px; text-align:right }} .today-pill small {{ color:currentColor; font-size:10px; grid-column:1; opacity:.9; text-align:right }}
 .mini-sparkline {{ display:block; height:22px; width:70px }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2 }}
-.holding-more {{ color:var(--muted); text-align:right }} .holding-more b {{ color:var(--text); font-size:11px }} .holding-more small {{ font-size:8px }}
-.portfolio-holding-card .decision-signal {{ align-items:center; border-radius:6px; display:grid; grid-template-columns:auto 1fr; padding:4px 6px }} .portfolio-holding-card .decision-signal strong {{ font-size:10px }} .portfolio-holding-card .decision-signal b {{ font-size:14px }}
+.today-pill .mini-sparkline {{ grid-column:2; grid-row:1 / span 2 }}
+.portfolio-holding-card .decision-signal {{ align-items:center; border-radius:6px; display:grid; grid-template-columns:auto 1fr; padding:5px 7px }} .portfolio-holding-card .decision-signal strong {{ font-size:11px }} .portfolio-holding-card .decision-signal b {{ font-size:14px }}
 .portfolio-holding-card .decision-signal small {{ font-size:8.5px; line-height:1.1 }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
 .pressure-mini b {{ color:var(--red) }}
@@ -1885,7 +1923,9 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
 .kline-chart {{ display:block; height:auto; overflow:visible; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
 .support-zone {{ fill:rgba(0,200,5,.14); stroke:rgba(0,200,5,.42); stroke-width:.8 }} .resistance-zone {{ fill:rgba(255,90,95,.25); stroke:rgba(255,90,95,.72); stroke-width:1.1 }} .upper-resistance-zone {{ fill:rgba(255,90,95,.16); stroke:rgba(255,90,95,.8); stroke-dasharray:5 4; stroke-width:1.1 }}
-.zone-label {{ fill:#ddd; font-size:9px; font-weight:850; paint-order:stroke; stroke:#050505; stroke-width:2px; text-transform:uppercase }} .pressure-label {{ fill:var(--red) }} .support-label {{ fill:var(--green) }}
+.zone-label {{ fill:#ddd; font-size:8px; font-weight:850; paint-order:stroke; stroke:#050505; stroke-width:1.5px; text-transform:uppercase }} .pressure-label {{ fill:var(--red) }} .support-label {{ fill:var(--green) }}
+.zone-label-bg.pressure-label {{ fill:rgba(60,15,18,.86); stroke:rgba(255,90,95,.5) }} .zone-label-bg.support-label {{ fill:rgba(0,45,14,.86); stroke:rgba(0,200,5,.45) }}
+.zone-leader.pressure-label,.target-label-leader.sell,.target-label-leader.breakout {{ stroke:var(--red); stroke-width:1; stroke-dasharray:3 3; opacity:.8 }} .zone-leader.support-label,.target-label-leader.buy {{ stroke:var(--green); stroke-width:1; stroke-dasharray:3 3; opacity:.8 }}
 .target-zone.buy {{ fill:rgba(0,200,5,.22); stroke:var(--green); stroke-width:1 }} .target-zone.sell {{ fill:rgba(255,90,95,.22); stroke:var(--red); stroke-width:1 }} .target-zone.breakout {{ fill:rgba(0,200,5,.16); stroke:var(--green); stroke-dasharray:5 3; stroke-width:1.4 }}
 .target-mid {{ stroke-width:1.7; stroke-dasharray:4 3 }} .target-mid.buy {{ stroke:var(--green) }} .target-mid.sell {{ stroke:var(--red) }} .target-mid.breakout {{ stroke:var(--green) }}
 .target-label-bg.buy {{ fill:#006b22 }} .target-label-bg.sell {{ fill:#8b252a }} .target-label-bg.breakout {{ fill:#006b22 }} .target-label {{ fill:#fff; font-size:8px; font-weight:800 }}
@@ -1912,7 +1952,11 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .experiment div {{ background:#111; border-radius:7px; padding:14px }} .experiment b {{ display:block; font-size:24px }}
 .experiment span {{ color:var(--muted); font-size:13px }}
 table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; padding:9px; border-bottom:1px solid var(--line) }} th {{ color:var(--green); font-size:12px; letter-spacing:.25px }}
-.note {{ color:var(--muted); font-size:13px }} @media(max-width:900px) {{
+.note {{ color:var(--muted); font-size:13px }} @media(min-width:1320px) {{
+  .portfolio-holdings-header {{ display:none }}
+  .portfolio-holdings-list {{ background:var(--line); gap:1px; grid-template-columns:repeat(2,minmax(0,1fr)) }}
+  .portfolio-holding-card {{ background:#050505; border-bottom:0; min-height:54px }}
+}} @media(max-width:900px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
   .portfolio-pulse {{ grid-template-columns:1fr }}

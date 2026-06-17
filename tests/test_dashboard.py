@@ -309,9 +309,11 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("$1,050.00", page)
         self.assertIn("+$150.00", page)
         self.assertIn("16.7%", page)
-        self.assertIn('value="today-desc" selected>Today return</option>', page)
+        self.assertIn('value="today-desc" selected>Today return $/%</option>', page)
         self.assertIn('class="today-pill positive"', page)
         self.assertIn('class="mini-sparkline', page)
+        self.assertIn("<span>Portfolio %</span><span>Prediction</span>", page)
+        self.assertNotIn("<span>More</span>", page)
 
     def test_dashboard_does_not_blend_evidence_across_model_versions(self):
         with tempfile.TemporaryDirectory() as directory:
