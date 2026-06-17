@@ -56,7 +56,6 @@ Near-term product goals:
 
 Current execution queue:
 
-- P0: M049 formal promotion, probation, retirement, and rollback gates.
 - P1: M081 compact model-health and opportunity summaries.
 - P1: M084 chart crosshair and OHLCV tooltips.
 - P1: M085 historical forecasts and matured outcomes on K-line charts.
@@ -127,7 +126,7 @@ Current execution queue:
 - [ ] M046 Add bull, bear, sideways, and high-volatility stability checks.
 - [ ] M047 Add sector-level stability checks.
 - [ ] M048 Add sensitivity analysis around every promoted threshold.
-- [ ] M049 Define formal model promotion, probation, retirement, and rollback gates.
+- [x] M049 Define formal model promotion, probation, retirement, and rollback gates.
 - [ ] M050 Publish the first reproducible model-governance report.
 
 ## Phase 6: Wave And Price-Zone Research

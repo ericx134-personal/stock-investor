@@ -1,0 +1,136 @@
+{
+  "schema_version": "model-governance-v1",
+  "frozen_at_local_date": "2026-06-16",
+  "purpose": "Formal lifecycle gates for read-only stock decision-support models and candidates.",
+  "lifecycle_states": [
+    "experimental",
+    "frozen_candidate",
+    "promoted",
+    "probation",
+    "retired",
+    "rolled_back"
+  ],
+  "global_invariants": [
+    {
+      "id": "read_only_contract",
+      "severity": "rollback",
+      "requirement": "The system must not place, preview, modify, or cancel trades, options, watchlists, or Robinhood write actions."
+    },
+    {
+      "id": "private_data_boundary",
+      "severity": "rollback",
+      "requirement": "Private portfolio data, account identifiers, credentials, and generated private artifacts must not be committed to the public repository."
+    },
+    {
+      "id": "forecast_immutability",
+      "severity": "rollback",
+      "requirement": "Past forecasts, failed predictions, and model-version outputs must remain append-only and must not be rewritten to improve apparent performance."
+    },
+    {
+      "id": "fresh_price_gate",
+      "severity": "probation",
+      "requirement": "Current BUY and SELL labels must be blocked when required price data is stale, missing, or classified POOR."
+    }
+  ],
+  "promotion_gates": [
+    {
+      "id": "frozen_candidate_manifest",
+      "status_required": "pass",
+      "minimum_evidence": "Candidate has a versioned manifest frozen before sealed outcomes are inspected."
+    },
+    {
+      "id": "sealed_forward_samples",
+      "status_required": "pass",
+      "minimum_evidence": "Sealed forward period contains at least 30 matured directional forecast episodes with both BUY and SELL represented."
+    },
+    {
+      "id": "calibration",
+      "status_required": "pass",
+      "minimum_evidence": "Displayed confidence buckets are within 10 percentage points of realized directional success, with no bucket showing severe overconfidence."
+    },
+    {
+      "id": "direction_precision",
+      "status_required": "pass",
+      "minimum_evidence": "BUY and SELL precision lower confidence bounds are acceptable across at least five symbols."
+    },
+    {
+      "id": "cross_symbol_stability",
+      "status_required": "pass",
+      "minimum_evidence": "Leave-one-symbol-out and top-symbol concentration gates pass for promoted directional evidence."
+    },
+    {
+      "id": "time_period_stability",
+      "status_required": "pass",
+      "minimum_evidence": "Fixed train, development, and sealed periods do not produce conflicting directional or relative classifications."
+    },
+    {
+      "id": "false_discovery_control",
+      "status_required": "pass",
+      "minimum_evidence": "Experiment families with medium or high multiple-testing risk have false-discovery correction or sealed replication."
+    },
+    {
+      "id": "operational_reliability",
+      "status_required": "pass",
+      "minimum_evidence": "Refresh, archive verification, public-safety checks, and CI pass without required manual repair."
+    }
+  ],
+  "probation_gates": [
+    {
+      "id": "calibration_drift",
+      "trigger": "Recent matured forecast calibration misses the expected bucket by more than 10 percentage points but no rollback invariant is violated."
+    },
+    {
+      "id": "coverage_drop",
+      "trigger": "BUY or SELL coverage materially collapses versus the promoted baseline without an intentional policy change."
+    },
+    {
+      "id": "data_quality_degradation",
+      "trigger": "Refresh remains DEGRADED for required market data or provider failures recur across scheduled runs."
+    },
+    {
+      "id": "false_positive_cluster",
+      "trigger": "False BUY or false SELL cohorts reveal a repeatable regime, sector, concentration, or data-quality failure mode."
+    }
+  ],
+  "retirement_gates": [
+    {
+      "id": "superseded_by_promoted_challenger",
+      "trigger": "A challenger passes all promotion gates and replaces the prior champion."
+    },
+    {
+      "id": "candidate_staleness",
+      "trigger": "A frozen candidate lacks enough sealed matured evidence after two full evaluation windows and no longer matches current data assumptions."
+    },
+    {
+      "id": "unrecoverable_underperformance",
+      "trigger": "A model remains on probation for two consecutive governance reviews without passing remediation gates."
+    }
+  ],
+  "rollback_gates": [
+    {
+      "id": "write_action_violation",
+      "trigger": "Any code path places, previews, modifies, or cancels a trade, option, watchlist, or other Robinhood write action."
+    },
+    {
+      "id": "private_data_exposure",
+      "trigger": "Private portfolio data, credentials, or account identifiers are committed or published."
+    },
+    {
+      "id": "forecast_rewrite",
+      "trigger": "Historical forecasts or failed outcomes are rewritten outside an explicit append-only correction record."
+    },
+    {
+      "id": "unsafe_promotion",
+      "trigger": "A model is promoted from raw in-sample, unsealed, or false-discovery-uncorrected evidence."
+    },
+    {
+      "id": "required_data_block_ignored",
+      "trigger": "The dashboard emits a BUY or SELL label from stale, missing, or POOR required price data."
+    }
+  ],
+  "review_cadence": {
+    "weekly": "Operational health, refresh failures, stale data, and failed-current forecasts.",
+    "monthly": "Calibration, false-direction cohorts, time-period stability, and probation decisions.",
+    "quarterly": "Promotion, retirement, rollback review, and candidate freeze decisions."
+  }
+}

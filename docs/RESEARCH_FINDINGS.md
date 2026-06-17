@@ -894,3 +894,18 @@ is blocked unless at least two fixed periods have enough observations and those
 periods produce non-conflicting directional and relative classifications. Until
 sealed-test outcomes mature, most rows should remain blocked for insufficient
 period evidence.
+
+## Model Governance V1
+
+M049 adds `models/model-governance-v1.json`, a machine-readable lifecycle
+policy for experimental models, frozen candidates, promoted models, probation,
+retirement, and rollback. It formalizes global invariants, promotion gates,
+probation triggers, retirement triggers, rollback triggers, and weekly, monthly,
+and quarterly review cadence.
+
+Decision rule: promotion requires a frozen candidate, sealed forward samples,
+calibration, directional precision, cross-symbol stability, time-period
+stability, false-discovery control, and operational reliability. Rollback is
+mandatory for any write-action violation, private-data exposure, forecast
+rewrite, unsafe promotion, or BUY/SELL label emitted from blocked required
+price data.
