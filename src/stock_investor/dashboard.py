@@ -63,7 +63,12 @@ def _optional_ratio(value: object) -> str:
 
 
 def _optional_number(value: object) -> str:
-    return "pending" if value is None else f"{float(value):.3f}"
+    if value is None:
+        return "pending"
+    number = float(value)
+    if number.is_integer():
+        return f"{int(number):,}"
+    return f"{number:,.3f}".rstrip("0").rstrip(".")
 
 
 def _optional_money(value: object) -> str:
@@ -422,9 +427,10 @@ def _kline_chart(
 ) -> str:
     if data_quality_status == "POOR":
         return '<div class="chart-unavailable">K-line chart blocked by the data-quality gate.</div>'
+    visible_sessions = 126
     candles = [
         item
-        for item in history[-126:]
+        for item in history[-visible_sessions:]
         if item.open is not None and item.high is not None and item.low is not None
     ]
     if len(candles) < 20:
@@ -451,8 +457,19 @@ def _kline_chart(
     ):
         if wave.get(key) is not None:
             price_values.append(float(wave[key]))
-    if average_cost is not None and float(average_cost) > 0:
-        price_values.append(float(average_cost))
+    average_cost_value = (
+        float(average_cost)
+        if average_cost is not None and float(average_cost) > 0
+        else None
+    )
+    raw_price_low, raw_price_high = min(price_values), max(price_values)
+    raw_span = raw_price_high - raw_price_low or max(raw_price_high * 0.02, 1)
+    include_cost_in_scale = (
+        average_cost_value is not None
+        and raw_price_low - raw_span * 0.18 <= average_cost_value <= raw_price_high + raw_span * 0.18
+    )
+    if include_cost_in_scale:
+        price_values.append(float(average_cost_value))
     price_low, price_high = min(price_values), max(price_values)
     padding = max((price_high - price_low) * 0.06, price_high * 0.01)
     price_low, price_high = price_low - padding, price_high + padding
@@ -524,14 +541,22 @@ def _kline_chart(
             f'y="{max(top + 16, target_mid - 18):.1f}">{html.escape(target_label)}</text>'
         )
     cost_line = ""
-    if average_cost is not None and float(average_cost) > 0:
-        cost_y = y(float(average_cost))
-        cost_line = (
-            f'<line class="average-cost-line" x1="{left:.1f}" y1="{cost_y:.1f}" '
-            f'x2="{left + plot_width:.1f}" y2="{cost_y:.1f}"/>'
-            f'<text class="average-cost-label" x="{left + plot_width - 70:.1f}" '
-            f'y="{cost_y - 4:.1f}">Avg cost ${float(average_cost):.2f}</text>'
-        )
+    if average_cost_value is not None:
+        if price_low <= average_cost_value <= price_high:
+            cost_y = y(average_cost_value)
+            cost_line = (
+                f'<line class="average-cost-line" x1="{left:.1f}" y1="{cost_y:.1f}" '
+                f'x2="{left + plot_width:.1f}" y2="{cost_y:.1f}"/>'
+                f'<text class="average-cost-label" x="{left + plot_width - 90:.1f}" '
+                f'y="{cost_y - 4:.1f}">Avg cost ${average_cost_value:.2f}</text>'
+            )
+        else:
+            location = "below chart" if average_cost_value < price_low else "above chart"
+            marker_y = price_bottom - 5 if average_cost_value < price_low else top + 12
+            cost_line = (
+                f'<text class="average-cost-label average-cost-offscreen" x="{left + plot_width - 142:.1f}" '
+                f'y="{marker_y:.1f}">Avg cost ${average_cost_value:.2f} {location}</text>'
+            )
     grid = []
     for fraction in (0, 0.25, 0.5, 0.75, 1):
         grid_y = top + plot_height * fraction
@@ -592,7 +617,7 @@ def _kline_chart(
     )
     signal_probability = "--" if probability is None else f"{probability:.0%}"
     return f"""<section class="kline-chart-card">
-      <div class="chart-heading"><div><small>126-session daily K-line</small><h3>Price wave in context</h3></div>
+      <div class="chart-heading"><div><small>{visible_sessions}-session daily K-line</small><h3>Price wave in context</h3></div>
       <span class="chart-signal {signal_class}">{html.escape(signal_label)} {signal_probability}</span></div>
       <svg class="kline-chart" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(signal_label)} evidence on daily candlestick chart">
         {''.join(grid)}{''.join(zones)}{target_zone}{cost_line}{''.join(candle_shapes)}{pivot_line}
@@ -603,6 +628,7 @@ def _kline_chart(
         {''.join(candle_hitboxes)}
       </svg>
       <div class="chart-tooltip" aria-live="polite" hidden></div>
+      <small class="chart-zoom-hint">Pinch or scroll on the chart to zoom time. Double-click resets.</small>
       <div class="chart-legend"><span class="support-key">Support zone</span><span class="resistance-key">Resistance zone</span><span class="cost-key">Average cost</span><span class="wave-key">Active wave</span><span>Volume</span></div>
     </section>"""
 
@@ -1358,12 +1384,12 @@ def build_dashboard(
               data-sort-recent="{float(recent_momentum or 0):.6f}"
               data-sort-confidence="{confidence_sort:.6f}"
               data-sort-signal="{signal_rank}">
-              <span class="holding-identity" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong></span>
-              <span class="today-pill {today_return_class}"><b>{_optional_percent(today_return)}</b><small>{_signed_compact_money(today_dollars)}</small>{mini_sparkline}</span>
-              <span class="holding-current {today_return_class}"><b>${display_price:,.2f}</b></span>
-              <span class="{display_return_class}"><b>{_optional_percent(display_unrealized_return)}</b></span>
-              <span><b>{_percent(record.get("portfolio_weight"))}</b></span>
-              <span class="decision-signal {signal_class}" title="{html.escape(signal_source)}"><strong>{signal_label}</strong><b>{signal_percent}</b></span>
+              <span class="holding-identity" data-label="Symbol" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong></span>
+              <span class="today-pill {today_return_class}" data-label="Today"><b>{_signed_compact_money(today_dollars)}</b><small>{_optional_percent(today_return)}</small>{mini_sparkline}</span>
+              <span class="holding-current {today_return_class}" data-label="Price"><b>${display_price:,.2f}</b></span>
+              <span class="{display_return_class}" data-label="Gain"><b>{_optional_percent(display_unrealized_return)}</b></span>
+              <span data-label="Portfolio"><b>{_percent(record.get("portfolio_weight"))}</b></span>
+              <span class="decision-signal {signal_class}" data-label="Prediction" title="{html.escape(signal_source)}"><strong>{signal_label}</strong><b>{signal_percent}</b></span>
             </button>"""
         )
         board_rows[signal_label].append(
@@ -1461,7 +1487,7 @@ def build_dashboard(
         <div><small>Your holdings</small><h3>Portfolio</h3></div>
         <label>Sort
           <select id="portfolio-sort" aria-label="Sort portfolio holdings">
-            <option value="today-desc" selected>Today return $/%</option>
+            <option value="today-desc" selected>Today return</option>
             <option value="value-desc">Market value</option>
             <option value="gain-desc">Total return %</option>
             <option value="gain-dollars-desc">Total return $</option>
@@ -1474,7 +1500,7 @@ def build_dashboard(
         </label>
       </div>
       <div class="portfolio-holdings-header" aria-hidden="true">
-        <span>Symbol</span><span>Today $/%</span><span>Current price</span>
+        <span>Symbol</span><span>Today return</span><span>Current price</span>
         <span>Gain %</span><span>Portfolio %</span><span>Prediction</span>
       </div>
       <div class="portfolio-holdings-list" data-portfolio-holdings>
@@ -1810,7 +1836,7 @@ def build_dashboard(
 :root {{ --bg:#000; --panel:#0b0b0b; --panel-raised:#121212; --muted:#8c8c8c; --text:#f5f5f5;
 --line:#252525; --red:#ff5a5f; --amber:#f5b642; --blue:#a6a6a6; --green:#00c805; --green-dim:#003b12; }}
 * {{ box-sizing:border-box }} body {{ margin:0; background:var(--bg);
-color:var(--text); font:15px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif }}
+color:var(--text); font:15px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",Inter,ui-sans-serif,system-ui,sans-serif; font-variant-numeric:tabular-nums }}
 main {{ max-width:1480px; margin:auto; padding:24px 18px 70px }}
 h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::after {{ color:var(--green); content:"."; }}
 .sub {{ color:var(--muted); margin:5px 0 28px }}
@@ -1831,7 +1857,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
-.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:72px 150px 112px 72px 82px 118px; gap:12px; align-items:center }}
+.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:72px 154px 112px 72px 82px 118px; gap:12px; align-items:center }}
 .portfolio-holdings-header {{ background:#080808; border-bottom:1px solid var(--line); color:var(--muted); font-size:9px; font-weight:800; letter-spacing:.28px; padding:5px 10px; text-transform:uppercase }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ display:grid }}
@@ -1839,9 +1865,10 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
 .portfolio-holding-card strong {{ font-size:16px }} .portfolio-holding-card small {{ color:var(--muted); display:block; font-size:10px; line-height:1.1 }} .portfolio-holding-card b {{ display:block; font-size:13px; white-space:nowrap }}
 .portfolio-holding-card>span {{ min-width:0; white-space:nowrap }}
-.holding-current b {{ font-size:16px; font-weight:850; letter-spacing:-.25px }} .holding-current.positive b {{ color:var(--green) }} .holding-current.negative b {{ color:var(--red) }}
+.portfolio-holding-card>span::before {{ color:var(--muted); content:attr(data-label); display:none; font-size:9px; font-weight:700; letter-spacing:.18px; margin-bottom:2px }}
+.holding-current b {{ font-size:17px; font-weight:850; letter-spacing:-.25px }} .holding-current.positive b {{ color:var(--green) }} .holding-current.negative b {{ color:var(--red) }}
 .holding-return.positive b,.positive b {{ color:var(--green) }} .holding-return.negative b,.negative b {{ color:var(--red) }}
-.today-pill {{ align-items:center; border:1px solid #333; border-radius:9px; display:grid; gap:1px 7px; grid-template-columns:50px 76px; padding:5px 6px }}
+.today-pill {{ align-items:center; border:1px solid #333; border-radius:9px; display:grid; gap:1px 7px; grid-template-columns:58px 76px; padding:5px 6px }}
 .today-pill.positive {{ background:rgba(0,200,5,.12); border-color:#006b24; color:var(--green) }} .today-pill.negative {{ background:rgba(255,90,95,.14); border-color:#733035; color:var(--red) }}
 .today-pill b {{ font-size:13px; text-align:right }} .today-pill small {{ color:currentColor; font-size:10px; grid-column:1; opacity:.9; text-align:right }}
 .mini-sparkline {{ display:block; height:22px; width:70px }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2 }}
@@ -1921,7 +1948,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .kline-chart-card {{ background:#0b0b0b; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; padding:13px; position:relative }}
 .chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ font-size:17px; margin:1px 0 0 }}
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
-.kline-chart {{ display:block; height:auto; overflow:visible; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
+.kline-chart {{ display:block; height:auto; overflow:visible; touch-action:none; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
 .support-zone {{ fill:rgba(0,200,5,.14); stroke:rgba(0,200,5,.42); stroke-width:.8 }} .resistance-zone {{ fill:rgba(255,90,95,.25); stroke:rgba(255,90,95,.72); stroke-width:1.1 }} .upper-resistance-zone {{ fill:rgba(255,90,95,.16); stroke:rgba(255,90,95,.8); stroke-dasharray:5 4; stroke-width:1.1 }}
 .zone-label {{ fill:#ddd; font-size:8px; font-weight:850; paint-order:stroke; stroke:#050505; stroke-width:1.5px; text-transform:uppercase }} .pressure-label {{ fill:var(--red) }} .support-label {{ fill:var(--green) }}
 .zone-label-bg.pressure-label {{ fill:rgba(60,15,18,.86); stroke:rgba(255,90,95,.5) }} .zone-label-bg.support-label {{ fill:rgba(0,45,14,.86); stroke:rgba(0,200,5,.45) }}
@@ -1929,14 +1956,14 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .target-zone.buy {{ fill:rgba(0,200,5,.22); stroke:var(--green); stroke-width:1 }} .target-zone.sell {{ fill:rgba(255,90,95,.22); stroke:var(--red); stroke-width:1 }} .target-zone.breakout {{ fill:rgba(0,200,5,.16); stroke:var(--green); stroke-dasharray:5 3; stroke-width:1.4 }}
 .target-mid {{ stroke-width:1.7; stroke-dasharray:4 3 }} .target-mid.buy {{ stroke:var(--green) }} .target-mid.sell {{ stroke:var(--red) }} .target-mid.breakout {{ stroke:var(--green) }}
 .target-label-bg.buy {{ fill:#006b22 }} .target-label-bg.sell {{ fill:#8b252a }} .target-label-bg.breakout {{ fill:#006b22 }} .target-label {{ fill:#fff; font-size:8px; font-weight:800 }}
-.average-cost-line {{ stroke:#e6e6e6; stroke-width:1.2; stroke-dasharray:3 3; opacity:.85 }} .average-cost-label {{ fill:#e6e6e6; font-size:8px; font-weight:800 }}
+.average-cost-line {{ stroke:#e6e6e6; stroke-width:1.2; stroke-dasharray:3 3; opacity:.85 }} .average-cost-label {{ fill:#e6e6e6; font-size:8px; font-weight:800 }} .average-cost-offscreen {{ fill:#bfbfbf; opacity:.95 }}
 .up-candle {{ fill:var(--green); stroke:var(--green); stroke-width:1 }} .down-candle {{ fill:var(--red); stroke:var(--red); stroke-width:1 }} .volume {{ opacity:.22; stroke:none }}
 .active-wave {{ fill:none; stroke-width:2.2; stroke-dasharray:5 3 }} .active-wave.buy,.pivot-point.buy {{ stroke:var(--green); fill:var(--green) }} .active-wave.sell,.pivot-point.sell {{ stroke:var(--red); fill:var(--red) }} .active-wave.wait,.pivot-point.wait {{ stroke:var(--amber); fill:var(--amber) }}
 .candle-hitbox {{ cursor:crosshair; fill:transparent; outline:none }} .candle-hitbox:focus {{ stroke:#fff; stroke-opacity:.35; stroke-width:1 }}
 .chart-crosshair {{ display:none; pointer-events:none; stroke:#e6e6e6; stroke-dasharray:3 3; stroke-width:.9; opacity:.7 }} .chart-crosshair.active {{ display:block }}
 .chart-tooltip {{ background:#050505; border:1px solid #555; border-radius:8px; box-shadow:0 10px 28px rgba(0,0,0,.45); color:var(--text); font-size:11px; left:12px; min-width:190px; padding:8px 10px; pointer-events:none; position:absolute; top:50px; z-index:4 }}
 .chart-tooltip b,.chart-tooltip span {{ display:block }} .chart-tooltip span {{ color:var(--muted); margin-top:2px }}
-.volume-divider {{ stroke:#333; stroke-width:1 }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
+.volume-divider {{ stroke:#333; stroke-width:1 }} .chart-zoom-hint {{ color:var(--muted); display:block; font-size:10px; margin:4px 0 5px }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
 .chart-legend .support-key::before {{ background:var(--green) }} .chart-legend .resistance-key::before {{ background:var(--red) }} .chart-legend .wave-key::before {{ background:var(--amber) }} .chart-legend .cost-key::before {{ background:#e6e6e6 }}
 .chart-unavailable {{ background:#111; border-radius:7px; color:var(--muted); margin-bottom:12px; padding:18px }}
 .advanced-details {{ border-top:1px solid var(--line); margin-top:12px; padding-top:8px }} .advanced-details summary {{ color:var(--muted); cursor:pointer; font-weight:650; padding:8px 0 }} .advanced-details[open] summary {{ color:var(--text) }}
@@ -1954,8 +1981,11 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; padding:9px; border-bottom:1px solid var(--line) }} th {{ color:var(--green); font-size:12px; letter-spacing:.25px }}
 .note {{ color:var(--muted); font-size:13px }} @media(min-width:1320px) {{
   .portfolio-holdings-header {{ display:none }}
-  .portfolio-holdings-list {{ background:var(--line); gap:1px; grid-template-columns:repeat(2,minmax(0,1fr)) }}
-  .portfolio-holding-card {{ background:#050505; border-bottom:0; min-height:54px }}
+  .portfolio-holdings-list {{ background:transparent; column-gap:18px; grid-template-columns:repeat(2,minmax(0,1fr)); position:relative; row-gap:0 }}
+  .portfolio-holdings-list::before {{ background:var(--line); bottom:0; content:""; left:50%; position:absolute; top:0; width:1px }}
+  .portfolio-holding-card {{ background:#050505; border-bottom:1px solid var(--line); min-height:64px; padding:10px 14px }}
+  .portfolio-holding-card>span::before {{ display:block }}
+  .today-pill::before {{ grid-column:1 / -1; text-align:left }}
 }} @media(max-width:900px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
@@ -2144,6 +2174,32 @@ document.querySelectorAll(".kline-chart-card").forEach((card) => {{
   const hitboxes = [...card.querySelectorAll(".candle-hitbox")];
   if (!svg || !tooltip || !vertical || !horizontal || hitboxes.length === 0) return;
   const viewBox = svg.viewBox.baseVal;
+  const baseViewBox = {{ x: viewBox.x, y: viewBox.y, width: viewBox.width, height: viewBox.height }};
+  let zoomLevel = 1;
+  const applyViewBox = (nextX, nextWidth) => {{
+    svg.setAttribute("viewBox", `${{nextX.toFixed(1)}} ${{baseViewBox.y.toFixed(1)}} ${{nextWidth.toFixed(1)}} ${{baseViewBox.height.toFixed(1)}}`);
+  }};
+  const resetZoom = () => {{
+    zoomLevel = 1;
+    applyViewBox(baseViewBox.x, baseViewBox.width);
+  }};
+  card.addEventListener("wheel", (event) => {{
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width) return;
+    event.preventDefault();
+    const oldWidth = svg.viewBox.baseVal.width || baseViewBox.width;
+    const oldX = svg.viewBox.baseVal.x || baseViewBox.x;
+    const pointerRatio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const direction = event.deltaY > 0 ? -1 : 1;
+    zoomLevel = Math.min(4, Math.max(1, zoomLevel + direction * 0.22));
+    const nextWidth = baseViewBox.width / zoomLevel;
+    const pointerValue = oldX + oldWidth * pointerRatio;
+    const minX = baseViewBox.x;
+    const maxX = baseViewBox.x + baseViewBox.width - nextWidth;
+    const nextX = Math.min(maxX, Math.max(minX, pointerValue - nextWidth * pointerRatio));
+    applyViewBox(nextX, nextWidth);
+  }}, {{ passive:false }});
+  card.addEventListener("dblclick", resetZoom);
   const showPoint = (hitbox) => {{
     const x = Number(hitbox.dataset.x);
     const y = Number(hitbox.dataset.closeY);
@@ -2156,8 +2212,9 @@ document.querySelectorAll(".kline-chart-card").forEach((card) => {{
     tooltip.hidden = false;
     tooltip.innerHTML = `<b>${{hitbox.dataset.date}}</b><span>O ${{hitbox.dataset.open}} · H ${{hitbox.dataset.high}} · L ${{hitbox.dataset.low}}</span><span>C ${{hitbox.dataset.close}} · Vol ${{hitbox.dataset.volume}}</span>`;
     const rect = svg.getBoundingClientRect();
-    const left = Math.min(Math.max((x / viewBox.width) * rect.width + 10, 8), Math.max(8, rect.width - 215));
-    const top = Math.min(Math.max((y / viewBox.height) * rect.height - 58, 8), Math.max(8, rect.height - 82));
+    const currentBox = svg.viewBox.baseVal;
+    const left = Math.min(Math.max(((x - currentBox.x) / currentBox.width) * rect.width + 10, 8), Math.max(8, rect.width - 215));
+    const top = Math.min(Math.max(((y - currentBox.y) / currentBox.height) * rect.height - 58, 8), Math.max(8, rect.height - 82));
     tooltip.style.left = `${{left}}px`;
     tooltip.style.top = `${{top}}px`;
   }};

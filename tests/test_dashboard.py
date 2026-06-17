@@ -53,6 +53,38 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('class="chart-tooltip"', page)
         self.assertIn('Pressure $125.00–$128.00', page)
         self.assertIn('class="zone-label pressure-label"', page)
+        self.assertIn("Pinch or scroll on the chart to zoom time", page)
+
+    def test_kline_chart_keeps_far_cost_basis_out_of_price_scale(self):
+        history = [
+            Price(
+                date=date(2026, 1, 1) + timedelta(days=index),
+                open=100 + index * 0.2,
+                high=102 + index * 0.2,
+                low=99 + index * 0.2,
+                close=101 + index * 0.2,
+                volume=1_000_000,
+            )
+            for index in range(35)
+        ]
+        page = _kline_chart(
+            history,
+            {
+                "support_zone_low": 98,
+                "support_zone_high": 100,
+                "resistance_zone_low": 107,
+                "resistance_zone_high": 110,
+                "latest_close": 108,
+            },
+            "SELL",
+            "sell",
+            0.64,
+            {"low": 107, "high": 110, "midpoint": 108.5, "plan_class": "sell", "label": "Sell zone"},
+            average_cost=19.77,
+        )
+        self.assertIn("Avg cost $19.77 below chart", page)
+        self.assertIn("average-cost-offscreen", page)
+        self.assertNotIn('class="average-cost-line"', page)
 
     def test_price_plan_uses_structural_zone_and_refuses_wait(self):
         wave = {
@@ -309,10 +341,13 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("$1,050.00", page)
         self.assertIn("+$150.00", page)
         self.assertIn("16.7%", page)
-        self.assertIn('value="today-desc" selected>Today return $/%</option>', page)
+        self.assertIn('value="today-desc" selected>Today return</option>', page)
         self.assertIn('class="today-pill positive"', page)
+        self.assertIn('data-label="Today"><b>+$50</b><small>5.0%</small>', page)
+        self.assertIn('data-label="Price"><b>$105.00</b>', page)
         self.assertIn('class="mini-sparkline', page)
         self.assertIn("<span>Portfolio %</span><span>Prediction</span>", page)
+        self.assertIn("<div><small>Shares</small><b>10</b></div>", page)
         self.assertNotIn("<span>More</span>", page)
 
     def test_dashboard_does_not_blend_evidence_across_model_versions(self):
