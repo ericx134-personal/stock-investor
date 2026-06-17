@@ -209,7 +209,8 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Market value", page)
         self.assertIn("Total return %", page)
         self.assertIn("12-1 momentum", page)
-        self.assertIn("Next pressure", page)
+        self.assertIn("Pressure", page)
+        self.assertIn("Today return", page)
         self.assertIn("sortHoldings", page)
         self.assertIn('class="portfolio-pulse"', page)
         self.assertIn("Model health", page)
@@ -244,6 +245,48 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("<strong>WAIT</strong><b>--</b>", page)
         self.assertIn("no wave analog", page)
         self.assertNotIn("Prioritized Signals", page)
+
+    def test_dashboard_uses_latest_quote_overlay_for_front_page_price(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            alerts = root / "alerts.jsonl"
+            alerts.write_text(
+                json.dumps(
+                    {
+                        "symbol": "ABC",
+                        "shares": 10,
+                        "average_cost": 90,
+                        "cost_basis": 900,
+                        "market_value": 1000,
+                        "portfolio_weight": 0.2,
+                        "latest_close": 100,
+                        "unrealized_return": 0.111111,
+                        "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                        "technicals": {"return_12_to_1": 0.25},
+                    }
+                )
+                + "\n"
+            )
+            quotes = root / "latest-quotes.json"
+            quotes.write_text(
+                json.dumps(
+                    {
+                        "ABC": {
+                            "price": 105,
+                            "previous_close": 100,
+                            "today_return": 0.05,
+                            "source": "test quote",
+                        }
+                    }
+                )
+            )
+            page = build_dashboard(alerts, latest_quotes_path=quotes)
+        self.assertIn("$105.00", page)
+        self.assertIn("5.0%", page)
+        self.assertIn("$1,050.00", page)
+        self.assertIn("+$150.00", page)
+        self.assertIn("16.7%", page)
+        self.assertIn('value="today-desc">Today return</option>', page)
 
     def test_dashboard_does_not_blend_evidence_across_model_versions(self):
         with tempfile.TemporaryDirectory() as directory:

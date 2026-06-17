@@ -103,6 +103,56 @@ def fetch_yahoo_daily_bars(
     return prices
 
 
+def fetch_yahoo_latest_quotes(
+    symbols: list[str],
+    *,
+    transport: Transport = _request_json,
+) -> dict[str, dict]:
+    """Fetch no-credential latest quote metadata from Yahoo's chart endpoint."""
+    quotes: dict[str, dict] = {}
+    for symbol in sorted(set(item.strip().upper() for item in symbols if item.strip())):
+        payload = transport(
+            f"{BASE_URL}/{symbol}?range=1d&interval=1m&includePrePost=true"
+        )
+        chart = payload.get("chart", {})
+        error = chart.get("error")
+        if error:
+            raise YahooChartError(
+                str(error.get("code") or "chart_error"),
+                str(error.get("description") or ""),
+            )
+        result = (chart.get("result") or [None])[0]
+        if not result:
+            continue
+        meta = result.get("meta", {})
+        price = meta.get("regularMarketPrice")
+        previous_close = meta.get("chartPreviousClose", meta.get("previousClose"))
+        if price is None:
+            closes = (
+                (result.get("indicators", {}).get("quote") or [{}])[0].get("close")
+                or []
+            )
+            price = next((value for value in reversed(closes) if value is not None), None)
+        if price is None or float(price) <= 0:
+            continue
+        today_return = (
+            float(price) / float(previous_close) - 1
+            if previous_close is not None and float(previous_close) > 0
+            else None
+        )
+        quotes[symbol] = {
+            "symbol": symbol,
+            "price": float(price),
+            "previous_close": float(previous_close) if previous_close is not None else None,
+            "today_return": today_return,
+            "regular_market_time": meta.get("regularMarketTime"),
+            "exchange_timezone": meta.get("exchangeTimezoneName"),
+            "source": "Yahoo Finance chart quote",
+            "source_confidence": "DECLARED",
+        }
+    return quotes
+
+
 def _fetch_symbol_history(
     symbol: str,
     query: str,

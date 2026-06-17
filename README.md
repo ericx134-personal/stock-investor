@@ -363,9 +363,12 @@ and do not require credentials. A private runtime file at
 needed for optional settings such as archive retention.
 
 macOS privacy controls prevent background LaunchAgents from reliably reading
-`Documents`, so the installer creates a private operational copy under
-`~/Library/Application Support/stock-investor`. Re-run the installer after
-manually changing portfolio inputs or application code.
+`Documents`, so the installer keeps private runtime data under
+`~/Library/Application Support/stock-investor`. The repo remains the source of
+truth for code: the installer records the repo path in `.source-root`, and the
+scheduled refresh self-syncs application code from that repo before generating
+the dashboard. Re-run the installer only after moving the repo or changing
+LaunchAgent templates, not after ordinary code edits.
 
 The refresh service fetches two years of daily bars through Yahoo Finance chart
 data, merges those bars with the existing price file so unsupported or delisted

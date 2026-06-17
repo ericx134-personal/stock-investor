@@ -165,6 +165,13 @@ def _signed_money(value: float | None) -> str:
     return f"{sign}${abs(value):,.2f}"
 
 
+def _latest_daily_return(history: list[Price]) -> float | None:
+    closes = [float(item.close) for item in history if item.close is not None]
+    if len(closes) < 2 or closes[-2] <= 0:
+        return None
+    return closes[-1] / closes[-2] - 1
+
+
 def _holding_stage(record: dict) -> tuple[str, str]:
     shares = float(record.get("shares") or 0)
     unrealized = record.get("unrealized_return")
@@ -755,6 +762,7 @@ def build_dashboard(
     model_health_path: str | Path | None = None,
     price_health_path: str | Path | None = None,
     prices_path: str | Path | None = None,
+    latest_quotes_path: str | Path | None = None,
 ) -> str:
     records = _latest_by_symbol(_load_jsonl(alerts_path))
     diagnostic = analyze_alert_burden(records)
@@ -803,6 +811,11 @@ def build_dashboard(
     chart_prices = (
         load_prices(prices_path)
         if prices_path and Path(prices_path).exists()
+        else {}
+    )
+    latest_quotes = (
+        json.loads(Path(latest_quotes_path).read_text())
+        if latest_quotes_path and Path(latest_quotes_path).exists()
         else {}
     )
     wave_scorecard = (
@@ -1104,9 +1117,38 @@ def build_dashboard(
             else '<div class="kline">Full K-line OHLCV evidence unavailable.</div>'
         )
         detail_id = f"holding-detail-{index}"
-        market_value = float(record.get("market_value") or 0)
-        gain_dollars = _unrealized_dollars(record)
+        quote = latest_quotes.get(str(record.get("symbol", "")).upper(), {})
+        display_price = float(quote.get("price") or record.get("latest_close") or 0)
+        shares = float(record.get("shares") or 0)
+        market_value = shares * display_price if shares > 0 else float(record.get("market_value") or 0)
+        gain_dollars = (
+            market_value - float(record.get("cost_basis"))
+            if record.get("cost_basis") is not None
+            else _unrealized_dollars(record)
+        )
+        display_unrealized_return = (
+            gain_dollars / float(record.get("cost_basis"))
+            if gain_dollars is not None
+            and record.get("cost_basis") is not None
+            and float(record.get("cost_basis")) > 0
+            else unrealized_return
+        )
+        display_return_class = (
+            "positive"
+            if display_unrealized_return is not None
+            and float(display_unrealized_return) >= 0
+            else "negative"
+        )
         recent_momentum = technicals.get("return_12_to_1")
+        symbol_history = chart_prices.get(record.get("symbol", ""), [])
+        today_return = quote.get("today_return")
+        if today_return is None:
+            today_return = _latest_daily_return(symbol_history)
+        today_return_class = (
+            "positive"
+            if today_return is not None and float(today_return) >= 0
+            else "negative"
+        )
         confidence_sort = float(signal_probability or 0)
         signal_rank = {"BUY": 3, "SELL": 2, "WAIT": 1}.get(signal_label, 0)
         signal_source = "no promoted analog"
@@ -1139,21 +1181,26 @@ def build_dashboard(
             <button type="button" class="portfolio-holding-card signal-{signal_class}" data-detail-target="{detail_id}"
               data-sort-symbol="{html.escape(str(record.get("symbol", "")))}"
               data-sort-value="{market_value:.6f}"
-              data-sort-gain="{float(unrealized_return or 0):.6f}"
+              data-sort-gain="{float(display_unrealized_return or 0):.6f}"
               data-sort-gain-dollars="{float(gain_dollars or 0):.6f}"
+              data-sort-today="{float(today_return or 0):.6f}"
               data-sort-weight="{float(record.get("portfolio_weight") or 0):.6f}"
               data-sort-recent="{float(recent_momentum or 0):.6f}"
               data-sort-confidence="{confidence_sort:.6f}"
               data-sort-signal="{signal_rank}">
-              <span class="holding-identity"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
-              <span class="holding-value"><b>${market_value:,.2f}</b><small>Close ${float(record.get("latest_close") or 0):,.2f}</small></span>
-              <span class="holding-return {return_class}"><b>{_signed_money(gain_dollars)}</b><small>{_optional_percent(unrealized_return)} total</small></span>
-              <span class="decision-signal {signal_class}"><strong>{signal_label}</strong><b>{signal_percent}</b><small>{html.escape(signal_source)}</small></span>
-              <span class="holding-mini"><small>Avg cost</small><b>{_optional_money(record.get("average_cost"))}</b></span>
-              <span class="holding-mini"><small>Weight</small><b>{_percent(record.get("portfolio_weight"))}</b></span>
-              <span class="holding-mini"><small>12-1 momentum</small><b>{_optional_percent(recent_momentum)}</b></span>
-              <span class="holding-mini pressure-mini"><small>Next pressure</small><b>{pressure_summary}</b></span>
-              <span class="holding-mini"><small>Support</small><b>{support_summary}</b></span>
+              <span class="holding-identity" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong></span>
+              <span class="decision-signal {signal_class}" title="{html.escape(signal_source)}"><strong>{signal_label}</strong><b>{signal_percent}</b></span>
+              <span class="holding-current"><b>${display_price:,.2f}</b></span>
+              <span class="{today_return_class}"><b>{_optional_percent(today_return)}</b></span>
+              <span><b>${market_value:,.2f}</b></span>
+              <span><b>{_optional_money(record.get("average_cost"))}</b></span>
+              <span><b>{_optional_number(record.get("shares"))}</b></span>
+              <span class="{display_return_class}"><b>{_signed_money(gain_dollars)}</b></span>
+              <span class="{display_return_class}"><b>{_optional_percent(display_unrealized_return)}</b></span>
+              <span><b>{_percent(record.get("portfolio_weight"))}</b></span>
+              <span><b>{_optional_percent(recent_momentum)}</b></span>
+              <span class="pressure-mini"><b>{pressure_summary}</b></span>
+              <span><b>{support_summary}</b></span>
             </button>"""
         )
         board_rows[signal_label].append(
@@ -1252,6 +1299,7 @@ def build_dashboard(
         <label>Sort
           <select id="portfolio-sort" aria-label="Sort portfolio holdings">
             <option value="value-desc">Market value</option>
+            <option value="today-desc">Today return</option>
             <option value="gain-desc">Total return %</option>
             <option value="gain-dollars-desc">Total return $</option>
             <option value="recent-desc">12-1 momentum</option>
@@ -1261,6 +1309,11 @@ def build_dashboard(
             <option value="symbol-asc">Symbol A-Z</option>
           </select>
         </label>
+      </div>
+      <div class="portfolio-holdings-header" aria-hidden="true">
+        <span>Symbol</span><span>Prediction</span><span>Current price</span><span>Today</span>
+        <span>Value</span><span>Avg cost</span><span>Shares</span><span>Gain $</span>
+        <span>Gain %</span><span>Weight</span><span>12-1 mom <abbr class="inline-info" title="12-1 momentum means price performance from about 12 months ago to 1 month ago. It skips the most recent month so short-term noise does not dominate.">i</abbr></span><span>Pressure</span><span>Support</span>
       </div>
       <div class="portfolio-holdings-list" data-portfolio-holdings>
         {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
@@ -1596,7 +1649,7 @@ def build_dashboard(
 --line:#252525; --red:#ff5a5f; --amber:#f5b642; --blue:#a6a6a6; --green:#00c805; --green-dim:#003b12; }}
 * {{ box-sizing:border-box }} body {{ margin:0; background:var(--bg);
 color:var(--text); font:15px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif }}
-main {{ max-width:1240px; margin:auto; padding:34px 24px 80px }}
+main {{ max-width:1480px; margin:auto; padding:24px 18px 70px }}
 h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::after {{ color:var(--green); content:"."; }}
 .sub {{ color:var(--muted); margin:5px 0 28px }}
 .grid {{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:24px }}
@@ -1612,17 +1665,23 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-pulse div {{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 15px }}
 .portfolio-pulse small {{ color:var(--muted); display:block; font-size:10px; font-weight:800; letter-spacing:.4px; text-transform:uppercase }}
 .portfolio-pulse b {{ display:block; font-size:18px; margin-top:3px }} .portfolio-pulse span {{ color:var(--muted); display:block; font-size:12px; margin-top:3px }}
-.portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px 0 18px; overflow:hidden }}
+.portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:10px 0 16px; overflow:hidden }}
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
+.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:64px 118px 96px 66px 94px 76px 78px 88px 66px 58px 72px minmax(112px,1fr) minmax(112px,1fr); gap:7px; align-items:center }}
+.portfolio-holdings-header {{ background:#080808; border-bottom:1px solid var(--line); color:var(--muted); font-size:9px; font-weight:800; letter-spacing:.28px; padding:5px 10px; text-transform:uppercase }}
+.inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ display:grid }}
-.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; display:grid; font:inherit; gap:8px 14px; grid-template-columns:90px 1.05fr 1fr 142px; padding:14px 16px; text-align:left; width:100% }}
+.portfolio-holding-card {{ background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; font:inherit; min-height:38px; padding:5px 10px; text-align:left; width:100% }}
 .portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
-.portfolio-holding-card strong {{ font-size:20px }} .portfolio-holding-card small {{ color:var(--muted); display:block; font-size:11px }} .portfolio-holding-card b {{ display:block; white-space:nowrap }}
-.holding-value b,.holding-return b {{ font-size:17px }} .holding-return.positive b {{ color:var(--green) }} .holding-return.negative b {{ color:var(--red) }}
-.portfolio-holding-card .decision-signal {{ grid-row:span 2; padding:8px 10px }} .portfolio-holding-card .decision-signal strong {{ font-size:12px }} .portfolio-holding-card .decision-signal b {{ font-size:18px }}
-.holding-mini {{ background:#0d0d0d; border-radius:8px; min-width:0; padding:8px 9px }} .holding-mini b {{ font-size:12px; overflow:hidden; text-overflow:ellipsis }}
+.portfolio-holding-card strong {{ font-size:16px }} .portfolio-holding-card small {{ color:var(--muted); display:block; font-size:9px; line-height:1.1 }} .portfolio-holding-card b {{ display:block; font-size:11.5px; white-space:nowrap }}
+.portfolio-holding-card>span {{ min-width:0; white-space:nowrap }}
+.holding-current b {{ color:var(--text); font-size:18px; font-weight:850; letter-spacing:-.35px }}
+.holding-return.positive b,.positive b {{ color:var(--green) }} .holding-return.negative b,.negative b {{ color:var(--red) }}
+.portfolio-holding-card .decision-signal {{ align-items:center; border-radius:6px; display:grid; grid-template-columns:auto 1fr; padding:4px 6px }} .portfolio-holding-card .decision-signal strong {{ font-size:10px }} .portfolio-holding-card .decision-signal b {{ font-size:14px }}
+.portfolio-holding-card .decision-signal small {{ font-size:8.5px; line-height:1.1 }}
+.holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
 .pressure-mini b {{ color:var(--red) }}
 .priority-board-panel {{ margin-top:16px }} .priority-board-panel>summary {{ align-items:center; background:#0b0b0b; border:1px solid var(--line); border-radius:10px; cursor:pointer; display:flex; justify-content:space-between; list-style:none; padding:13px 15px }}
 .priority-board-panel>summary::-webkit-details-marker {{ display:none }} .priority-board-panel>summary span {{ color:var(--text); font-weight:800 }} .priority-board-panel>summary small {{ color:var(--muted) }}
@@ -1860,6 +1919,7 @@ const sortHoldings = () => {{
   const [field, direction] = portfolioSort.value.split("-");
   const datasetKey = {{
     value: "sortValue",
+    today: "sortToday",
     gain: "sortGain",
     "gain-dollars": "sortGainDollars",
     recent: "sortRecent",

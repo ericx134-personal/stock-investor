@@ -49,7 +49,11 @@ from .monitor import run_monitor, write_alert_history, write_monitor_snapshot
 from .providers.alpaca import fetch_daily_bars, write_prices_csv
 from .providers.robinhood import extract_historicals_from_session, load_historical_response
 from .providers.sec import fetch_company_facts, fetch_submissions, fetch_ticker_ciks
-from .providers.yahoo import fetch_yahoo_daily_bars, merge_price_histories
+from .providers.yahoo import (
+    fetch_yahoo_daily_bars,
+    fetch_yahoo_latest_quotes,
+    merge_price_histories,
+)
 from .refresh import refresh_lock, run_refresh, validate_production_refresh
 from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk_history
 from .robinhood import (
@@ -270,6 +274,22 @@ def _fetch_yahoo(
             flush=True,
         )
     print(f"Wrote {sum(map(len, prices.values()))} Yahoo daily bars to {output_path}")
+    return 0
+
+
+def _fetch_yahoo_quotes(
+    positions_path: str,
+    output_path: str,
+    extra_symbols: tuple[str, ...] = (),
+) -> int:
+    symbols = [position.symbol for position in load_positions(positions_path)]
+    symbols.extend(symbol.upper() for symbol in extra_symbols if symbol)
+    quotes = fetch_yahoo_latest_quotes(symbols)
+    atomic_write_text(json.dumps(quotes, indent=2, sort_keys=True) + "\n", output_path)
+    missing = sorted(set(symbols) - set(quotes))
+    if missing:
+        print("Yahoo missing latest quotes for: " + ", ".join(missing), flush=True)
+    print(f"Wrote {len(quotes)} Yahoo latest quotes to {output_path}")
     return 0
 
 
@@ -723,6 +743,7 @@ def _dashboard(
     model_health_path: str | None,
     price_health_path: str | None,
     prices_path: str | None,
+    latest_quotes_path: str | None,
 ) -> int:
     write_dashboard(
         build_dashboard(
@@ -744,6 +765,7 @@ def _dashboard(
             model_health_path=model_health_path,
             price_health_path=price_health_path,
             prices_path=prices_path,
+            latest_quotes_path=latest_quotes_path,
         ),
         output_path,
     )
@@ -766,6 +788,7 @@ def _refresh(
     benchmark_symbol: str | None,
     episode_sessions: int,
     price_source: str | None,
+    latest_quotes_path: str | None,
     price_adjustment: str | None,
     production_safe: bool,
 ) -> int:
@@ -795,6 +818,7 @@ def _refresh(
             benchmark_symbol=benchmark_symbol,
             episode_sessions=episode_sessions,
             price_source=price_source,
+            latest_quotes_path=latest_quotes_path,
             price_adjustment=price_adjustment,
         )
     print(
@@ -860,6 +884,13 @@ def main() -> int:
     )
     yahoo_parser.add_argument("--extra-symbol", action="append", default=[])
     yahoo_parser.add_argument("--merge-existing")
+
+    yahoo_quotes_parser = subparsers.add_parser(
+        "fetch-yahoo-quotes", help="fetch latest no-credential quotes from Yahoo chart data"
+    )
+    yahoo_quotes_parser.add_argument("positions")
+    yahoo_quotes_parser.add_argument("output")
+    yahoo_quotes_parser.add_argument("--extra-symbol", action="append", default=[])
 
     daily_parser = subparsers.add_parser(
         "daily", help="fetch prices, monitor, and persist actionable alerts"
@@ -1062,6 +1093,7 @@ def main() -> int:
     dashboard_parser.add_argument("--model-health")
     dashboard_parser.add_argument("--price-health")
     dashboard_parser.add_argument("--prices")
+    dashboard_parser.add_argument("--latest-quotes")
 
     refresh_parser = subparsers.add_parser(
         "refresh",
@@ -1085,6 +1117,7 @@ def main() -> int:
     refresh_parser.add_argument("--benchmark", default="SPY")
     refresh_parser.add_argument("--episode-sessions", type=int, default=21)
     refresh_parser.add_argument("--price-source")
+    refresh_parser.add_argument("--latest-quotes")
     refresh_parser.add_argument(
         "--price-adjustment",
         choices=("unknown", "none", "split", "all"),
@@ -1124,6 +1157,12 @@ def main() -> int:
             args.end,
             tuple(args.extra_symbol),
             args.merge_existing,
+        )
+    if args.command == "fetch-yahoo-quotes":
+        return _fetch_yahoo_quotes(
+            args.positions,
+            args.output,
+            tuple(args.extra_symbol or ()),
         )
     if args.command == "daily":
         return _daily(
@@ -1246,6 +1285,7 @@ def main() -> int:
             args.model_health,
             args.price_health,
             args.prices,
+            args.latest_quotes,
         )
     if args.command == "refresh":
         return _refresh(
@@ -1263,6 +1303,7 @@ def main() -> int:
             args.benchmark,
             args.episode_sessions,
             args.price_source,
+            args.latest_quotes,
             args.price_adjustment,
             args.production_safe,
         )

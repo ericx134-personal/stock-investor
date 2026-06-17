@@ -193,6 +193,7 @@ def run_refresh(
     benchmark_symbol: str | None = "SPY",
     episode_sessions: int = 21,
     price_source: str | None = None,
+    latest_quotes_path: str | Path | None = None,
     price_adjustment: str | None = None,
 ) -> dict:
     """Refresh all read-only decision-support artifacts, writing the manifest last."""
@@ -501,6 +502,7 @@ def run_refresh(
             model_health_path=paths["model_health"],
             price_health_path=paths["price_health"],
             prices_path=prices_path,
+            latest_quotes_path=latest_quotes_path,
         ),
         paths["dashboard"],
     )

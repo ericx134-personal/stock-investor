@@ -943,3 +943,31 @@ rather than implying independent per-symbol precision.
 
 Decision rule: this is a comprehension and sorting surface only. It does not
 change model output, confidence calibration, or any trading action.
+
+## Latest Quote Overlay
+
+The dashboard now loads `data/private/latest-quotes.json` when available and
+uses it as a display-only overlay for current price and today's return. The
+background refresh script fetches these quotes from Yahoo Finance's chart quote
+endpoint without credentials, then still keeps historical model inputs on the
+daily OHLCV price file. This separates "what the user sees right now" from
+"what the model was trained and scored on."
+
+Decision rule: latest quotes may update visible current price, market value,
+today return, and unrealized gain/loss. They must not rewrite historical bars,
+change preserved forecasts, or create a trading action. Robinhood MCP read-only
+data can be added later as an optional foreground/manual source, but the macOS
+LaunchAgent refresh cannot depend on MCP session credentials. Credentialed
+providers should not be introduced without an explicit product reason and user
+approval.
+
+## 12-1 Momentum Display
+
+The compact holdings board exposes 12-1 momentum with an inline explanation:
+price performance from roughly 12 months ago to 1 month ago, intentionally
+skipping the most recent month so short-term reversal/noise does not dominate
+the signal.
+
+Decision rule: this is a broad cross-sectional context feature, not a standalone
+BUY/SELL trigger. It should be shown as supporting evidence beside wave zones,
+support/pressure, and calibrated forward outcomes.

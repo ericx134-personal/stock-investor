@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 from stock_investor.data import Price
 from stock_investor.providers.yahoo import (
     fetch_yahoo_daily_bars,
+    fetch_yahoo_latest_quotes,
     merge_price_histories,
 )
 
@@ -48,6 +49,37 @@ class YahooProviderTests(unittest.TestCase):
         self.assertEqual(query["interval"], ["1d"])
         self.assertEqual([item.close for item in prices["HOOD"]], [98.12, 96.17])
         self.assertEqual(prices["HOOD"][0].volume, 1000)
+
+    def test_fetch_latest_quotes_parses_chart_meta(self):
+        calls = []
+
+        def transport(url):
+            calls.append(url)
+            return {
+                "chart": {
+                    "result": [
+                        {
+                            "meta": {
+                                "regularMarketPrice": 101.5,
+                                "chartPreviousClose": 100.0,
+                                "regularMarketTime": 1780000000,
+                                "exchangeTimezoneName": "America/New_York",
+                            },
+                            "timestamp": [1780000000],
+                            "indicators": {"quote": [{"close": [101.5]}]},
+                        }
+                    ]
+                }
+            }
+
+        quotes = fetch_yahoo_latest_quotes(["HOOD"], transport=transport)
+        query = parse_qs(urlparse(calls[0]).query)
+        self.assertEqual(query["interval"], ["1m"])
+        self.assertEqual(query["range"], ["1d"])
+        self.assertEqual(quotes["HOOD"]["price"], 101.5)
+        self.assertEqual(quotes["HOOD"]["previous_close"], 100.0)
+        self.assertAlmostEqual(quotes["HOOD"]["today_return"], 0.015)
+        self.assertEqual(quotes["HOOD"]["source"], "Yahoo Finance chart quote")
 
     def test_fetch_daily_bars_normalizes_implausible_yahoo_envelopes(self):
         prices = fetch_yahoo_daily_bars(
