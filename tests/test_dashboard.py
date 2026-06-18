@@ -6,6 +6,7 @@ from pathlib import Path
 
 from stock_investor.dashboard import (
     _kline_chart,
+    _mini_sparkline,
     _next_resistance_zone,
     _price_plan,
     _professional_plan,
@@ -349,11 +350,13 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("16.7%", page)
         self.assertIn('value="today-desc" selected>Today return</option>', page)
         self.assertIn('class="today-pill positive"', page)
-        self.assertIn('data-label="Today %"><small>Today</small><b>+5.0%</b>', page)
+        self.assertIn('data-label="Today %"><b>+5.0%</b>', page)
+        self.assertNotIn('<small>Today</small>', page)
         self.assertIn('data-label="Today $"><b>+$50</b>', page)
         self.assertIn('data-label="Price"><small>Price</small><b>$105.00</b>', page)
         self.assertIn('data-label="Gain"><small>Total</small><b>+16.7%</b>', page)
         self.assertIn('<small>Prediction</small>', page)
+        self.assertIn('rel="icon"', page)
         self.assertIn('class="mini-sparkline', page)
         self.assertNotIn("<span>Today %</span><span>Today $</span>", page)
         self.assertNotIn("<span>Portfolio %</span><span>Prediction</span>", page)
@@ -871,6 +874,17 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Avg cost $100.00", page)
         self.assertIn('<details class="advanced-details">', page)
         self.assertNotIn('<details class="advanced-details" open>', page)
+
+    def test_mini_sparkline_uses_direction_color_and_previous_close_baseline(self):
+        history = [
+            Price(date=date(2026, 1, 1), close=100),
+            Price(date=date(2026, 1, 2), close=103),
+        ]
+        sparkline = _mini_sparkline([100, 101, 103], history, "positive")
+
+        self.assertIn('class="mini-sparkline positive"', sparkline)
+        self.assertIn('class="mini-sparkline-baseline"', sparkline)
+        self.assertIn("<polyline", sparkline)
 
     def test_poor_data_quality_blocks_kline_chart(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -101,7 +101,13 @@ def _mini_sparkline(
     if len(values) < 2:
         return '<svg class="mini-sparkline empty" viewBox="0 0 70 22" aria-hidden="true"></svg>'
     width, height, pad = 70, 22, 2
-    low, high = min(values), max(values)
+    previous_close = None
+    for item in reversed(fallback_history[:-1]):
+        if item.close is not None and float(item.close) > 0:
+            previous_close = float(item.close)
+            break
+    scale_values = values + ([previous_close] if previous_close is not None else [])
+    low, high = min(scale_values), max(scale_values)
     span = high - low or max(high * 0.01, 1)
     step = (width - pad * 2) / (len(values) - 1)
     coords = []
@@ -109,9 +115,16 @@ def _mini_sparkline(
         x = pad + index * step
         y = pad + (high - value) / span * (height - pad * 2)
         coords.append(f"{x:.1f},{y:.1f}")
+    baseline = ""
+    if previous_close is not None:
+        baseline_y = pad + (high - previous_close) / span * (height - pad * 2)
+        baseline = (
+            f'<line class="mini-sparkline-baseline" x1="{pad:.1f}" y1="{baseline_y:.1f}" '
+            f'x2="{width - pad:.1f}" y2="{baseline_y:.1f}"/>'
+        )
     return (
         f'<svg class="mini-sparkline {html.escape(css_class)}" viewBox="0 0 {width} {height}" '
-        'aria-hidden="true"><polyline points="'
+        f'aria-hidden="true">{baseline}<polyline points="'
         + " ".join(coords)
         + '"/></svg>'
     )
@@ -1450,7 +1463,7 @@ def build_dashboard(
               data-sort-signal="{signal_rank}">
               <span class="holding-identity" data-label="Symbol" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
               <span class="holding-spark" data-label="Trend">{mini_sparkline}</span>
-              <span class="today-pill {today_return_class}" data-label="Today %"><small>Today</small><b>{_optional_signed_percent(today_return)}</b></span>
+              <span class="today-pill {today_return_class}" data-label="Today %"><b>{_optional_signed_percent(today_return)}</b></span>
               <span class="holding-today-cash {today_return_class}" data-label="Today $"><b>{_signed_compact_money(today_dollars)}</b></span>
               <span class="holding-current {today_return_class}" data-label="Price"><small>Price</small><b>${display_price:,.2f}</b></span>
               <span class="{display_return_class}" data-label="Gain"><small>Total</small><b>{_optional_signed_percent(display_unrealized_return)}</b></span>
@@ -1894,6 +1907,7 @@ def build_dashboard(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23000000'/%3E%3Cpath d='M13 43 25 31l8 8 18-24' fill='none' stroke='%2300c805' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='51' cy='15' r='5' fill='%2300c805'/%3E%3C/svg%3E">
 <style>
 :root {{ --bg:#000; --panel:#0b0b0b; --panel-raised:#121212; --muted:#8c8c8c; --text:#f5f5f5;
 --line:#252525; --red:#ff5a5f; --amber:#f5b642; --blue:#a6a6a6; --green:#00c805; --green-dim:#003b12; }}
@@ -1931,11 +1945,10 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holding-spark {{ align-items:center; color:#79818a; display:flex; justify-content:center }}
 .holding-spark::after {{ content:none }}
 .holding-today-cash.positive b {{ color:var(--green) }} .holding-today-cash.negative b {{ color:var(--red) }}
-.today-pill {{ align-items:center; border:1px solid currentColor; border-radius:9px; display:flex; flex-direction:column; justify-content:center; min-height:38px; padding:4px 8px }}
+.today-pill {{ align-items:center; border:1px solid currentColor; border-radius:9px; display:flex; justify-content:center; min-height:38px; padding:4px 8px }}
 .today-pill.positive {{ background:var(--green); border-color:var(--green); color:#001f08 }} .today-pill.negative {{ background:#ff5000; border-color:#ff5000; color:#050505 }}
-.today-pill small {{ color:inherit; font-size:9px; margin:0; opacity:.68 }}
 .today-pill b {{ color:inherit; font-size:16px; font-weight:700; text-align:center }}
-.mini-sparkline {{ display:block; height:26px; width:70px }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }}
+.mini-sparkline {{ display:block; height:26px; width:70px }} .mini-sparkline.positive {{ color:var(--green) }} .mini-sparkline.negative {{ color:#ff5000 }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }} .mini-sparkline-baseline {{ stroke:#666; stroke-dasharray:2 3; stroke-linecap:round; stroke-width:1 }}
 .portfolio-holding-card .decision-signal {{ align-items:center; border-radius:7px; display:grid; grid-template-columns:auto 1fr; min-width:0; padding:5px 7px }} .portfolio-holding-card .decision-signal strong {{ font-size:10px }} .portfolio-holding-card .decision-signal b {{ font-size:13px }}
 .portfolio-holding-card .decision-signal small {{ font-size:8.5px; grid-column:1 / -1; line-height:1.1; margin:0 0 2px }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
@@ -2049,17 +2062,17 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .portfolio-holding-card>span::before {{ display:none }}
   .holding-today-cash,.portfolio-holding-card>span[data-label="Portfolio"] {{ display:none }}
 }} @media(max-width:1320px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 80px 82px 88px 78px; min-height:66px; padding:11px 14px }}
-  .portfolio-holding-card>span[data-label="Portfolio"],.portfolio-holding-card>span[data-label="Gain"],.portfolio-holding-card .decision-signal {{ display:none }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 80px 82px 88px 78px 78px; min-height:66px; padding:11px 14px }}
+  .holding-today-cash,.portfolio-holding-card>span[data-label="Portfolio"] {{ display:none }}
 }} @media(max-width:1080px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 86px 92px 82px; min-height:68px }}
-  .holding-today-cash {{ display:none }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 86px 92px 88px 78px; min-height:68px }}
+  .portfolio-holding-card .decision-signal {{ display:none }}
 }} @media(max-width:900px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
   .portfolio-pulse {{ grid-template-columns:1fr }}
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) minmax(110px,1.25fr) 112px; min-height:76px; padding:14px 12px }}
-  .holding-current,.holding-today-cash,.portfolio-holding-card>span[data-label="Gain"],.portfolio-holding-card>span[data-label="Portfolio"],.portfolio-holding-card .decision-signal {{ display:none }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) minmax(110px,1.25fr) 96px 92px; min-height:76px; padding:14px 12px }}
+  .holding-today-cash,.portfolio-holding-card>span[data-label="Gain"],.portfolio-holding-card>span[data-label="Portfolio"],.portfolio-holding-card .decision-signal {{ display:none }}
   .portfolio-holding-card>span::before {{ display:none }}
   .holding-spark .mini-sparkline {{ height:44px; width:92px }}
   .today-pill {{ justify-self:end; min-width:88px }}
@@ -2070,6 +2083,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
   .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }} .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) minmax(86px,1.05fr) 96px }}
+  .holding-current {{ display:none }}
   .portfolio-pulse {{ display:none }} .board-intro p {{ display:none }}
   .chart-range-tabs {{ gap:9px; justify-content:space-between }} .chart-range-tabs button {{ font-size:12px; padding:6px 7px }}
   .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
