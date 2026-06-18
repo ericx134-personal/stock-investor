@@ -56,9 +56,9 @@ Near-term product goals:
 
 Current execution queue:
 
-- P1: M085 historical forecasts and matured outcomes on K-line charts.
-- P2: M017 symbol-change, merger, and delisting detection.
+- P1: M017 symbol-change, merger, and delisting detection.
 - P2: M061-M063 market-regime conditioning only after stability gates pass.
+- P2: M078 first-observed-forecast tracking for every holding.
 
 ## Phase 1: Measurement Foundation
 
@@ -177,7 +177,7 @@ Current execution queue:
 - [x] M084A Restore responsive Robinhood-style holdings rows and visible detail drawer.
 - [x] M085A Robinhood-style interactive K-line chart rewrite research and specification.
 - [x] M085B Replace hand-written SVG K-line chart with a full interactive chart runtime.
-- [ ] M085 Mark historical forecasts and matured outcomes on K-line charts.
+- [x] M085 Mark historical forecasts and matured outcomes on K-line charts.
 - [x] M086 Add selectable 1D, 1W, 1M, 3M, YTD, and 1Y chart horizons with
   data-driven redraw and recalculated visible price scale.
 - [ ] M087 Add relative-strength and volume annotations.

@@ -214,6 +214,8 @@ PYTHONPATH=src python3 -m stock_investor.cli dashboard \
   --wave-scorecard data/private/wave-scorecard.json \
   --wave-experiment-scorecard data/private/wave-experiment-scorecard.json \
   --wave-conditional-scorecard data/private/wave-conditional-scorecard.json \
+  --direction-forecasts data/private/wave-direction-forecasts.jsonl \
+  --direction-forecast-outcomes data/private/wave-direction-forecast-outcomes.json \
   --prices data/private/robinhood-prices.csv
 ```
 
@@ -236,7 +238,7 @@ Robust BUY and SELL directions also show a structural review price range:
 BUY uses the confirmed support zone and SELL uses the confirmed resistance
 zone. The detail drawer uses a local vendored Lightweight Charts runtime for
 range-specific candlesticks and volume, with support, resistance, target,
-average-cost, current-price, and pivot metadata supplied through
+average-cost, current-price, pivot, and immutable forecast/outcome metadata supplied through
 `chart-payloads-v1.json` beside the generated dashboard HTML. The 1D range
 uses an explicit daily fallback until intraday bars are available. The dashboard
 refuses to invent a price when that structural zone is unavailable.

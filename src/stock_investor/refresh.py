@@ -493,6 +493,8 @@ def run_refresh(
             wave_conditional_scorecard_path=paths["wave_conditional_scorecard"],
             wave_time_decay_scorecard_path=paths["wave_time_decay_scorecard"],
             direction_rate_comparison_path=paths["direction_rate_comparison"],
+            direction_forecasts_path=paths["direction_forecasts"],
+            direction_forecast_outcomes_path=paths["direction_forecast_outcomes"],
             direction_forecast_scorecard_path=paths["direction_forecast_scorecard"],
             forecast_calibration_curves_path=paths["forecast_calibration_curves"],
             direction_classification_metrics_path=paths["direction_classification_metrics"],

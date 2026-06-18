@@ -445,6 +445,7 @@ def _kline_chart(
     symbol: object = None,
     latest_price: object = None,
     today_return: object = None,
+    forecast_markers: list[dict] | None = None,
     payload_registry: dict | None = None,
 ) -> str:
     if data_quality_status == "POOR":
@@ -467,6 +468,7 @@ def _kline_chart(
         symbol,
         latest_price,
         today_return,
+        forecast_markers,
     )
     symbol_key = payload["symbol"] or "UNKNOWN"
     if payload_registry is not None:
@@ -748,6 +750,115 @@ def _safe_float(value: object) -> float | None:
         return None
 
 
+def _load_json_records(path: str | Path | None) -> list[dict]:
+    if not path or not Path(path).exists():
+        return []
+    payload = json.loads(Path(path).read_text())
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, dict):
+        for key in ("records", "outcomes", "forecasts", "items"):
+            rows = payload.get(key)
+            if isinstance(rows, list):
+                return [row for row in rows if isinstance(row, dict)]
+    return []
+
+
+def _forecast_horizon(record: dict) -> str:
+    horizon = str(record.get("horizon") or "21d")
+    return horizon if horizon.endswith("d") else f"{horizon}d"
+
+
+def _forecast_return(record: dict, key: str, horizon: str) -> float | None:
+    values = record.get(key)
+    if not isinstance(values, dict):
+        return None
+    return _safe_float(values.get(horizon))
+
+
+def _forecast_marker_key(record: dict) -> str:
+    forecast_id = str(record.get("forecast_id") or "").strip()
+    if forecast_id:
+        return forecast_id
+    return "|".join(
+        str(record.get(key) or "")
+        for key in ("symbol", "signal_date", "direction", "horizon")
+    )
+
+
+def _forecast_marker(record: dict) -> dict | None:
+    symbol = str(record.get("symbol") or "").strip().upper()
+    signal_date = str(record.get("signal_date") or "").strip()
+    direction = str(record.get("direction") or "").strip().upper()
+    entry_close = _safe_float(record.get("entry_close"))
+    if not symbol or direction not in {"BUY", "SELL", "WAIT"}:
+        return None
+    if not signal_date or entry_close is None or entry_close <= 0:
+        return None
+    try:
+        date.fromisoformat(signal_date)
+    except ValueError:
+        return None
+    horizon = _forecast_horizon(record)
+    directional_return = _forecast_return(record, "directional_returns", horizon)
+    status = str(record.get("status") or "RECORDED").upper()
+    outcome = "pending"
+    if status == "MATURED" and directional_return is not None:
+        outcome = "hit" if directional_return > 0 else "miss"
+    label = direction
+    if outcome == "hit":
+        label = f"{direction} HIT"
+    elif outcome == "miss":
+        label = f"{direction} MISS"
+    marker = {
+        "time": signal_date,
+        "price": entry_close,
+        "label": label,
+        "type": "forecast",
+        "signal": direction.lower(),
+        "status": status,
+        "outcome": outcome,
+        "horizon": horizon,
+        "probability": _safe_float(record.get("probability")),
+        "return": _forecast_return(record, "returns", horizon),
+        "directional_return": directional_return,
+        "excess_return": _forecast_return(record, "excess_returns", horizon),
+        "max_favorable_excursion": _safe_float(
+            record.get("max_favorable_excursion")
+        ),
+        "max_adverse_excursion": _safe_float(record.get("max_adverse_excursion")),
+    }
+    for key in ("forecast_id", "forecast_version", "regime"):
+        if record.get(key) is not None:
+            marker[key] = str(record.get(key))
+    return marker
+
+
+def _forecast_markers_by_symbol(
+    forecasts: list[dict],
+    outcomes: list[dict],
+    *,
+    limit_per_symbol: int = 80,
+) -> dict[str, list[dict]]:
+    latest_by_key: dict[str, dict] = {}
+    for record in forecasts:
+        latest_by_key[_forecast_marker_key(record)] = record
+    for record in outcomes:
+        latest_by_key[_forecast_marker_key(record)] = record
+    markers_by_symbol: dict[str, list[dict]] = {}
+    for record in latest_by_key.values():
+        marker = _forecast_marker(record)
+        if not marker:
+            continue
+        symbol = str(record.get("symbol") or "").strip().upper()
+        markers_by_symbol.setdefault(symbol, []).append(marker)
+    for symbol, markers in markers_by_symbol.items():
+        markers.sort(key=lambda marker: (marker["time"], marker.get("forecast_id", "")))
+        if len(markers) > limit_per_symbol:
+            markers_by_symbol[symbol] = markers[-limit_per_symbol:]
+    return markers_by_symbol
+
+
 def _chart_bar(item: Price) -> dict:
     return {
         "time": item.date.isoformat(),
@@ -871,6 +982,7 @@ def _kline_chart_payload(
     symbol: object,
     latest_price: object,
     today_return: object,
+    forecast_markers: list[dict] | None = None,
 ) -> dict:
     clean_history = [
         item
@@ -935,6 +1047,13 @@ def _kline_chart_payload(
             }
         )
     markers = []
+    for marker in forecast_markers or []:
+        if not isinstance(marker, dict):
+            continue
+        marker_time = marker.get("time")
+        marker_price = _safe_float(marker.get("price"))
+        if marker_time and marker_price is not None:
+            markers.append({**marker, "time": str(marker_time), "price": marker_price})
     pivot_date = wave.get("last_pivot_date")
     pivot_price = _safe_float(wave.get("last_pivot_price"))
     if pivot_date and pivot_price is not None:
@@ -1055,6 +1174,8 @@ def build_dashboard(
     wave_conditional_scorecard_path: str | Path | None = None,
     wave_time_decay_scorecard_path: str | Path | None = None,
     direction_rate_comparison_path: str | Path | None = None,
+    direction_forecasts_path: str | Path | None = None,
+    direction_forecast_outcomes_path: str | Path | None = None,
     direction_forecast_scorecard_path: str | Path | None = None,
     forecast_calibration_curves_path: str | Path | None = None,
     direction_classification_metrics_path: str | Path | None = None,
@@ -1152,6 +1273,10 @@ def build_dashboard(
         if direction_rate_comparison_path
         and Path(direction_rate_comparison_path).exists()
         else []
+    )
+    direction_forecast_markers = _forecast_markers_by_symbol(
+        _load_jsonl(direction_forecasts_path),
+        _load_json_records(direction_forecast_outcomes_path),
     )
     direction_forecast_scorecard = (
         json.loads(Path(direction_forecast_scorecard_path).read_text())
@@ -1405,6 +1530,7 @@ def build_dashboard(
             record.get("symbol", ""),
             display_price,
             today_return,
+            forecast_markers=direction_forecast_markers.get(symbol, []),
             payload_registry=chart_payloads["symbols"],
         )
         return_class = (

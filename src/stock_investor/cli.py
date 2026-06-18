@@ -736,6 +736,8 @@ def _dashboard(
     wave_scorecard_path: str | None,
     wave_experiment_scorecard_path: str | None,
     wave_conditional_scorecard_path: str | None,
+    direction_forecasts_path: str | None,
+    direction_forecast_outcomes_path: str | None,
     direction_forecast_scorecard_path: str | None,
     forecast_calibration_curves_path: str | None,
     direction_classification_metrics_path: str | None,
@@ -758,6 +760,8 @@ def _dashboard(
             wave_scorecard_path=wave_scorecard_path,
             wave_experiment_scorecard_path=wave_experiment_scorecard_path,
             wave_conditional_scorecard_path=wave_conditional_scorecard_path,
+            direction_forecasts_path=direction_forecasts_path,
+            direction_forecast_outcomes_path=direction_forecast_outcomes_path,
             direction_forecast_scorecard_path=direction_forecast_scorecard_path,
             forecast_calibration_curves_path=forecast_calibration_curves_path,
             direction_classification_metrics_path=direction_classification_metrics_path,
@@ -1086,6 +1090,8 @@ def main() -> int:
     dashboard_parser.add_argument("--wave-scorecard")
     dashboard_parser.add_argument("--wave-experiment-scorecard")
     dashboard_parser.add_argument("--wave-conditional-scorecard")
+    dashboard_parser.add_argument("--direction-forecasts")
+    dashboard_parser.add_argument("--direction-forecast-outcomes")
     dashboard_parser.add_argument("--direction-forecast-scorecard")
     dashboard_parser.add_argument("--forecast-calibration-curves")
     dashboard_parser.add_argument("--direction-classification-metrics")
@@ -1278,6 +1284,8 @@ def main() -> int:
             args.wave_scorecard,
             args.wave_experiment_scorecard,
             args.wave_conditional_scorecard,
+            args.direction_forecasts,
+            args.direction_forecast_outcomes,
             args.direction_forecast_scorecard,
             args.forecast_calibration_curves,
             args.direction_classification_metrics,

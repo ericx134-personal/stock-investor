@@ -157,6 +157,94 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('data-src="chart-payloads-v1.json"', dashboard_html)
         self.assertNotIn("bars_daily", dashboard_html)
 
+    def test_direction_forecast_outcomes_become_kline_markers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            alerts = root / "alerts.jsonl"
+            alerts.write_text(
+                json.dumps(
+                    {
+                        "symbol": "ABC",
+                        "shares": 10,
+                        "average_cost": 90,
+                        "latest_close": 120,
+                        "portfolio_weight": 0.2,
+                        "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                        "technicals": {"ohlcv_available": True},
+                    }
+                )
+                + "\n"
+            )
+            start = date(2026, 1, 1)
+            prices = root / "prices.csv"
+            prices.write_text(
+                "date,symbol,close,open,high,low,volume\n"
+                + "".join(
+                    f"{(start + timedelta(days=index)).isoformat()},ABC,{100 + index:.2f},"
+                    f"{99 + index:.2f},{102 + index:.2f},{98 + index:.2f},100000\n"
+                    for index in range(70)
+                )
+            )
+            forecasts = root / "wave-direction-forecasts.jsonl"
+            forecasts.write_text(
+                json.dumps(
+                    {
+                        "forecast_id": "abc-buy-1",
+                        "forecast_version": "wave-direction-v1",
+                        "symbol": "ABC",
+                        "signal_date": "2026-01-20",
+                        "entry_close": 119,
+                        "direction": "BUY",
+                        "probability": 0.72,
+                        "horizon": "21d",
+                    }
+                )
+                + "\n"
+            )
+            outcomes = root / "wave-direction-forecast-outcomes.json"
+            outcomes.write_text(
+                json.dumps(
+                    [
+                        {
+                            "forecast_id": "abc-buy-1",
+                            "forecast_version": "wave-direction-v1",
+                            "symbol": "ABC",
+                            "signal_date": "2026-01-20",
+                            "entry_close": 119,
+                            "direction": "BUY",
+                            "probability": 0.72,
+                            "horizon": "21d",
+                            "status": "MATURED",
+                            "returns": {"21d": 0.1},
+                            "directional_returns": {"21d": 0.1},
+                            "excess_returns": {"21d": 0.04},
+                            "max_favorable_excursion": 0.14,
+                            "max_adverse_excursion": -0.03,
+                        }
+                    ]
+                )
+            )
+            output = root / "dashboard-v3.html"
+            write_dashboard(
+                build_dashboard(
+                    alerts,
+                    prices_path=prices,
+                    direction_forecasts_path=forecasts,
+                    direction_forecast_outcomes_path=outcomes,
+                ),
+                output,
+            )
+
+            payload = json.loads((root / "chart-payloads-v1.json").read_text())
+        markers = payload["symbols"]["ABC"]["markers"]
+        forecast_marker = next(marker for marker in markers if marker["type"] == "forecast")
+        self.assertEqual(forecast_marker["forecast_id"], "abc-buy-1")
+        self.assertEqual(forecast_marker["label"], "BUY HIT")
+        self.assertEqual(forecast_marker["status"], "MATURED")
+        self.assertEqual(forecast_marker["outcome"], "hit")
+        self.assertAlmostEqual(forecast_marker["directional_return"], 0.1)
+        self.assertAlmostEqual(forecast_marker["max_adverse_excursion"], -0.03)
+
     def test_price_plan_uses_structural_zone_and_refuses_wait(self):
         wave = {
             "support_zone_low": 90,

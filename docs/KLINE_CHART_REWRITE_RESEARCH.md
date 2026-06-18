@@ -1,6 +1,6 @@
 # K-Line Chart Rewrite Research
 
-Status: M085A and M085B implemented on 2026-06-18.
+Status: M085A, M085B, and M085 implemented on 2026-06-18.
 
 ## Why Rewrite
 
@@ -117,6 +117,9 @@ M085B completes when:
 - Client-side candlestick and volume rendering in `web/assets/kline-chart.js`.
 - Support, resistance, target, average-cost, current-price, and pivot metadata
   in the payload.
+- Immutable direction forecast and evaluated outcome markers in the payload,
+  de-duplicated by `forecast_id` with outcome records preferred over raw
+  forecast records.
 - Overlay bands for support/resistance/target zones.
 - Range buttons for `1D`, `1W`, `1M`, `3M`, `YTD`, `1Y`, `5Y`, and `MAX`;
   unavailable long ranges are disabled.
@@ -124,10 +127,12 @@ M085B completes when:
 - Browser verification on the fixed local URL confirmed HOOD range switching:
   YTD 116 bars, 1W 7 bars, and 1M 21 bars, with three overlay zones and no
   console errors.
+- Live sidecar verification on `http://127.0.0.1:8765/data/private/dashboard-v3.html`
+  confirmed 26 symbols with forecast markers. HOOD currently has six forecast
+  markers, including 2026-06-12 SELL, 2026-06-16 SELL, and 2026-06-18 WAIT.
 
 ## Remaining Follow-Ups
 
 - Add real intraday bars for the `1D` view.
-- Add historical forecast and matured-outcome markers from the immutable ledger.
 - Add relative-strength and volume annotations without crowding the chart.
 - Complete keyboard and screen-reader chart inspection support.

@@ -172,8 +172,10 @@
   }
 
   function markerColor(marker) {
+    if (marker.outcome === "miss") return RED;
+    if (marker.outcome === "hit") return GREEN;
     if (marker.signal === "buy") return GREEN;
-    if (marker.signal === "sell") return RED;
+    if (marker.signal === "sell") return ORANGE;
     return AMBER;
   }
 
@@ -183,7 +185,7 @@
       .filter((marker) => timeSet.has(marker.time))
       .map((marker) => ({
         time: marker.time,
-        position: "belowBar",
+        position: marker.signal === "sell" ? "aboveBar" : "belowBar",
         color: markerColor(marker),
         shape: "circle",
         text: marker.label || marker.type || "",
