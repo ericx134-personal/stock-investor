@@ -1,6 +1,6 @@
 # K-Line Chart Rewrite Research
 
-Status: active research for M085A and implementation input for M085B.
+Status: M085A and M085B implemented on 2026-06-18.
 
 ## Why Rewrite
 
@@ -66,16 +66,17 @@ Sources:
 
 Adopt a client-side chart runtime for detail charts.
 
-Preferred implementation path:
+Implemented path:
 
 1. Export chart-ready JSON next to the dashboard HTML.
 2. Render holdings list server-side as today.
 3. Render detail chart containers server-side with a compact JSON reference.
 4. Initialize charts client-side when a drawer opens.
-5. Use a local vendored chart runtime or pinned CDN with a no-network fallback.
+5. Use a local vendored chart runtime; no credentialed data provider or CDN is required.
 
-The current SVG chart should remain as a fallback until the new runtime passes
-browser verification and accessibility tests.
+The old hand-written SVG chart is no longer the primary rendering path. The
+dashboard writes `chart-payloads-v1.json` beside `dashboard-v3.html`; the HTML
+keeps only a small pointer to that sidecar so the page stays responsive.
 
 ## Data Contract
 
@@ -108,14 +109,25 @@ M085B completes when:
 - The old SVG path remains only as a fallback or is removed with tests.
 - Full tests and public-safety checks pass.
 
-## Immediate Implementation Tasks
+## Implemented
 
-- Add `chart_payloads.json` generation from existing price, wave, position, and
-  forecast data.
-- Prototype one holding detail chart using Lightweight Charts candlesticks.
-- Add support/resistance bands via custom overlay primitives or stacked area
-  series if primitives are too heavy.
-- Add average-cost and current-price lines.
-- Add forecast/outcome markers after M085 chart payload exists.
-- Add browser checks for `1D`, `1W`, `1M`, `3M`, `YTD`, `1Y` visible range
-  changes.
+- `chart-payloads-v1.json` generation from existing price, wave, position, and
+  signal data.
+- Local `TradingView Lightweight Charts` production bundle under `web/assets`.
+- Client-side candlestick and volume rendering in `web/assets/kline-chart.js`.
+- Support, resistance, target, average-cost, current-price, and pivot metadata
+  in the payload.
+- Overlay bands for support/resistance/target zones.
+- Range buttons for `1D`, `1W`, `1M`, `3M`, `YTD`, `1Y`, `5Y`, and `MAX`;
+  unavailable long ranges are disabled.
+- 1D daily fallback is explicit until intraday bars are added.
+- Browser verification on the fixed local URL confirmed HOOD range switching:
+  YTD 116 bars, 1W 7 bars, and 1M 21 bars, with three overlay zones and no
+  console errors.
+
+## Remaining Follow-Ups
+
+- Add real intraday bars for the `1D` view.
+- Add historical forecast and matured-outcome markers from the immutable ledger.
+- Add relative-strength and volume annotations without crowding the chart.
+- Complete keyboard and screen-reader chart inspection support.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import json
 from collections import Counter
+from datetime import date, timedelta
 from pathlib import Path
 
 from .data import Price, load_prices
@@ -444,6 +445,7 @@ def _kline_chart(
     symbol: object = None,
     latest_price: object = None,
     today_return: object = None,
+    payload_registry: dict | None = None,
 ) -> str:
     if data_quality_status == "POOR":
         return '<div class="chart-unavailable">K-line chart blocked by the data-quality gate.</div>'
@@ -454,235 +456,46 @@ def _kline_chart(
     ]
     if len(clean_history) < 20:
         return '<div class="chart-unavailable">Daily OHLCV chart unavailable.</div>'
-    average_cost_value = (
-        float(average_cost)
-        if average_cost is not None and float(average_cost) > 0
-        else None
+    payload = _kline_chart_payload(
+        clean_history,
+        wave,
+        signal_label,
+        signal_class,
+        probability,
+        price_plan,
+        average_cost,
+        symbol,
+        latest_price,
+        today_return,
     )
-
-    def render_svg(visible_sessions: int, active: bool) -> str:
-        candles = clean_history[-visible_sessions:]
-        width, height = 860, 430
-        left, right, top, price_bottom = 18, 64, 28, 315
-        volume_top, volume_bottom = 340, 390
-        plot_width = width - left - right
-        plot_height = price_bottom - top
-        price_values = [
-            value
-            for item in candles
-            for value in (float(item.high), float(item.low))
-        ]
-        visible_low, visible_high = min(price_values), max(price_values)
-        visible_span = visible_high - visible_low or max(visible_high * 0.02, 1)
-        for key in (
-            "support_zone_low",
-            "support_zone_high",
-            "resistance_zone_low",
-            "resistance_zone_high",
-            "next_resistance_zone_low",
-            "next_resistance_zone_high",
-            "last_pivot_price",
-            "latest_close",
-        ):
-            if wave.get(key) is None:
-                continue
-            zone_value = float(wave[key])
-            if visible_low - visible_span * 0.75 <= zone_value <= visible_high + visible_span * 0.75:
-                price_values.append(zone_value)
-        include_cost_in_scale = (
-            average_cost_value is not None
-            and visible_low - visible_span * 0.18 <= average_cost_value <= visible_high + visible_span * 0.18
+    symbol_key = payload["symbol"] or "UNKNOWN"
+    if payload_registry is not None:
+        payload_registry[symbol_key] = payload
+        local_payload = ""
+    else:
+        local_payload = (
+            '<script type="application/json" class="kline-local-payload">'
+            f"{_json_script(payload)}</script>"
         )
-        if include_cost_in_scale:
-            price_values.append(float(average_cost_value))
-        price_low, price_high = min(price_values), max(price_values)
-        padding = max((price_high - price_low) * 0.08, price_high * 0.01)
-        price_low, price_high = price_low - padding, price_high + padding
-        price_span = price_high - price_low or 1
-        x_step = plot_width / len(candles)
-        body_width = max(2.0, min(14.0, x_step * 0.62))
-
-        def x(index: int) -> float:
-            return left + (index + 0.5) * x_step
-
-        def y(value: float) -> float:
-            return top + (price_high - value) / price_span * plot_height
-
-        zones = []
-        zone_definitions = (
-            ("Pressure", "resistance_zone_low", "resistance_zone_high", "resistance-zone"),
-            (
-                "Upper pressure",
-                "next_resistance_zone_low",
-                "next_resistance_zone_high",
-                "upper-resistance-zone",
-            ),
-            ("Support", "support_zone_low", "support_zone_high", "support-zone"),
-        )
-        zone_label_count = 0
-        for label, low_key, high_key, css_class in zone_definitions:
-            if wave.get(low_key) is None or wave.get(high_key) is None:
-                continue
-            low_value = float(wave[low_key])
-            high_value = float(wave[high_key])
-            if high_value < price_low or low_value > price_high:
-                continue
-            zone_top = y(high_value)
-            zone_bottom = y(low_value)
-            zone_mid = (zone_top + zone_bottom) / 2
-            label_y = min(
-                max(zone_mid + (zone_label_count % 3 - 1) * 14, top + 14),
-                price_bottom - 8,
-            )
-            zone_label_count += 1
-            label_class = "pressure-label" if "pressure" in label.lower() else "support-label"
-            label_text = f"{label} ${low_value:.2f}–${high_value:.2f}"
-            zones.append(
-                f'<rect class="{css_class}" x="{left:.1f}" y="{zone_top:.1f}" '
-                f'width="{plot_width:.1f}" height="{max(1, zone_bottom - zone_top):.1f}"/>'
-                f'<line class="zone-leader {label_class}" x1="{left + plot_width - 42:.1f}" y1="{zone_mid:.1f}" '
-                f'x2="{left + plot_width - 174:.1f}" y2="{label_y:.1f}"/>'
-                f'<rect class="zone-label-bg {label_class}" x="{left + plot_width - 342:.1f}" y="{label_y - 11:.1f}" width="166" height="16" rx="4"/>'
-                f'<text class="zone-label {label_class}" x="{left + plot_width - 336:.1f}" y="{label_y:.1f}">{html.escape(label_text)}</text>'
-            )
-        target_zone = ""
-        if price_plan and float(price_plan["high"]) >= price_low and float(price_plan["low"]) <= price_high:
-            zone_class = html.escape(str(price_plan.get("plan_class") or signal_class))
-            target_top = y(float(price_plan["high"]))
-            target_bottom = y(float(price_plan["low"]))
-            target_mid = y(float(price_plan["midpoint"]))
-            target_label = (
-                f'{price_plan.get("label", signal_label)} '
-                f'${price_plan["low"]:.2f}–${price_plan["high"]:.2f}'
-            )
-            target_zone = (
-                f'<rect class="target-zone {zone_class}" x="{left:.1f}" y="{target_top:.1f}" '
-                f'width="{plot_width:.1f}" height="{max(1, target_bottom - target_top):.1f}"/>'
-                f'<line class="target-mid {zone_class}" x1="{left:.1f}" y1="{target_mid:.1f}" '
-                f'x2="{left + plot_width:.1f}" y2="{target_mid:.1f}"/>'
-                f'<line class="target-label-leader {zone_class}" x1="{left + plot_width - 26:.1f}" y1="{target_mid:.1f}" '
-                f'x2="{left + plot_width - 150:.1f}" y2="{max(top + 18, target_mid - 18):.1f}"/>'
-                f'<rect class="target-label-bg {zone_class}" x="{left + plot_width - 300:.1f}" '
-                f'y="{max(top + 4, target_mid - 30):.1f}" width="148" height="17" rx="4"/>'
-                f'<text class="target-label" x="{left + plot_width - 294:.1f}" '
-                f'y="{max(top + 16, target_mid - 18):.1f}">{html.escape(target_label)}</text>'
-            )
-        cost_line = ""
-        if average_cost_value is not None:
-            if price_low <= average_cost_value <= price_high:
-                cost_y = y(average_cost_value)
-                cost_line = (
-                    f'<line class="average-cost-line" x1="{left:.1f}" y1="{cost_y:.1f}" '
-                    f'x2="{left + plot_width:.1f}" y2="{cost_y:.1f}"/>'
-                    f'<text class="average-cost-label" x="{left + plot_width - 90:.1f}" '
-                    f'y="{cost_y - 4:.1f}">Avg cost ${average_cost_value:.2f}</text>'
-                )
-            else:
-                location = "below chart" if average_cost_value < price_low else "above chart"
-                marker_y = price_bottom - 5 if average_cost_value < price_low else top + 12
-                cost_line = (
-                    f'<text class="average-cost-label average-cost-offscreen" x="{left + plot_width - 142:.1f}" '
-                    f'y="{marker_y:.1f}">Avg cost ${average_cost_value:.2f} {location}</text>'
-                )
-        grid = []
-        for fraction in (0, 0.25, 0.5, 0.75, 1):
-            grid_y = top + plot_height * fraction
-            grid_price = price_high - price_span * fraction
-            grid.append(
-                f'<line class="chart-grid" x1="{left}" y1="{grid_y:.1f}" x2="{left + plot_width:.1f}" y2="{grid_y:.1f}"/>'
-                f'<text class="axis-label" x="{left + plot_width + 5:.1f}" y="{grid_y + 4:.1f}">${grid_price:.2f}</text>'
-            )
-        volumes = [float(item.volume or 0) for item in candles]
-        max_volume = max(volumes) or 1
-        candle_shapes = []
-        candle_hitboxes = []
-        for index, item in enumerate(candles):
-            center = x(index)
-            open_value, close_value = float(item.open), float(item.close)
-            high_value, low_value = float(item.high), float(item.low)
-            css_class = "up-candle" if close_value >= open_value else "down-candle"
-            body_top = y(max(open_value, close_value))
-            body_height = max(1.2, abs(y(open_value) - y(close_value)))
-            volume_height = float(item.volume or 0) / max_volume * (volume_bottom - volume_top)
-            candle_shapes.append(
-                f'<line class="{css_class}" x1="{center:.1f}" y1="{y(high_value):.1f}" x2="{center:.1f}" y2="{y(low_value):.1f}"/>'
-                f'<rect class="{css_class}" x="{center - body_width / 2:.1f}" y="{body_top:.1f}" width="{body_width:.1f}" height="{body_height:.1f}"/>'
-                f'<rect class="volume {css_class}" x="{center - body_width / 2:.1f}" y="{volume_bottom - volume_height:.1f}" width="{body_width:.1f}" height="{volume_height:.1f}"/>'
-            )
-            candle_hitboxes.append(
-                f'<rect class="candle-hitbox" x="{left + index * x_step:.1f}" y="{top:.1f}" '
-                f'width="{x_step:.1f}" height="{volume_bottom - top:.1f}" tabindex="0" '
-                f'aria-label="{item.date.isoformat()} open ${open_value:.2f} high ${high_value:.2f} low ${low_value:.2f} close ${close_value:.2f}" '
-                f'data-date="{item.date.isoformat()}" data-x="{center:.1f}" data-close-y="{y(close_value):.1f}" '
-                f'data-open="${open_value:.2f}" data-high="${high_value:.2f}" '
-                f'data-low="${low_value:.2f}" data-close="${close_value:.2f}" '
-                f'data-volume="{float(item.volume or 0):,.0f}"/>'
-            )
-        pivot_line = ""
-        pivot_date = wave.get("last_pivot_date")
-        wave_class = (
-            "buy"
-            if wave.get("direction") == "ADVANCING"
-            else "sell" if wave.get("direction") == "DECLINING" else "wait"
-        )
-        if pivot_date:
-            pivot_index = next(
-                (index for index, item in enumerate(candles) if item.date.isoformat() == pivot_date),
-                None,
-            )
-            if pivot_index is not None and wave.get("last_pivot_price") is not None:
-                pivot_line = (
-                    f'<line class="active-wave {wave_class}" x1="{x(pivot_index):.1f}" '
-                    f'y1="{y(float(wave["last_pivot_price"])):.1f}" x2="{x(len(candles) - 1):.1f}" '
-                    f'y2="{y(float(candles[-1].close)):.1f}"/>'
-                    f'<circle class="pivot-point {wave_class}" cx="{x(pivot_index):.1f}" '
-                    f'cy="{y(float(wave["last_pivot_price"])):.1f}" r="4"/>'
-                )
-        date_indices = sorted(set((0, len(candles) // 2, len(candles) - 1)))
-        date_labels = "".join(
-            f'<text class="axis-label date-label" x="{x(index):.1f}" y="414">{candles[index].date.strftime("%b %d")}</text>'
-            for index in date_indices
-        )
-        hidden = "" if active else " hidden"
-        return (
-            f'<svg class="kline-chart" viewBox="0 0 {width} {height}" data-chart-range="{visible_sessions}" '
-            f'data-plot-left="{left}" data-plot-top="{top}" data-plot-width="{plot_width:.1f}" '
-            f'data-plot-height="{volume_bottom - top:.1f}" data-candle-count="{len(candles)}" '
-            f'role="img" aria-label="{html.escape(signal_label)} evidence on {visible_sessions} daily candles"{hidden}>'
-            f'{"".join(grid)}{"".join(zones)}{target_zone}{cost_line}{"".join(candle_shapes)}{pivot_line}'
-            f'<line class="volume-divider" x1="{left}" y1="{volume_top - 5}" x2="{left + plot_width}" y2="{volume_top - 5}"/>'
-            f'{date_labels}'
-            f'<line class="chart-crosshair vertical" data-chart-crosshair-x x1="{left}" y1="{top}" x2="{left}" y2="{volume_bottom}"/>'
-            f'<line class="chart-crosshair horizontal" data-chart-crosshair-y x1="{left}" y1="{top}" x2="{left + plot_width}" y2="{top}"/>'
-            f'{"".join(candle_hitboxes)}</svg>'
-        )
-
     signal_probability = "--" if probability is None else f"{probability:.0%}"
-    ranges = ((5, "1D"), (7, "1W"), (21, "1M"), (63, "3M"), (126, "YTD"), (252, "1Y"))
-    rendered_ranges = []
-    rendered_values = set()
-    for sessions, label in ranges:
-        range_value = min(sessions, len(clean_history))
-        if range_value in rendered_values:
-            continue
-        rendered_values.add(range_value)
-        rendered_ranges.append((range_value, label))
-    preferred_range = 126 if len(clean_history) >= 126 else len(clean_history)
-    active_range = preferred_range if preferred_range in rendered_values else rendered_ranges[-1][0]
-    chart_svgs = "".join(render_svg(range_value, range_value == active_range) for range_value, _ in rendered_ranges)
+    range_order = ("1D", "1W", "1M", "3M", "YTD", "1Y", "5Y", "MAX")
+    active_range = (
+        payload["default_range"]
+        if payload["ranges"].get(payload["default_range"], {}).get("available")
+        else "1M"
+    )
     button_items = []
-    active_button_assigned = False
-    for sessions, label in ranges:
-        range_value = min(sessions, len(clean_history))
-        is_active_button = range_value == active_range and not active_button_assigned
-        active_button_assigned = active_button_assigned or is_active_button
-        active_class = ' class="active"' if is_active_button else ""
+    for label in range_order:
+        range_payload = payload["ranges"].get(label, {})
+        disabled = "" if range_payload.get("available") else " disabled"
+        active_class = ' class="active"' if label == active_range and not disabled else ""
         button_items.append(
-            f'<button type="button" data-chart-range="{range_value}"{active_class}>{label}</button>'
+            f'<button type="button" data-chart-range="{label}" data-chart-bars="{int(range_payload.get("bar_count", 0))}"'
+            f'{active_class}{disabled}>{label}</button>'
         )
     buttons = "".join(button_items)
     price_context = ""
-    if symbol:
+    if symbol_key != "UNKNOWN":
         price_class = (
             "positive"
             if today_return is not None and float(today_return) >= 0
@@ -695,15 +508,19 @@ def _kline_chart(
         )
     else:
         price_context = "<h3>Price wave in context</h3>"
-    return f"""<section class="kline-chart-card" data-active-chart-range="{active_range}">
-      <div class="chart-heading"><div><small>Daily K-line · switched by range</small>{price_context}</div>
+    return f"""<section class="kline-chart-card" data-chart-symbol="{html.escape(symbol_key)}" data-active-chart-range="{html.escape(active_range)}">
+      <div class="chart-heading"><div><small>Interactive K-line · switched by range</small>{price_context}</div>
       <span class="chart-signal {signal_class}">{html.escape(signal_label)} {signal_probability}</span></div>
-      {chart_svgs}
+      <div class="interactive-kline" data-chart-root role="img" aria-label="{html.escape(symbol_key)} interactive candlestick chart"></div>
+      <div class="chart-overlay" data-chart-overlay aria-hidden="true"></div>
       <div class="chart-tooltip" aria-live="polite" hidden></div>
+      <div class="chart-status" data-chart-status>Loading local chart runtime…</div>
+      <div class="chart-fallback" data-chart-fallback hidden>Interactive chart unavailable; chart data is still recorded in the payload.</div>
       <div class="chart-range-tabs" aria-label="Chart time range">
         {buttons}
       </div>
-      <div class="chart-legend"><span class="support-key">Support zone</span><span class="resistance-key">Resistance zone</span><span class="cost-key">Average cost</span><span class="wave-key">Active wave</span><span>Volume</span></div>
+      <div class="chart-legend"><span class="support-key">Support zone</span><span class="resistance-key">Resistance zone</span><span class="cost-key">Average cost</span><span class="wave-key">Forecast / pivot</span><span>Volume</span></div>
+      {local_payload}
     </section>"""
 
 
@@ -920,6 +737,255 @@ def _next_resistance_zone(
             "next_resistance_source": "projected volatility extension",
         }
     return {}
+
+
+def _safe_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _chart_bar(item: Price) -> dict:
+    return {
+        "time": item.date.isoformat(),
+        "open": float(item.open),
+        "high": float(item.high),
+        "low": float(item.low),
+        "close": float(item.close),
+        "volume": float(item.volume or 0),
+        "source": "daily",
+    }
+
+
+def _aggregate_chart_bars(bars: list[dict], bucket: str) -> list[dict]:
+    grouped: dict[date, list[dict]] = {}
+    for bar in bars:
+        bar_date = date.fromisoformat(str(bar["time"]))
+        if bucket == "monthly":
+            key = date(bar_date.year, bar_date.month, 1)
+        else:
+            key = bar_date - timedelta(days=bar_date.weekday())
+        grouped.setdefault(key, []).append(bar)
+    aggregated = []
+    for key, items in sorted(grouped.items()):
+        aggregated.append(
+            {
+                "time": key.isoformat(),
+                "open": float(items[0]["open"]),
+                "high": max(float(item["high"]) for item in items),
+                "low": min(float(item["low"]) for item in items),
+                "close": float(items[-1]["close"]),
+                "volume": sum(float(item.get("volume") or 0) for item in items),
+                "source": f"{bucket}_aggregate",
+            }
+        )
+    return aggregated
+
+
+def _chart_range(label: str, bars: list[dict], fallback_reason: str | None = None) -> dict:
+    if not bars:
+        return {
+            "label": label,
+            "available": False,
+            "bar_count": 0,
+            "raw_bar_count": 0,
+            "aggregation": "none",
+            "fallback_reason": fallback_reason,
+        }
+    aggregation = "none"
+    visible_bars = bars
+    if len(bars) > 600:
+        aggregation = "monthly" if len(bars) > 1260 else "weekly"
+        visible_bars = _aggregate_chart_bars(bars, aggregation)
+    return {
+        "label": label,
+        "available": True,
+        "bar_count": len(visible_bars),
+        "raw_bar_count": len(bars),
+        "aggregation": aggregation,
+        "fallback_reason": fallback_reason,
+        "start": bars[0]["time"],
+        "end": bars[-1]["time"],
+    }
+
+
+def _chart_ranges(history: list[Price]) -> dict[str, dict]:
+    daily_bars = [_chart_bar(item) for item in history]
+    latest = history[-1].date
+    ytd_bars = [
+        bar for bar in daily_bars if date.fromisoformat(bar["time"]).year == latest.year
+    ]
+    return {
+        "1D": _chart_range(
+            "1D",
+            daily_bars[-min(5, len(daily_bars)) :],
+            "Daily fallback: intraday bars are not available yet.",
+        ),
+        "1W": _chart_range("1W", daily_bars[-min(7, len(daily_bars)) :]),
+        "1M": _chart_range("1M", daily_bars[-min(21, len(daily_bars)) :]),
+        "3M": _chart_range("3M", daily_bars[-min(63, len(daily_bars)) :]),
+        "YTD": _chart_range("YTD", ytd_bars or daily_bars[-min(126, len(daily_bars)) :]),
+        "1Y": _chart_range("1Y", daily_bars[-min(252, len(daily_bars)) :]),
+        "5Y": _chart_range(
+            "5Y",
+            daily_bars[-min(1260, len(daily_bars)) :] if len(daily_bars) > 252 else [],
+            "Need more than one year of daily bars before showing 5Y.",
+        ),
+        "MAX": _chart_range("MAX", daily_bars),
+    }
+
+
+def _zone_payload(
+    zone_id: str,
+    label: str,
+    low: object,
+    high: object,
+    zone_type: str,
+) -> dict | None:
+    low_value = _safe_float(low)
+    high_value = _safe_float(high)
+    if low_value is None or high_value is None or low_value <= 0 or high_value <= 0:
+        return None
+    low_value, high_value = sorted((low_value, high_value))
+    return {
+        "id": zone_id,
+        "label": label,
+        "low": low_value,
+        "high": high_value,
+        "midpoint": (low_value + high_value) / 2,
+        "type": zone_type,
+    }
+
+
+def _kline_chart_payload(
+    history: list[Price],
+    wave: dict,
+    signal_label: str,
+    signal_class: str,
+    probability: float | None,
+    price_plan: dict | None,
+    average_cost: object,
+    symbol: object,
+    latest_price: object,
+    today_return: object,
+) -> dict:
+    clean_history = [
+        item
+        for item in history
+        if item.open is not None and item.high is not None and item.low is not None
+    ]
+    zones = [
+        zone
+        for zone in (
+            _zone_payload(
+                "support",
+                "Support",
+                wave.get("support_zone_low"),
+                wave.get("support_zone_high"),
+                "support",
+            ),
+            _zone_payload(
+                "resistance",
+                "Pressure",
+                wave.get("resistance_zone_low"),
+                wave.get("resistance_zone_high"),
+                "resistance",
+            ),
+            _zone_payload(
+                "upper_resistance",
+                "Upper pressure",
+                wave.get("next_resistance_zone_low"),
+                wave.get("next_resistance_zone_high"),
+                "resistance",
+            ),
+            _zone_payload(
+                "target",
+                str((price_plan or {}).get("label") or signal_label),
+                (price_plan or {}).get("low"),
+                (price_plan or {}).get("high"),
+                str((price_plan or {}).get("plan_class") or signal_class),
+            )
+            if price_plan
+            else None,
+        )
+        if zone
+    ]
+    lines = []
+    average_cost_value = _safe_float(average_cost)
+    latest_price_value = _safe_float(latest_price or wave.get("latest_close"))
+    if average_cost_value is not None and average_cost_value > 0:
+        lines.append(
+            {
+                "id": "average_cost",
+                "label": "Avg cost",
+                "price": average_cost_value,
+                "type": "cost",
+            }
+        )
+    if latest_price_value is not None and latest_price_value > 0:
+        lines.append(
+            {
+                "id": "current_price",
+                "label": "Current",
+                "price": latest_price_value,
+                "type": "current",
+            }
+        )
+    markers = []
+    pivot_date = wave.get("last_pivot_date")
+    pivot_price = _safe_float(wave.get("last_pivot_price"))
+    if pivot_date and pivot_price is not None:
+        markers.append(
+            {
+                "time": str(pivot_date),
+                "price": pivot_price,
+                "label": "Pivot",
+                "type": "pivot",
+                "signal": signal_class,
+            }
+        )
+    latest_bar_date = clean_history[-1].date.isoformat() if clean_history else None
+    return {
+        "symbol": str(symbol or "").upper(),
+        "display_name": str(symbol or "").upper(),
+        "quote": {
+            "price": latest_price_value,
+            "today_return": _safe_float(today_return),
+            "latest_bar_date": latest_bar_date,
+        },
+        "position": {"average_cost": average_cost_value},
+        "bars_daily": [_chart_bar(item) for item in clean_history],
+        "bars_intraday": [],
+        "ranges": _chart_ranges(clean_history) if clean_history else {},
+        "default_range": "YTD" if len(clean_history) >= 63 else "1M",
+        "signal": {
+            "label": signal_label,
+            "class": signal_class,
+            "probability": probability,
+        },
+        "zones": zones,
+        "lines": lines,
+        "markers": markers,
+        "quality": {
+            "ohlcv_bars": len(clean_history),
+            "intraday_available": False,
+            "fallback_reasons": [
+                "1D uses daily fallback until intraday bars are available."
+            ],
+        },
+    }
+
+
+def _json_script(data: dict) -> str:
+    return (
+        json.dumps(data, sort_keys=True, separators=(",", ":"))
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
 
 
 def _price_plan_card(plan: dict | None, signal_class: str) -> str:
@@ -1210,6 +1276,7 @@ def build_dashboard(
         "SELL": [],
         "WAIT": [],
     }
+    chart_payloads = {"version": 1, "source": "dashboard-v3", "symbols": {}}
     portfolio_rows = []
     detail_panels = []
     for index, record in enumerate(records):
@@ -1338,6 +1405,7 @@ def build_dashboard(
             record.get("symbol", ""),
             display_price,
             today_return,
+            payload_registry=chart_payloads["symbols"],
         )
         return_class = (
             "positive"
@@ -1678,6 +1746,8 @@ def build_dashboard(
         (record.get("observed_at") or "unknown" for record in records),
         default="unknown",
     )
+    chart_payloads["generated_at"] = generated
+    chart_payload_json = _json_script(chart_payloads)
     model_label = ", ".join(model_versions) or "model version unavailable"
     comparison_html = ""
     if comparison:
@@ -2022,25 +2092,18 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .price-plan.unavailable {{ display:block }} .info-tip {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--muted); cursor:help; display:flex; font-size:11px; font-weight:800; height:20px; justify-content:center; position:relative; width:20px }}
 .info-tip::after {{ background:#222; border:1px solid #555; border-radius:6px; bottom:29px; color:#ddd; content:attr(data-tip); display:none; font-size:11px; font-weight:500; line-height:1.35; padding:8px; position:absolute; right:-6px; text-transform:none; width:240px; z-index:5 }}
 .info-tip:hover::after,.info-tip:focus::after {{ display:block }} .info-tip:focus {{ border-color:#aaa; outline:none }}
-.kline-chart-card {{ background:#0b0b0b; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; padding:13px; position:relative }}
+.kline-chart-card {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:0 0 12px; padding:16px; position:relative }}
 .chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ align-items:baseline; display:flex; flex-wrap:wrap; gap:7px; font-size:17px; margin:1px 0 0 }} .chart-heading h3 b {{ font-size:21px }} .chart-heading h3 em {{ font-style:normal }} .chart-heading h3 em.positive {{ color:var(--green) }} .chart-heading h3 em.negative {{ color:var(--red) }}
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
-.kline-chart {{ display:block; height:auto; overflow:visible; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
-.support-zone {{ fill:rgba(0,200,5,.14); stroke:rgba(0,200,5,.42); stroke-width:.8 }} .resistance-zone {{ fill:rgba(255,90,95,.25); stroke:rgba(255,90,95,.72); stroke-width:1.1 }} .upper-resistance-zone {{ fill:rgba(255,90,95,.16); stroke:rgba(255,90,95,.8); stroke-dasharray:5 4; stroke-width:1.1 }}
-.zone-label {{ fill:#ddd; font-size:8px; font-weight:850; paint-order:stroke; stroke:#050505; stroke-width:1.5px; text-transform:uppercase }} .pressure-label {{ fill:var(--red) }} .support-label {{ fill:var(--green) }}
-.zone-label-bg.pressure-label {{ fill:rgba(60,15,18,.86); stroke:rgba(255,90,95,.5) }} .zone-label-bg.support-label {{ fill:rgba(0,45,14,.86); stroke:rgba(0,200,5,.45) }}
-.zone-leader.pressure-label,.target-label-leader.sell,.target-label-leader.breakout {{ stroke:var(--red); stroke-width:1; stroke-dasharray:3 3; opacity:.8 }} .zone-leader.support-label,.target-label-leader.buy {{ stroke:var(--green); stroke-width:1; stroke-dasharray:3 3; opacity:.8 }}
-.target-zone.buy {{ fill:rgba(0,200,5,.22); stroke:var(--green); stroke-width:1 }} .target-zone.sell {{ fill:rgba(255,90,95,.22); stroke:var(--red); stroke-width:1 }} .target-zone.breakout {{ fill:rgba(0,200,5,.16); stroke:var(--green); stroke-dasharray:5 3; stroke-width:1.4 }}
-.target-mid {{ stroke-width:1.7; stroke-dasharray:4 3 }} .target-mid.buy {{ stroke:var(--green) }} .target-mid.sell {{ stroke:var(--red) }} .target-mid.breakout {{ stroke:var(--green) }}
-.target-label-bg.buy {{ fill:#006b22 }} .target-label-bg.sell {{ fill:#8b252a }} .target-label-bg.breakout {{ fill:#006b22 }} .target-label {{ fill:#fff; font-size:8px; font-weight:800 }}
-.average-cost-line {{ stroke:#e6e6e6; stroke-width:1.2; stroke-dasharray:3 3; opacity:.85 }} .average-cost-label {{ fill:#e6e6e6; font-size:8px; font-weight:800 }} .average-cost-offscreen {{ fill:#bfbfbf; opacity:.95 }}
-.up-candle {{ fill:var(--green); stroke:var(--green); stroke-width:1 }} .down-candle {{ fill:var(--red); stroke:var(--red); stroke-width:1 }} .volume {{ opacity:.22; stroke:none }}
-.active-wave {{ fill:none; stroke-width:2.2; stroke-dasharray:5 3 }} .active-wave.buy,.pivot-point.buy {{ stroke:var(--green); fill:var(--green) }} .active-wave.sell,.pivot-point.sell {{ stroke:var(--red); fill:var(--red) }} .active-wave.wait,.pivot-point.wait {{ stroke:var(--amber); fill:var(--amber) }}
-.candle-hitbox {{ cursor:crosshair; fill:transparent; outline:none }} .candle-hitbox:focus {{ stroke:#fff; stroke-opacity:.35; stroke-width:1 }}
-.chart-crosshair {{ display:none; pointer-events:none; stroke:#e6e6e6; stroke-dasharray:3 3; stroke-width:.9; opacity:.7 }} .chart-crosshair.active {{ display:block }}
-.chart-tooltip {{ background:#050505; border:1px solid #555; border-radius:8px; box-shadow:0 10px 28px rgba(0,0,0,.45); color:var(--text); font-size:11px; left:12px; min-width:190px; padding:8px 10px; pointer-events:none; position:absolute; top:50px; z-index:4 }}
+.interactive-kline {{ height:520px; margin-top:8px; position:relative; touch-action:pan-y; width:100% }}
+.chart-overlay {{ inset:0; pointer-events:none; position:absolute; z-index:2 }}
+.kline-zone {{ border:1px solid currentColor; border-radius:3px; left:0; opacity:.36; position:absolute; right:0 }}
+.kline-zone.support {{ background:rgba(0,200,5,.18); color:var(--green) }} .kline-zone.resistance,.kline-zone.sell {{ background:rgba(255,90,95,.20); color:var(--red) }} .kline-zone.buy {{ background:rgba(0,200,5,.22); color:var(--green) }} .kline-zone.breakout {{ background:rgba(0,200,5,.13); border-style:dashed; color:var(--green) }}
+.kline-zone-label {{ background:#050505; border:1px solid currentColor; border-radius:999px; color:inherit; font-size:10px; font-weight:800; padding:3px 8px; position:absolute; right:10px; top:4px; white-space:nowrap }}
+.chart-tooltip {{ background:#050505; border:1px solid #555; border-radius:8px; box-shadow:0 10px 28px rgba(0,0,0,.45); color:var(--text); font-size:11px; left:12px; min-width:210px; padding:8px 10px; pointer-events:none; position:absolute; top:72px; z-index:4 }}
 .chart-tooltip b,.chart-tooltip span {{ display:block }} .chart-tooltip span {{ color:var(--muted); margin-top:2px }}
-.volume-divider {{ stroke:#333; stroke-width:1 }} .chart-range-tabs {{ align-items:center; display:flex; gap:22px; justify-content:center; margin:11px 0 8px }} .chart-range-tabs button {{ background:transparent; border:0; border-radius:8px; color:var(--green); cursor:pointer; font:inherit; font-size:13px; font-weight:800; padding:7px 10px }} .chart-range-tabs button.active {{ background:var(--green); color:#001f08 }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
+.chart-status,.chart-fallback {{ background:#111; border-radius:8px; color:var(--muted); font-size:12px; margin:8px 0; padding:9px 11px }}
+.chart-range-tabs {{ align-items:center; display:flex; gap:22px; justify-content:center; margin:11px 0 8px }} .chart-range-tabs button {{ background:transparent; border:0; border-radius:8px; color:var(--green); cursor:pointer; font:inherit; font-size:13px; font-weight:800; padding:7px 10px }} .chart-range-tabs button.active {{ background:var(--green); color:#001f08 }} .chart-range-tabs button:disabled {{ color:#474747; cursor:not-allowed }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
 .chart-legend .support-key::before {{ background:var(--green) }} .chart-legend .resistance-key::before {{ background:var(--red) }} .chart-legend .wave-key::before {{ background:var(--amber) }} .chart-legend .cost-key::before {{ background:#e6e6e6 }}
 .chart-unavailable {{ background:#111; border-radius:7px; color:var(--muted); margin-bottom:12px; padding:18px }}
 .advanced-details {{ border-top:1px solid var(--line); margin-top:12px; padding-top:8px }} .advanced-details summary {{ color:var(--muted); cursor:pointer; font-weight:650; padding:8px 0 }} .advanced-details[open] summary {{ color:var(--text) }}
@@ -2084,6 +2147,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
   .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }}
   .portfolio-pulse {{ display:none }} .board-intro p {{ display:none }}
+  .interactive-kline {{ height:380px }}
   .chart-range-tabs {{ gap:9px; justify-content:space-between }} .chart-range-tabs button {{ font-size:12px; padding:6px 7px }}
   .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
 }} @media(max-width:460px) {{
@@ -2188,6 +2252,11 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   <button type="button" class="drawer-close" data-close-drawer>Close</button>
   {''.join(detail_panels)}
 </aside>
+<script type="application/json" id="chart-payloads-v1">{chart_payload_json}</script>
+<script src="/assets/lightweight-charts.standalone.production.js"></script>
+<script>if(!window.LightweightCharts)document.write('<script src="/web/assets/lightweight-charts.standalone.production.js"><\\/script>');</script>
+<script src="/assets/kline-chart.js"></script>
+<script>if(!window.StockInvestorKline)document.write('<script src="/web/assets/kline-chart.js"><\\/script>');</script>
 <script>
 const tabButtons = [...document.querySelectorAll("[data-tab-target]")];
 const tabViews = [...document.querySelectorAll(".tab-view")];
@@ -2252,72 +2321,50 @@ document.querySelectorAll("[data-detail-target]").forEach((button) => button.add
   drawer.setAttribute("aria-hidden", "false");
   backdrop.classList.add("open");
   drawer.scrollTop = 0;
+  window.StockInvestorKline?.initVisibleCharts();
 }}));
 document.querySelectorAll("[data-close-drawer]").forEach((button) => button.addEventListener("click", closeDrawer));
 document.addEventListener("keydown", (event) => {{
   if (event.key === "Escape") closeDrawer();
 }});
-
-document.querySelectorAll(".kline-chart-card").forEach((card) => {{
-  const tooltip = card.querySelector(".chart-tooltip");
-  const charts = [...card.querySelectorAll(".kline-chart")];
-  const rangeButtons = [...card.querySelectorAll("[data-chart-range]")];
-  if (!tooltip || charts.length === 0) return;
-  const hidePoint = () => {{
-    tooltip.hidden = true;
-    charts.forEach((chart) => {{
-      chart.querySelector("[data-chart-crosshair-x]")?.classList.remove("active");
-      chart.querySelector("[data-chart-crosshair-y]")?.classList.remove("active");
-    }});
-  }};
-  const showRange = (range) => {{
-    charts.forEach((chart) => {{
-      chart.toggleAttribute("hidden", chart.dataset.chartRange !== range);
-    }});
-    card.dataset.activeChartRange = range;
-    hidePoint();
-  }};
-  rangeButtons.forEach((button) => {{
-    button.addEventListener("click", () => {{
-      rangeButtons.forEach((item) => item.classList.toggle("active", item === button));
-      showRange(button.dataset.chartRange);
-    }});
-  }});
-  charts.forEach((svg) => {{
-    const vertical = svg.querySelector("[data-chart-crosshair-x]");
-    const horizontal = svg.querySelector("[data-chart-crosshair-y]");
-    const hitboxes = [...svg.querySelectorAll(".candle-hitbox")];
-    if (!vertical || !horizontal || hitboxes.length === 0) return;
-    const showPoint = (hitbox) => {{
-      const x = Number(hitbox.dataset.x);
-      const y = Number(hitbox.dataset.closeY);
-      vertical.setAttribute("x1", x.toFixed(1));
-      vertical.setAttribute("x2", x.toFixed(1));
-      horizontal.setAttribute("y1", y.toFixed(1));
-      horizontal.setAttribute("y2", y.toFixed(1));
-      vertical.classList.add("active");
-      horizontal.classList.add("active");
-      tooltip.hidden = false;
-      tooltip.innerHTML = `<b>${{hitbox.dataset.date}}</b><span>O ${{hitbox.dataset.open}} · H ${{hitbox.dataset.high}} · L ${{hitbox.dataset.low}}</span><span>C ${{hitbox.dataset.close}} · Vol ${{hitbox.dataset.volume}}</span>`;
-      const rect = svg.getBoundingClientRect();
-      const currentBox = svg.viewBox.baseVal;
-      const left = Math.min(Math.max(((x - currentBox.x) / currentBox.width) * rect.width + 10, 8), Math.max(8, rect.width - 215));
-      const top = Math.min(Math.max(((y - currentBox.y) / currentBox.height) * rect.height - 58, 8), Math.max(8, rect.height - 82));
-      tooltip.style.left = `${{left}}px`;
-      tooltip.style.top = `${{top}}px`;
-    }};
-    hitboxes.forEach((hitbox) => {{
-      hitbox.addEventListener("pointerenter", () => showPoint(hitbox));
-      hitbox.addEventListener("pointermove", () => showPoint(hitbox));
-      hitbox.addEventListener("focus", () => showPoint(hitbox));
-      hitbox.addEventListener("blur", hidePoint);
-    }});
-    svg.addEventListener("pointerleave", hidePoint);
-  }});
-}});
 </script>
 </body></html>"""
 
 
+def _extract_chart_payload(content: str) -> dict | None:
+    marker = '<script type="application/json" id="chart-payloads-v1">'
+    start = content.find(marker)
+    if start == -1:
+        return None
+    start += len(marker)
+    end = content.find("</script>", start)
+    if end == -1:
+        return None
+    return json.loads(content[start:end])
+
+
+def _slim_chart_payload_script(content: str) -> str:
+    marker = '<script type="application/json" id="chart-payloads-v1">'
+    start = content.find(marker)
+    if start == -1:
+        return content
+    payload_start = start + len(marker)
+    end = content.find("</script>", payload_start)
+    if end == -1:
+        return content
+    slim = (
+        '<script type="application/json" id="chart-payloads-v1" '
+        'data-src="chart-payloads-v1.json">{"version":1,"source":"dashboard-v3","symbols":{}}</script>'
+    )
+    return content[:start] + slim + content[end + len("</script>") :]
+
+
 def write_dashboard(content: str, path: str | Path) -> None:
-    atomic_write_text(content, path)
+    output_path = Path(path)
+    payload = _extract_chart_payload(content)
+    atomic_write_text(_slim_chart_payload_script(content) if payload is not None else content, output_path)
+    if payload is not None:
+        atomic_write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            output_path.with_name("chart-payloads-v1.json"),
+        )

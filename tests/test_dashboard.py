@@ -5,18 +5,21 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from stock_investor.dashboard import (
+    _chart_ranges,
     _kline_chart,
+    _kline_chart_payload,
     _mini_sparkline,
     _next_resistance_zone,
     _price_plan,
     _professional_plan,
     build_dashboard,
+    write_dashboard,
 )
 from stock_investor.data import Price
 
 
 class DashboardTests(unittest.TestCase):
-    def test_kline_chart_exposes_crosshair_ohlcv_tooltips(self):
+    def test_kline_chart_emits_interactive_payload_and_true_ranges(self):
         history = [
             Price(
                 date=date(2026, 1, 1) + timedelta(days=index),
@@ -43,26 +46,24 @@ class DashboardTests(unittest.TestCase):
             {"low": 125, "high": 128, "midpoint": 126.5, "plan_class": "sell", "label": "Sell zone"},
             average_cost=90,
         )
-        self.assertIn('class="candle-hitbox"', page)
-        self.assertIn('data-date="2026-01-25"', page)
-        self.assertIn('data-open="$124.00"', page)
-        self.assertIn('data-high="$126.00"', page)
-        self.assertIn('data-low="$123.00"', page)
-        self.assertIn('data-close="$125.00"', page)
-        self.assertIn('data-chart-crosshair-x', page)
-        self.assertIn('data-chart-crosshair-y', page)
+        self.assertIn('class="interactive-kline"', page)
+        self.assertIn('class="kline-local-payload"', page)
         self.assertIn('class="chart-tooltip"', page)
-        self.assertIn('Pressure $125.00–$128.00', page)
-        self.assertIn('class="zone-label pressure-label"', page)
+        self.assertIn('"label":"Pressure"', page)
+        self.assertIn('"label":"Sell zone"', page)
+        self.assertIn('"open":124.0', page)
+        self.assertIn('"close":125.0', page)
         self.assertNotIn("pinch/scroll", page)
-        self.assertIn('data-active-chart-range="25"', page)
-        self.assertIn('data-chart-range="5"', page)
-        self.assertIn('data-chart-range="25"', page)
-        self.assertGreater(page.count('class="kline-chart"'), 1)
+        self.assertIn('data-active-chart-range="1M"', page)
+        self.assertIn('data-chart-range="1D"', page)
+        self.assertIn('data-chart-range="MAX"', page)
+        self.assertIn('data-chart-bars="21"', page)
+        self.assertNotIn('class="kline-chart"', page)
+        self.assertNotIn('class="candle-hitbox"', page)
         self.assertIn('class="chart-range-tabs"', page)
-        self.assertIn('data-chart-range="21">1M</button>', page)
+        self.assertIn('data-chart-range="1M" data-chart-bars="21" class="active">1M</button>', page)
 
-    def test_kline_chart_keeps_far_cost_basis_out_of_price_scale(self):
+    def test_kline_payload_preserves_far_cost_basis_as_line_metadata(self):
         history = [
             Price(
                 date=date(2026, 1, 1) + timedelta(days=index),
@@ -89,9 +90,72 @@ class DashboardTests(unittest.TestCase):
             {"low": 107, "high": 110, "midpoint": 108.5, "plan_class": "sell", "label": "Sell zone"},
             average_cost=19.77,
         )
-        self.assertIn("Avg cost $19.77 below chart", page)
-        self.assertIn("average-cost-offscreen", page)
+        self.assertIn('"id":"average_cost"', page)
+        self.assertIn('"price":19.77', page)
         self.assertNotIn('class="average-cost-line"', page)
+
+    def test_chart_ranges_use_ytd_and_aggregate_dense_history(self):
+        history = [
+            Price(
+                date=date(2024, 1, 1) + timedelta(days=index),
+                open=100 + index * 0.01,
+                high=101 + index * 0.01,
+                low=99 + index * 0.01,
+                close=100.5 + index * 0.01,
+                volume=1_000 + index,
+            )
+            for index in range(760)
+        ]
+        ranges = _chart_ranges(history)
+
+        self.assertEqual(ranges["1W"]["raw_bar_count"], 7)
+        self.assertEqual(ranges["1M"]["raw_bar_count"], 21)
+        self.assertEqual(ranges["YTD"]["start"], "2026-01-01")
+        self.assertEqual(ranges["MAX"]["aggregation"], "weekly")
+        self.assertLess(ranges["MAX"]["bar_count"], ranges["MAX"]["raw_bar_count"])
+
+    def test_chart_payload_schema_and_dashboard_sidecar_are_written(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            history = [
+                Price(
+                    date=date(2026, 1, 1) + timedelta(days=index),
+                    open=100 + index,
+                    high=102 + index,
+                    low=99 + index,
+                    close=101 + index,
+                    volume=10_000 + index,
+                )
+                for index in range(30)
+            ]
+            payload = _kline_chart_payload(
+                history,
+                {"support_zone_low": 98, "support_zone_high": 101},
+                "BUY",
+                "buy",
+                0.66,
+                {"low": 98, "high": 101, "midpoint": 99.5, "plan_class": "buy", "label": "Buy zone"},
+                95,
+                "ABC",
+                130,
+                0.02,
+            )
+            html = (
+                '<html><script type="application/json" id="chart-payloads-v1">'
+                + json.dumps({"version": 1, "symbols": {"ABC": payload}}, sort_keys=True)
+                + "</script></html>"
+            )
+            output = root / "dashboard-v3.html"
+            write_dashboard(html, output)
+
+            sidecar = json.loads((root / "chart-payloads-v1.json").read_text())
+            dashboard_html = output.read_text()
+        self.assertEqual(sidecar["symbols"]["ABC"]["symbol"], "ABC")
+        self.assertIn("bars_daily", sidecar["symbols"]["ABC"])
+        self.assertIn("ranges", sidecar["symbols"]["ABC"])
+        self.assertEqual(sidecar["symbols"]["ABC"]["ranges"]["1D"]["fallback_reason"], "Daily fallback: intraday bars are not available yet.")
+        self.assertIn('data-src="chart-payloads-v1.json"', dashboard_html)
+        self.assertNotIn("bars_daily", dashboard_html)
 
     def test_price_plan_uses_structural_zone_and_refuses_wait(self):
         wave = {
@@ -855,13 +919,15 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('class="price-target">$106.00–$112.00</small>', page)
         self.assertIn("<h3>$106.00–$112.00</h3>", page)
         self.assertIn('class="info-tip"', page)
-        self.assertIn('class="target-zone buy"', page)
-        self.assertIn("Buy zone $106.00–$112.00", page)
+        self.assertIn('"label":"Buy zone"', page)
+        self.assertIn('"low":106.0', page)
+        self.assertIn('"high":112.0', page)
         self.assertIn("Conditional age/magnitude evidence used", page)
         self.assertIn("direction gate <b>BUY</b>", page)
-        self.assertIn('class="kline-chart"', page)
-        self.assertIn("Daily K-line · switched by range", page)
-        self.assertIn('data-chart-range="5">1D</button>', page)
+        self.assertIn('class="interactive-kline"', page)
+        self.assertIn('id="chart-payloads-v1"', page)
+        self.assertIn("Interactive K-line · switched by range", page)
+        self.assertIn('data-chart-range="1D"', page)
         self.assertNotIn(">Advanced</button>", page)
         self.assertIn("Support zone", page)
         self.assertIn("Your position", page)
@@ -870,8 +936,8 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("PROFESSIONAL PLAN", page)
         self.assertIn("ADD REVIEW", page)
         self.assertIn("Average cost", page)
-        self.assertIn("average-cost-line", page)
-        self.assertIn("Avg cost $100.00", page)
+        self.assertIn('"id":"average_cost"', page)
+        self.assertIn('"price":100.0', page)
         self.assertIn('<details class="advanced-details">', page)
         self.assertNotIn('<details class="advanced-details" open>', page)
 
