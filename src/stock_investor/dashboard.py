@@ -1934,8 +1934,8 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
-.portfolio-holdings-list {{ container-type:inline-size; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr)); position:relative }}
-.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; display:grid; font:inherit; gap:10px; grid-template-columns:minmax(86px,1.1fr) 74px 78px minmax(76px,.9fr) minmax(74px,.8fr) 68px 78px 78px; min-height:64px; overflow:hidden; padding:10px 14px; text-align:left; width:100% }}
+.portfolio-holdings-list {{ container-type:inline-size; display:grid; grid-template-columns:1fr; position:relative }}
+.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; display:grid; font:inherit; gap:12px; grid-template-columns:minmax(92px,1fr) 92px 92px 92px 82px 88px; min-height:66px; overflow:hidden; padding:11px 16px; text-align:left; width:100% }}
 .portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
 .portfolio-holding-card strong {{ font-size:18px; letter-spacing:-.25px }} .portfolio-holding-card small {{ color:#9aa0a6; display:block; font-size:10px; font-weight:700; letter-spacing:.15px; line-height:1.1; margin-bottom:2px }} .holding-identity small {{ font-size:13px; font-weight:500; letter-spacing:0; margin:2px 0 0 }} .portfolio-holding-card b {{ display:block; font-size:15px; letter-spacing:-.1px; white-space:nowrap }}
 .portfolio-holding-card>span {{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
@@ -1944,11 +1944,12 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holding-return.positive b,.positive b {{ color:var(--green) }} .holding-return.negative b,.negative b {{ color:var(--red) }}
 .holding-spark {{ align-items:center; color:#79818a; display:flex; justify-content:center }}
 .holding-spark::after {{ content:none }}
+.holding-today-cash,.portfolio-holding-card>span[data-label="Portfolio"] {{ display:none }}
 .holding-today-cash.positive b {{ color:var(--green) }} .holding-today-cash.negative b {{ color:var(--red) }}
 .today-pill {{ align-items:center; border:1px solid currentColor; border-radius:9px; display:flex; justify-content:center; min-height:38px; padding:4px 8px }}
 .today-pill.positive {{ background:var(--green); border-color:var(--green); color:#001f08 }} .today-pill.negative {{ background:#ff5000; border-color:#ff5000; color:#050505 }}
 .today-pill b {{ color:inherit; font-size:16px; font-weight:700; text-align:center }}
-.mini-sparkline {{ display:block; height:26px; width:70px }} .mini-sparkline.positive {{ color:var(--green) }} .mini-sparkline.negative {{ color:#ff5000 }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }} .mini-sparkline-baseline {{ stroke:#666; stroke-dasharray:2 3; stroke-linecap:round; stroke-width:1 }}
+.mini-sparkline {{ display:block; height:28px; width:86px }} .mini-sparkline.positive {{ color:var(--green) }} .mini-sparkline.negative {{ color:#ff5000 }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }} .mini-sparkline-baseline {{ stroke:#666; stroke-dasharray:2 3; stroke-linecap:round; stroke-width:1 }}
 .portfolio-holding-card .decision-signal {{ align-items:center; border-radius:7px; display:grid; grid-template-columns:auto 1fr; min-width:0; padding:5px 7px }} .portfolio-holding-card .decision-signal strong {{ font-size:10px }} .portfolio-holding-card .decision-signal b {{ font-size:13px }}
 .portfolio-holding-card .decision-signal small {{ font-size:8.5px; grid-column:1 / -1; line-height:1.1; margin:0 0 2px }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
@@ -2055,38 +2056,39 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .experiment div {{ background:#111; border-radius:7px; padding:14px }} .experiment b {{ display:block; font-size:24px }}
 .experiment span {{ color:var(--muted); font-size:13px }}
 table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; padding:9px; border-bottom:1px solid var(--line) }} th {{ color:var(--green); font-size:12px; letter-spacing:.25px }}
-.note {{ color:var(--muted); font-size:13px }} @media(min-width:1320px) {{
-  .portfolio-holdings-list {{ background:transparent; column-gap:18px; grid-template-columns:repeat(2,minmax(0,1fr)); position:relative; row-gap:0 }}
-  .portfolio-holdings-list::before {{ background:var(--line); bottom:0; content:""; left:50%; position:absolute; top:0; width:1px }}
-  .portfolio-holding-card {{ background:#050505; grid-template-columns:minmax(92px,1fr) 78px 78px 82px 78px 80px; min-height:68px; padding:12px 18px }}
-  .portfolio-holding-card>span::before {{ display:none }}
-  .holding-today-cash,.portfolio-holding-card>span[data-label="Portfolio"] {{ display:none }}
-}} @media(max-width:1320px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 80px 82px 88px 78px 78px; min-height:66px; padding:11px 14px }}
-  .holding-today-cash,.portfolio-holding-card>span[data-label="Portfolio"] {{ display:none }}
+.note {{ color:var(--muted); font-size:13px }} @media(min-width:1420px) {{
+  .portfolio-holdings-list {{ background:transparent; column-gap:22px; grid-template-columns:repeat(2,minmax(0,1fr)); position:relative; row-gap:0 }}
+  .portfolio-holdings-list::before {{ background:#3a3a3a; bottom:0; box-shadow:0 0 0 1px rgba(255,255,255,.04); content:""; left:50%; position:absolute; top:0; width:2px; z-index:1 }}
+  .portfolio-holding-card {{ background:#050505; min-height:68px; padding:12px 18px }}
 }} @media(max-width:1080px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 86px 92px 88px 78px; min-height:68px }}
-  .portfolio-holding-card .decision-signal {{ display:none }}
-}} @media(max-width:900px) {{
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 86px 88px 88px 76px 78px; min-height:68px }}
+}} @media(max-width:920px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
   .portfolio-pulse {{ grid-template-columns:1fr }}
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) minmax(110px,1.25fr) 96px 92px; min-height:76px; padding:14px 12px }}
-  .holding-today-cash,.portfolio-holding-card>span[data-label="Gain"],.portfolio-holding-card>span[data-label="Portfolio"],.portfolio-holding-card .decision-signal {{ display:none }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 86px 88px 88px 76px 78px; min-height:72px; padding:13px 12px }}
   .portfolio-holding-card>span::before {{ display:none }}
-  .holding-spark .mini-sparkline {{ height:44px; width:92px }}
-  .today-pill {{ justify-self:end; min-width:88px }}
+  .today-pill {{ justify-self:end; min-width:84px }}
   .holding-row {{ grid-template-columns:80px 1fr; gap:10px }}
   .board-action {{ display:none }} .board-basics {{ grid-column:1 / -1; margin-top:3px }}
+}} @media(max-width:700px) {{
+  .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) minmax(86px,1.05fr) 96px 92px 76px }}
+  .portfolio-holding-card .decision-signal {{ display:none }}
+  .holding-spark .mini-sparkline {{ height:38px; width:92px }}
+}} @media(max-width:620px) {{
+  .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) minmax(86px,1.05fr) 96px 92px }}
+  .portfolio-holding-card>span[data-label="Gain"] {{ display:none }}
 }} @media(max-width:600px) {{
   main {{ padding:24px 12px 60px }} .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr }}
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
-  .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }} .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) minmax(86px,1.05fr) 96px }}
-  .holding-current {{ display:none }}
+  .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }}
   .portfolio-pulse {{ display:none }} .board-intro p {{ display:none }}
   .chart-range-tabs {{ gap:9px; justify-content:space-between }} .chart-range-tabs button {{ font-size:12px; padding:6px 7px }}
   .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
+}} @media(max-width:460px) {{
+  .portfolio-holding-card {{ grid-template-columns:minmax(84px,1fr) minmax(82px,1.05fr) 92px }}
+  .holding-current {{ display:none }}
 }}
 </style>
 </head>
