@@ -58,6 +58,10 @@ def _optional_percent(value: object) -> str:
     return "pending" if value is None else f"{float(value):.1%}"
 
 
+def _optional_signed_percent(value: object) -> str:
+    return "pending" if value is None else f"{float(value):+.1%}"
+
+
 def _optional_ratio(value: object) -> str:
     return "pending" if value is None else f"{float(value):.2f}×"
 
@@ -616,7 +620,7 @@ def _kline_chart(
         for index in (0, len(candles) // 2, len(candles) - 1)
     )
     signal_probability = "--" if probability is None else f"{probability:.0%}"
-    return f"""<section class="kline-chart-card">
+    return f"""<section class="kline-chart-card" data-active-chart-range="126">
       <div class="chart-heading"><div><small>{visible_sessions}-session daily K-line</small><h3>Price wave in context</h3></div>
       <span class="chart-signal {signal_class}">{html.escape(signal_label)} {signal_probability}</span></div>
       <svg class="kline-chart" viewBox="0 0 {width} {height}" data-plot-left="{left}" data-plot-top="{top}" data-plot-width="{plot_width:.1f}" data-plot-height="{volume_bottom - top:.1f}" data-candle-count="{len(candles)}" role="img" aria-label="{html.escape(signal_label)} evidence on daily candlestick chart">
@@ -636,7 +640,7 @@ def _kline_chart(
         <button type="button" data-chart-range="126" class="active">YTD</button>
         <button type="button" data-chart-range="252">1Y</button>
       </div>
-      <small class="chart-zoom-hint">Pinch or scroll on the chart to zoom its scale. Double-click resets.</small>
+      <small class="chart-zoom-hint">Use 1D/1W/1M tabs or pinch/scroll on the chart itself. Double-click resets.</small>
       <div class="chart-legend"><span class="support-key">Support zone</span><span class="resistance-key">Resistance zone</span><span class="cost-key">Average cost</span><span class="wave-key">Active wave</span><span>Volume</span></div>
     </section>"""
 
@@ -1394,10 +1398,10 @@ def build_dashboard(
               data-sort-signal="{signal_rank}">
               <span class="holding-identity" data-label="Symbol" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
               <span class="holding-spark" data-label="Trend">{mini_sparkline}</span>
-              <span class="today-pill {today_return_class}" data-label="Today %"><b>{_optional_percent(today_return)}</b></span>
+              <span class="today-pill {today_return_class}" data-label="Today %"><b>{_optional_signed_percent(today_return)}</b></span>
               <span class="holding-today-cash {today_return_class}" data-label="Today $"><b>{_signed_compact_money(today_dollars)}</b></span>
               <span class="holding-current {today_return_class}" data-label="Price"><b>${display_price:,.2f}</b></span>
-              <span class="{display_return_class}" data-label="Gain"><b>{_optional_percent(display_unrealized_return)}</b></span>
+              <span class="{display_return_class}" data-label="Gain"><b>{_optional_signed_percent(display_unrealized_return)}</b></span>
               <span data-label="Portfolio"><b>{_percent(record.get("portfolio_weight"))}</b></span>
               <span class="decision-signal {signal_class}" data-label="Prediction" title="{html.escape(signal_source)}"><strong>{signal_label}</strong><b>{signal_percent}</b></span>
             </button>"""
@@ -1508,10 +1512,6 @@ def build_dashboard(
             <option value="symbol-asc">Symbol A-Z</option>
           </select>
         </label>
-      </div>
-      <div class="portfolio-holdings-header" aria-hidden="true">
-        <span>Symbol</span><span>Trend</span><span>Today %</span><span>Today $</span>
-        <span>Current price</span><span>Gain %</span><span>Portfolio %</span><span>Prediction</span>
       </div>
       <div class="portfolio-holdings-list" data-portfolio-holdings>
         {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
@@ -1867,25 +1867,23 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
-.portfolio-holdings-header,.portfolio-holding-card {{ display:grid; grid-template-columns:82px 88px 86px 76px 104px 70px 78px 112px; gap:12px; align-items:center }}
-.portfolio-holdings-header {{ background:#080808; border-bottom:1px solid var(--line); color:var(--muted); font-size:9px; font-weight:800; letter-spacing:.28px; padding:5px 10px; text-transform:uppercase }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
-.portfolio-holdings-list {{ display:grid }}
-.portfolio-holding-card {{ background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; font:inherit; min-height:48px; padding:8px 10px; text-align:left; width:100% }}
+.portfolio-holdings-list {{ container-type:inline-size; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr)); position:relative }}
+.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; display:grid; font:inherit; gap:10px; grid-template-columns:minmax(86px,1.1fr) 74px 78px minmax(76px,.9fr) minmax(74px,.8fr) 68px 78px 78px; min-height:64px; overflow:hidden; padding:10px 14px; text-align:left; width:100% }}
 .portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
-.portfolio-holding-card strong {{ font-size:17px }} .portfolio-holding-card small {{ color:#9aa0a6; display:block; font-size:12px; line-height:1.18; margin-top:2px }} .portfolio-holding-card b {{ display:block; font-size:13px; white-space:nowrap }}
-.portfolio-holding-card>span {{ min-width:0; white-space:nowrap }}
+.portfolio-holding-card strong {{ font-size:18px; letter-spacing:-.25px }} .portfolio-holding-card small {{ color:#9aa0a6; display:block; font-size:13px; line-height:1.18; margin-top:2px }} .portfolio-holding-card b {{ display:block; font-size:15px; letter-spacing:-.1px; white-space:nowrap }}
+.portfolio-holding-card>span {{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
 .portfolio-holding-card>span::before {{ color:var(--muted); content:attr(data-label); display:none; font-size:9px; font-weight:700; letter-spacing:.18px; margin-bottom:2px }}
-.holding-current b {{ font-size:17px; font-weight:850; letter-spacing:-.25px }} .holding-current.positive b {{ color:var(--green) }} .holding-current.negative b {{ color:var(--red) }}
+.holding-current b {{ font-size:18px; font-weight:850; letter-spacing:-.35px }} .holding-current.positive b {{ color:var(--green) }} .holding-current.negative b {{ color:var(--red) }}
 .holding-return.positive b,.positive b {{ color:var(--green) }} .holding-return.negative b,.negative b {{ color:var(--red) }}
-.holding-spark {{ align-items:center; color:#7f858c; display:flex; gap:10px }}
-.holding-spark::after {{ border-top:2px dotted #555; content:""; flex:1; min-width:24px }}
+.holding-spark {{ align-items:center; color:#79818a; display:flex; justify-content:center }}
+.holding-spark::after {{ content:none }}
 .holding-today-cash.positive b {{ color:var(--green) }} .holding-today-cash.negative b {{ color:var(--red) }}
-.today-pill {{ align-items:center; border:1px solid currentColor; border-radius:10px; display:flex; justify-content:center; min-height:34px; padding:5px 9px }}
+.today-pill {{ align-items:center; border:1px solid currentColor; border-radius:9px; display:flex; justify-content:center; min-height:32px; padding:5px 8px }}
 .today-pill.positive {{ background:var(--green); border-color:var(--green); color:#001f08 }} .today-pill.negative {{ background:#ff5000; border-color:#ff5000; color:#050505 }}
-.today-pill b {{ color:inherit; font-size:16px; font-weight:650; text-align:center }}
-.mini-sparkline {{ display:block; height:28px; width:74px }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }}
-.portfolio-holding-card .decision-signal {{ align-items:center; border-radius:6px; display:grid; grid-template-columns:auto 1fr; padding:5px 7px }} .portfolio-holding-card .decision-signal strong {{ font-size:11px }} .portfolio-holding-card .decision-signal b {{ font-size:14px }}
+.today-pill b {{ color:inherit; font-size:16px; font-weight:700; text-align:center }}
+.mini-sparkline {{ display:block; height:26px; width:70px }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }}
+.portfolio-holding-card .decision-signal {{ align-items:center; border-radius:7px; display:grid; grid-template-columns:auto 1fr; min-width:0; padding:5px 7px }} .portfolio-holding-card .decision-signal strong {{ font-size:10px }} .portfolio-holding-card .decision-signal b {{ font-size:13px }}
 .portfolio-holding-card .decision-signal small {{ font-size:8.5px; line-height:1.1 }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
 .pressure-mini b {{ color:var(--red) }}
@@ -1927,7 +1925,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }} .today-pill.positive b,.today-pill.negative b {{ color:inherit }}
 .drawer-backdrop {{ background:rgba(0,0,0,.78); display:none; inset:0; position:fixed; z-index:20 }} .drawer-backdrop.open {{ display:block }}
 .drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:1040px; overflow:auto; padding:24px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .2s ease; width:min(96vw,1040px); z-index:30 }}
-.drawer.open {{ transform:translateX(0) }} .drawer-close {{ background:#171717; border:1px solid var(--line); border-radius:999px; color:var(--text); cursor:pointer; display:block; font:inherit; margin-left:auto; padding:7px 12px; position:sticky; top:0; z-index:2 }}
+.drawer.open {{ transform:none !important }} .drawer-close {{ background:#171717; border:1px solid var(--line); border-radius:999px; color:var(--text); cursor:pointer; display:block; font:inherit; margin-left:auto; padding:7px 12px; position:sticky; top:0; z-index:2 }}
 .drawer-heading {{ align-items:center; display:flex; justify-content:space-between; gap:12px; margin:34px 0 18px }} .drawer-heading h2 {{ display:inline; font-size:32px; margin:0 10px 0 0 }}
 .holding-detail {{ overflow-wrap:anywhere; padding:0 }} .detail-title {{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px }}
 .position-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:1px; grid-template-columns:1.4fr repeat(5,1fr); margin:0 0 14px; overflow:hidden }}
@@ -1992,28 +1990,33 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .experiment span {{ color:var(--muted); font-size:13px }}
 table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; padding:9px; border-bottom:1px solid var(--line) }} th {{ color:var(--green); font-size:12px; letter-spacing:.25px }}
 .note {{ color:var(--muted); font-size:13px }} @media(min-width:1320px) {{
-  .portfolio-holdings-header {{ display:none }}
   .portfolio-holdings-list {{ background:transparent; column-gap:18px; grid-template-columns:repeat(2,minmax(0,1fr)); position:relative; row-gap:0 }}
   .portfolio-holdings-list::before {{ background:var(--line); bottom:0; content:""; left:50%; position:absolute; top:0; width:1px }}
-  .portfolio-holding-card {{ background:#050505; border-bottom:1px solid var(--line); min-height:64px; padding:10px 14px }}
-  .portfolio-holding-card>span::before {{ display:block }}
+  .portfolio-holding-card {{ background:#050505; grid-template-columns:minmax(92px,1fr) 78px 78px 82px 78px 80px; min-height:68px; padding:12px 18px }}
+  .portfolio-holding-card>span::before {{ display:none }}
+  .holding-today-cash,.portfolio-holding-card>span[data-label="Portfolio"] {{ display:none }}
+}} @media(max-width:1320px) {{
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 80px 82px 88px 78px; min-height:66px; padding:11px 14px }}
+  .portfolio-holding-card>span[data-label="Portfolio"],.portfolio-holding-card>span[data-label="Gain"],.portfolio-holding-card .decision-signal {{ display:none }}
+}} @media(max-width:1080px) {{
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 86px 92px 82px; min-height:68px }}
+  .holding-today-cash {{ display:none }}
 }} @media(max-width:900px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
   .portfolio-pulse {{ grid-template-columns:1fr }}
-  .portfolio-holdings-header {{ display:none }}
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) minmax(110px,1.25fr) 112px; min-height:76px; padding:14px 10px }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) minmax(110px,1.25fr) 112px; min-height:76px; padding:14px 12px }}
   .holding-current,.holding-today-cash,.portfolio-holding-card>span[data-label="Gain"],.portfolio-holding-card>span[data-label="Portfolio"],.portfolio-holding-card .decision-signal {{ display:none }}
   .portfolio-holding-card>span::before {{ display:none }}
   .holding-spark .mini-sparkline {{ height:44px; width:92px }}
-  .today-pill {{ justify-self:end; min-width:92px }}
+  .today-pill {{ justify-self:end; min-width:88px }}
   .holding-row {{ grid-template-columns:80px 1fr; gap:10px }}
   .board-action {{ display:none }} .board-basics {{ grid-column:1 / -1; margin-top:3px }}
 }} @media(max-width:600px) {{
   main {{ padding:24px 12px 60px }} .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr }}
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
-  .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }} .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) minmax(92px,1.05fr) 104px }}
+  .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }} .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) minmax(86px,1.05fr) 96px }}
   .portfolio-pulse {{ display:none }} .board-intro p {{ display:none }}
   .chart-range-tabs {{ gap:9px; justify-content:space-between }} .chart-range-tabs button {{ font-size:12px; padding:6px 7px }}
   .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
@@ -2208,15 +2211,16 @@ document.querySelectorAll(".kline-chart-card").forEach((card) => {{
   const applyRange = (sessions) => {{
     const wanted = Math.min(candleCount, Number(sessions || candleCount));
     const xStep = plotWidth / candleCount;
-    const nextWidth = clamp(wanted * xStep + 90, minWidth, baseViewBox.width);
+    const nextWidth = clamp(wanted * xStep + 56, minWidth, baseViewBox.width);
     const rightEdge = plotLeft + plotWidth + 70;
     const nextX = clamp(rightEdge - nextWidth, baseViewBox.x, baseViewBox.x + baseViewBox.width - nextWidth);
+    card.dataset.activeChartRange = String(wanted);
     applyViewBox(nextX, baseViewBox.y, nextWidth, baseViewBox.height);
   }};
   const resetZoom = () => {{
     applyRange(126);
   }};
-  card.addEventListener("wheel", (event) => {{
+  const handleChartWheel = (event) => {{
     const rect = svg.getBoundingClientRect();
     if (!rect.width) return;
     event.preventDefault();
@@ -2235,12 +2239,23 @@ document.querySelectorAll(".kline-chart-card").forEach((card) => {{
     const nextX = clamp(pointerValue - nextWidth * pointerRatio, baseViewBox.x, baseViewBox.x + baseViewBox.width - nextWidth);
     const nextY = clamp(pointerYValue - nextHeight * pointerYRatio, baseViewBox.y, baseViewBox.y + baseViewBox.height - nextHeight);
     applyViewBox(nextX, nextY, nextWidth, nextHeight);
-  }}, {{ passive:false }});
+  }};
+  svg.addEventListener("wheel", handleChartWheel, {{ passive:false, capture:true }});
+  card.addEventListener("wheel", handleChartWheel, {{ passive:false, capture:true }});
   ["gesturestart", "gesturechange", "gestureend"].forEach((eventName) => {{
-    card.addEventListener(eventName, (event) => {{
+    svg.addEventListener(eventName, (event) => {{
       event.preventDefault();
       event.stopPropagation();
-    }}, {{ passive:false }});
+      if (event.scale && eventName === "gesturechange") {{
+        handleChartWheel({{
+          clientX: event.clientX || svg.getBoundingClientRect().left + svg.getBoundingClientRect().width / 2,
+          clientY: event.clientY || svg.getBoundingClientRect().top + svg.getBoundingClientRect().height / 2,
+          deltaY: event.scale > 1 ? -1 : 1,
+          preventDefault: () => {{}},
+          stopPropagation: () => {{}}
+        }});
+      }}
+    }}, {{ passive:false, capture:true }});
   }});
   rangeButtons.forEach((button) => {{
     button.addEventListener("click", () => {{

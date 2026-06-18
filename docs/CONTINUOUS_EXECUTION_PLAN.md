@@ -57,7 +57,7 @@ Near-term product goals:
 Current execution queue:
 
 - P1: M085 historical forecasts and matured outcomes on K-line charts.
-- P1: M086 selectable chart horizons.
+- P1: M086 data-driven selectable chart horizons with recalculated chart scale.
 - P2: M017 symbol-change, merger, and delisting detection.
 - P2: M061-M063 market-regime conditioning only after stability gates pass.
 
@@ -175,8 +175,10 @@ Current execution queue:
 - [ ] M082 Add BUY/SELL/WAIT, sector, weight, and confidence filters.
 - [ ] M083 Add ticker search and probability sorting.
 - [x] M084 Add chart crosshair and OHLCV tooltips.
+- [x] M084A Restore responsive Robinhood-style holdings rows and visible detail drawer.
 - [ ] M085 Mark historical forecasts and matured outcomes on K-line charts.
-- [ ] M086 Add selectable 6-month, 1-year, and 2-year horizons.
+- [~] M086 Add selectable 1D, 1W, 1M, 3M, YTD, and 1Y chart horizons with
+  data-driven redraw and recalculated visible price scale.
 - [ ] M087 Add relative-strength and volume annotations.
 - [ ] M088 Complete keyboard, screen-reader, and mobile chart support.
 - [ ] M089 Add concise-language and explanation usefulness tests.
