@@ -428,219 +428,268 @@ def _kline_chart(
     price_plan: dict | None = None,
     data_quality_status: str | None = None,
     average_cost: object = None,
+    symbol: object = None,
+    latest_price: object = None,
+    today_return: object = None,
 ) -> str:
     if data_quality_status == "POOR":
         return '<div class="chart-unavailable">K-line chart blocked by the data-quality gate.</div>'
-    visible_sessions = 252
-    candles = [
+    clean_history = [
         item
-        for item in history[-visible_sessions:]
+        for item in history
         if item.open is not None and item.high is not None and item.low is not None
     ]
-    if len(candles) < 20:
+    if len(clean_history) < 20:
         return '<div class="chart-unavailable">Daily OHLCV chart unavailable.</div>'
-    width, height = 860, 430
-    left, right, top, price_bottom = 18, 64, 28, 315
-    volume_top, volume_bottom = 340, 390
-    plot_width = width - left - right
-    plot_height = price_bottom - top
-    price_values = [
-        value
-        for item in candles
-        for value in (float(item.high), float(item.low))
-    ]
-    for key in (
-        "support_zone_low",
-        "support_zone_high",
-        "resistance_zone_low",
-        "resistance_zone_high",
-        "next_resistance_zone_low",
-        "next_resistance_zone_high",
-        "last_pivot_price",
-        "latest_close",
-    ):
-        if wave.get(key) is not None:
-            price_values.append(float(wave[key]))
     average_cost_value = (
         float(average_cost)
         if average_cost is not None and float(average_cost) > 0
         else None
     )
-    raw_price_low, raw_price_high = min(price_values), max(price_values)
-    raw_span = raw_price_high - raw_price_low or max(raw_price_high * 0.02, 1)
-    include_cost_in_scale = (
-        average_cost_value is not None
-        and raw_price_low - raw_span * 0.18 <= average_cost_value <= raw_price_high + raw_span * 0.18
-    )
-    if include_cost_in_scale:
-        price_values.append(float(average_cost_value))
-    price_low, price_high = min(price_values), max(price_values)
-    padding = max((price_high - price_low) * 0.06, price_high * 0.01)
-    price_low, price_high = price_low - padding, price_high + padding
-    price_span = price_high - price_low or 1
-    x_step = plot_width / len(candles)
-    body_width = max(1.2, min(4.0, x_step * 0.62))
 
-    def x(index: int) -> float:
-        return left + (index + 0.5) * x_step
-
-    def y(value: float) -> float:
-        return top + (price_high - value) / price_span * plot_height
-
-    zones = []
-    zone_definitions = (
-        ("Pressure", "resistance_zone_low", "resistance_zone_high", "resistance-zone"),
-        (
-            "Upper pressure",
+    def render_svg(visible_sessions: int, active: bool) -> str:
+        candles = clean_history[-visible_sessions:]
+        width, height = 860, 430
+        left, right, top, price_bottom = 18, 64, 28, 315
+        volume_top, volume_bottom = 340, 390
+        plot_width = width - left - right
+        plot_height = price_bottom - top
+        price_values = [
+            value
+            for item in candles
+            for value in (float(item.high), float(item.low))
+        ]
+        visible_low, visible_high = min(price_values), max(price_values)
+        visible_span = visible_high - visible_low or max(visible_high * 0.02, 1)
+        for key in (
+            "support_zone_low",
+            "support_zone_high",
+            "resistance_zone_low",
+            "resistance_zone_high",
             "next_resistance_zone_low",
             "next_resistance_zone_high",
-            "upper-resistance-zone",
-        ),
-        ("Support", "support_zone_low", "support_zone_high", "support-zone"),
-    )
-    zone_label_count = 0
-    for label, low_key, high_key, css_class in zone_definitions:
-        if wave.get(low_key) is None or wave.get(high_key) is None:
-            continue
-        low_value = float(wave[low_key])
-        high_value = float(wave[high_key])
-        zone_top = y(float(wave[high_key]))
-        zone_bottom = y(float(wave[low_key]))
-        zone_mid = (zone_top + zone_bottom) / 2
-        label_y = min(
-            max(zone_mid + (zone_label_count % 3 - 1) * 14, top + 14),
-            price_bottom - 8,
+            "last_pivot_price",
+            "latest_close",
+        ):
+            if wave.get(key) is None:
+                continue
+            zone_value = float(wave[key])
+            if visible_low - visible_span * 0.75 <= zone_value <= visible_high + visible_span * 0.75:
+                price_values.append(zone_value)
+        include_cost_in_scale = (
+            average_cost_value is not None
+            and visible_low - visible_span * 0.18 <= average_cost_value <= visible_high + visible_span * 0.18
         )
-        zone_label_count += 1
-        label_class = "pressure-label" if "pressure" in label.lower() else "support-label"
-        label_text = f"{label} ${low_value:.2f}–${high_value:.2f}"
-        zones.append(
-            f'<rect class="{css_class}" x="{left:.1f}" y="{zone_top:.1f}" '
-            f'width="{plot_width:.1f}" height="{max(1, zone_bottom - zone_top):.1f}"/>'
-            f'<line class="zone-leader {label_class}" x1="{left + plot_width - 42:.1f}" y1="{zone_mid:.1f}" '
-            f'x2="{left + plot_width - 174:.1f}" y2="{label_y:.1f}"/>'
-            f'<rect class="zone-label-bg {label_class}" x="{left + plot_width - 342:.1f}" y="{label_y - 11:.1f}" width="166" height="16" rx="4"/>'
-            f'<text class="zone-label {label_class}" x="{left + plot_width - 336:.1f}" y="{label_y:.1f}">{html.escape(label_text)}</text>'
+        if include_cost_in_scale:
+            price_values.append(float(average_cost_value))
+        price_low, price_high = min(price_values), max(price_values)
+        padding = max((price_high - price_low) * 0.08, price_high * 0.01)
+        price_low, price_high = price_low - padding, price_high + padding
+        price_span = price_high - price_low or 1
+        x_step = plot_width / len(candles)
+        body_width = max(2.0, min(14.0, x_step * 0.62))
+
+        def x(index: int) -> float:
+            return left + (index + 0.5) * x_step
+
+        def y(value: float) -> float:
+            return top + (price_high - value) / price_span * plot_height
+
+        zones = []
+        zone_definitions = (
+            ("Pressure", "resistance_zone_low", "resistance_zone_high", "resistance-zone"),
+            (
+                "Upper pressure",
+                "next_resistance_zone_low",
+                "next_resistance_zone_high",
+                "upper-resistance-zone",
+            ),
+            ("Support", "support_zone_low", "support_zone_high", "support-zone"),
         )
-    target_zone = ""
-    if price_plan:
-        zone_class = html.escape(str(price_plan.get("plan_class") or signal_class))
-        target_top = y(float(price_plan["high"]))
-        target_bottom = y(float(price_plan["low"]))
-        target_mid = y(float(price_plan["midpoint"]))
-        target_label = (
-            f'{price_plan.get("label", signal_label)} '
-            f'${price_plan["low"]:.2f}–${price_plan["high"]:.2f}'
-        )
-        target_zone = (
-            f'<rect class="target-zone {zone_class}" x="{left:.1f}" y="{target_top:.1f}" '
-            f'width="{plot_width:.1f}" height="{max(1, target_bottom - target_top):.1f}"/>'
-            f'<line class="target-mid {zone_class}" x1="{left:.1f}" y1="{target_mid:.1f}" '
-            f'x2="{left + plot_width:.1f}" y2="{target_mid:.1f}"/>'
-            f'<line class="target-label-leader {zone_class}" x1="{left + plot_width - 26:.1f}" y1="{target_mid:.1f}" '
-            f'x2="{left + plot_width - 150:.1f}" y2="{max(top + 18, target_mid - 18):.1f}"/>'
-            f'<rect class="target-label-bg {zone_class}" x="{left + plot_width - 300:.1f}" '
-            f'y="{max(top + 4, target_mid - 30):.1f}" width="148" height="17" rx="4"/>'
-            f'<text class="target-label" x="{left + plot_width - 294:.1f}" '
-            f'y="{max(top + 16, target_mid - 18):.1f}">{html.escape(target_label)}</text>'
-        )
-    cost_line = ""
-    if average_cost_value is not None:
-        if price_low <= average_cost_value <= price_high:
-            cost_y = y(average_cost_value)
-            cost_line = (
-                f'<line class="average-cost-line" x1="{left:.1f}" y1="{cost_y:.1f}" '
-                f'x2="{left + plot_width:.1f}" y2="{cost_y:.1f}"/>'
-                f'<text class="average-cost-label" x="{left + plot_width - 90:.1f}" '
-                f'y="{cost_y - 4:.1f}">Avg cost ${average_cost_value:.2f}</text>'
+        zone_label_count = 0
+        for label, low_key, high_key, css_class in zone_definitions:
+            if wave.get(low_key) is None or wave.get(high_key) is None:
+                continue
+            low_value = float(wave[low_key])
+            high_value = float(wave[high_key])
+            if high_value < price_low or low_value > price_high:
+                continue
+            zone_top = y(high_value)
+            zone_bottom = y(low_value)
+            zone_mid = (zone_top + zone_bottom) / 2
+            label_y = min(
+                max(zone_mid + (zone_label_count % 3 - 1) * 14, top + 14),
+                price_bottom - 8,
             )
-        else:
-            location = "below chart" if average_cost_value < price_low else "above chart"
-            marker_y = price_bottom - 5 if average_cost_value < price_low else top + 12
-            cost_line = (
-                f'<text class="average-cost-label average-cost-offscreen" x="{left + plot_width - 142:.1f}" '
-                f'y="{marker_y:.1f}">Avg cost ${average_cost_value:.2f} {location}</text>'
+            zone_label_count += 1
+            label_class = "pressure-label" if "pressure" in label.lower() else "support-label"
+            label_text = f"{label} ${low_value:.2f}–${high_value:.2f}"
+            zones.append(
+                f'<rect class="{css_class}" x="{left:.1f}" y="{zone_top:.1f}" '
+                f'width="{plot_width:.1f}" height="{max(1, zone_bottom - zone_top):.1f}"/>'
+                f'<line class="zone-leader {label_class}" x1="{left + plot_width - 42:.1f}" y1="{zone_mid:.1f}" '
+                f'x2="{left + plot_width - 174:.1f}" y2="{label_y:.1f}"/>'
+                f'<rect class="zone-label-bg {label_class}" x="{left + plot_width - 342:.1f}" y="{label_y - 11:.1f}" width="166" height="16" rx="4"/>'
+                f'<text class="zone-label {label_class}" x="{left + plot_width - 336:.1f}" y="{label_y:.1f}">{html.escape(label_text)}</text>'
             )
-    grid = []
-    for fraction in (0, 0.25, 0.5, 0.75, 1):
-        grid_y = top + plot_height * fraction
-        grid_price = price_high - price_span * fraction
-        grid.append(
-            f'<line class="chart-grid" x1="{left}" y1="{grid_y:.1f}" x2="{left + plot_width:.1f}" y2="{grid_y:.1f}"/>'
-            f'<text class="axis-label" x="{left + plot_width + 5:.1f}" y="{grid_y + 4:.1f}">${grid_price:.2f}</text>'
-        )
-    volumes = [float(item.volume or 0) for item in candles]
-    max_volume = max(volumes) or 1
-    candle_shapes = []
-    candle_hitboxes = []
-    for index, item in enumerate(candles):
-        center = x(index)
-        open_value, close_value = float(item.open), float(item.close)
-        high_value, low_value = float(item.high), float(item.low)
-        css_class = "up-candle" if close_value >= open_value else "down-candle"
-        body_top = y(max(open_value, close_value))
-        body_height = max(1.2, abs(y(open_value) - y(close_value)))
-        volume_height = float(item.volume or 0) / max_volume * (volume_bottom - volume_top)
-        candle_shapes.append(
-            f'<line class="{css_class}" x1="{center:.1f}" y1="{y(high_value):.1f}" x2="{center:.1f}" y2="{y(low_value):.1f}"/>'
-            f'<rect class="{css_class}" x="{center - body_width / 2:.1f}" y="{body_top:.1f}" width="{body_width:.1f}" height="{body_height:.1f}"/>'
-            f'<rect class="volume {css_class}" x="{center - body_width / 2:.1f}" y="{volume_bottom - volume_height:.1f}" width="{body_width:.1f}" height="{volume_height:.1f}"/>'
-        )
-        candle_hitboxes.append(
-            f'<rect class="candle-hitbox" x="{left + index * x_step:.1f}" y="{top:.1f}" '
-            f'width="{x_step:.1f}" height="{volume_bottom - top:.1f}" tabindex="0" '
-            f'aria-label="{item.date.isoformat()} open ${open_value:.2f} high ${high_value:.2f} low ${low_value:.2f} close ${close_value:.2f}" '
-            f'data-date="{item.date.isoformat()}" data-x="{center:.1f}" data-close-y="{y(close_value):.1f}" '
-            f'data-open="${open_value:.2f}" data-high="${high_value:.2f}" '
-            f'data-low="${low_value:.2f}" data-close="${close_value:.2f}" '
-            f'data-volume="{float(item.volume or 0):,.0f}"/>'
-        )
-    pivot_line = ""
-    pivot_date = wave.get("last_pivot_date")
-    wave_class = (
-        "buy"
-        if wave.get("direction") == "ADVANCING"
-        else "sell" if wave.get("direction") == "DECLINING" else "wait"
-    )
-    if pivot_date:
-        pivot_index = next(
-            (index for index, item in enumerate(candles) if item.date.isoformat() == pivot_date),
-            None,
-        )
-        if pivot_index is not None and wave.get("last_pivot_price") is not None:
-            pivot_line = (
-                f'<line class="active-wave {wave_class}" x1="{x(pivot_index):.1f}" '
-                f'y1="{y(float(wave["last_pivot_price"])):.1f}" x2="{x(len(candles) - 1):.1f}" '
-                f'y2="{y(float(candles[-1].close)):.1f}"/>'
-                f'<circle class="pivot-point {wave_class}" cx="{x(pivot_index):.1f}" '
-                f'cy="{y(float(wave["last_pivot_price"])):.1f}" r="4"/>'
+        target_zone = ""
+        if price_plan and float(price_plan["high"]) >= price_low and float(price_plan["low"]) <= price_high:
+            zone_class = html.escape(str(price_plan.get("plan_class") or signal_class))
+            target_top = y(float(price_plan["high"]))
+            target_bottom = y(float(price_plan["low"]))
+            target_mid = y(float(price_plan["midpoint"]))
+            target_label = (
+                f'{price_plan.get("label", signal_label)} '
+                f'${price_plan["low"]:.2f}–${price_plan["high"]:.2f}'
             )
-    date_labels = "".join(
-        f'<text class="axis-label date-label" x="{x(index):.1f}" y="414">{candles[index].date.strftime("%b %d")}</text>'
-        for index in (0, len(candles) // 2, len(candles) - 1)
-    )
+            target_zone = (
+                f'<rect class="target-zone {zone_class}" x="{left:.1f}" y="{target_top:.1f}" '
+                f'width="{plot_width:.1f}" height="{max(1, target_bottom - target_top):.1f}"/>'
+                f'<line class="target-mid {zone_class}" x1="{left:.1f}" y1="{target_mid:.1f}" '
+                f'x2="{left + plot_width:.1f}" y2="{target_mid:.1f}"/>'
+                f'<line class="target-label-leader {zone_class}" x1="{left + plot_width - 26:.1f}" y1="{target_mid:.1f}" '
+                f'x2="{left + plot_width - 150:.1f}" y2="{max(top + 18, target_mid - 18):.1f}"/>'
+                f'<rect class="target-label-bg {zone_class}" x="{left + plot_width - 300:.1f}" '
+                f'y="{max(top + 4, target_mid - 30):.1f}" width="148" height="17" rx="4"/>'
+                f'<text class="target-label" x="{left + plot_width - 294:.1f}" '
+                f'y="{max(top + 16, target_mid - 18):.1f}">{html.escape(target_label)}</text>'
+            )
+        cost_line = ""
+        if average_cost_value is not None:
+            if price_low <= average_cost_value <= price_high:
+                cost_y = y(average_cost_value)
+                cost_line = (
+                    f'<line class="average-cost-line" x1="{left:.1f}" y1="{cost_y:.1f}" '
+                    f'x2="{left + plot_width:.1f}" y2="{cost_y:.1f}"/>'
+                    f'<text class="average-cost-label" x="{left + plot_width - 90:.1f}" '
+                    f'y="{cost_y - 4:.1f}">Avg cost ${average_cost_value:.2f}</text>'
+                )
+            else:
+                location = "below chart" if average_cost_value < price_low else "above chart"
+                marker_y = price_bottom - 5 if average_cost_value < price_low else top + 12
+                cost_line = (
+                    f'<text class="average-cost-label average-cost-offscreen" x="{left + plot_width - 142:.1f}" '
+                    f'y="{marker_y:.1f}">Avg cost ${average_cost_value:.2f} {location}</text>'
+                )
+        grid = []
+        for fraction in (0, 0.25, 0.5, 0.75, 1):
+            grid_y = top + plot_height * fraction
+            grid_price = price_high - price_span * fraction
+            grid.append(
+                f'<line class="chart-grid" x1="{left}" y1="{grid_y:.1f}" x2="{left + plot_width:.1f}" y2="{grid_y:.1f}"/>'
+                f'<text class="axis-label" x="{left + plot_width + 5:.1f}" y="{grid_y + 4:.1f}">${grid_price:.2f}</text>'
+            )
+        volumes = [float(item.volume or 0) for item in candles]
+        max_volume = max(volumes) or 1
+        candle_shapes = []
+        candle_hitboxes = []
+        for index, item in enumerate(candles):
+            center = x(index)
+            open_value, close_value = float(item.open), float(item.close)
+            high_value, low_value = float(item.high), float(item.low)
+            css_class = "up-candle" if close_value >= open_value else "down-candle"
+            body_top = y(max(open_value, close_value))
+            body_height = max(1.2, abs(y(open_value) - y(close_value)))
+            volume_height = float(item.volume or 0) / max_volume * (volume_bottom - volume_top)
+            candle_shapes.append(
+                f'<line class="{css_class}" x1="{center:.1f}" y1="{y(high_value):.1f}" x2="{center:.1f}" y2="{y(low_value):.1f}"/>'
+                f'<rect class="{css_class}" x="{center - body_width / 2:.1f}" y="{body_top:.1f}" width="{body_width:.1f}" height="{body_height:.1f}"/>'
+                f'<rect class="volume {css_class}" x="{center - body_width / 2:.1f}" y="{volume_bottom - volume_height:.1f}" width="{body_width:.1f}" height="{volume_height:.1f}"/>'
+            )
+            candle_hitboxes.append(
+                f'<rect class="candle-hitbox" x="{left + index * x_step:.1f}" y="{top:.1f}" '
+                f'width="{x_step:.1f}" height="{volume_bottom - top:.1f}" tabindex="0" '
+                f'aria-label="{item.date.isoformat()} open ${open_value:.2f} high ${high_value:.2f} low ${low_value:.2f} close ${close_value:.2f}" '
+                f'data-date="{item.date.isoformat()}" data-x="{center:.1f}" data-close-y="{y(close_value):.1f}" '
+                f'data-open="${open_value:.2f}" data-high="${high_value:.2f}" '
+                f'data-low="${low_value:.2f}" data-close="${close_value:.2f}" '
+                f'data-volume="{float(item.volume or 0):,.0f}"/>'
+            )
+        pivot_line = ""
+        pivot_date = wave.get("last_pivot_date")
+        wave_class = (
+            "buy"
+            if wave.get("direction") == "ADVANCING"
+            else "sell" if wave.get("direction") == "DECLINING" else "wait"
+        )
+        if pivot_date:
+            pivot_index = next(
+                (index for index, item in enumerate(candles) if item.date.isoformat() == pivot_date),
+                None,
+            )
+            if pivot_index is not None and wave.get("last_pivot_price") is not None:
+                pivot_line = (
+                    f'<line class="active-wave {wave_class}" x1="{x(pivot_index):.1f}" '
+                    f'y1="{y(float(wave["last_pivot_price"])):.1f}" x2="{x(len(candles) - 1):.1f}" '
+                    f'y2="{y(float(candles[-1].close)):.1f}"/>'
+                    f'<circle class="pivot-point {wave_class}" cx="{x(pivot_index):.1f}" '
+                    f'cy="{y(float(wave["last_pivot_price"])):.1f}" r="4"/>'
+                )
+        date_indices = sorted(set((0, len(candles) // 2, len(candles) - 1)))
+        date_labels = "".join(
+            f'<text class="axis-label date-label" x="{x(index):.1f}" y="414">{candles[index].date.strftime("%b %d")}</text>'
+            for index in date_indices
+        )
+        hidden = "" if active else " hidden"
+        return (
+            f'<svg class="kline-chart" viewBox="0 0 {width} {height}" data-chart-range="{visible_sessions}" '
+            f'data-plot-left="{left}" data-plot-top="{top}" data-plot-width="{plot_width:.1f}" '
+            f'data-plot-height="{volume_bottom - top:.1f}" data-candle-count="{len(candles)}" '
+            f'role="img" aria-label="{html.escape(signal_label)} evidence on {visible_sessions} daily candles"{hidden}>'
+            f'{"".join(grid)}{"".join(zones)}{target_zone}{cost_line}{"".join(candle_shapes)}{pivot_line}'
+            f'<line class="volume-divider" x1="{left}" y1="{volume_top - 5}" x2="{left + plot_width}" y2="{volume_top - 5}"/>'
+            f'{date_labels}'
+            f'<line class="chart-crosshair vertical" data-chart-crosshair-x x1="{left}" y1="{top}" x2="{left}" y2="{volume_bottom}"/>'
+            f'<line class="chart-crosshair horizontal" data-chart-crosshair-y x1="{left}" y1="{top}" x2="{left + plot_width}" y2="{top}"/>'
+            f'{"".join(candle_hitboxes)}</svg>'
+        )
+
     signal_probability = "--" if probability is None else f"{probability:.0%}"
-    return f"""<section class="kline-chart-card" data-active-chart-range="126">
-      <div class="chart-heading"><div><small>{visible_sessions}-session daily K-line</small><h3>Price wave in context</h3></div>
+    ranges = ((5, "1D"), (7, "1W"), (21, "1M"), (63, "3M"), (126, "YTD"), (252, "1Y"))
+    rendered_ranges = []
+    rendered_values = set()
+    for sessions, label in ranges:
+        range_value = min(sessions, len(clean_history))
+        if range_value in rendered_values:
+            continue
+        rendered_values.add(range_value)
+        rendered_ranges.append((range_value, label))
+    preferred_range = 126 if len(clean_history) >= 126 else len(clean_history)
+    active_range = preferred_range if preferred_range in rendered_values else rendered_ranges[-1][0]
+    chart_svgs = "".join(render_svg(range_value, range_value == active_range) for range_value, _ in rendered_ranges)
+    button_items = []
+    active_button_assigned = False
+    for sessions, label in ranges:
+        range_value = min(sessions, len(clean_history))
+        is_active_button = range_value == active_range and not active_button_assigned
+        active_button_assigned = active_button_assigned or is_active_button
+        active_class = ' class="active"' if is_active_button else ""
+        button_items.append(
+            f'<button type="button" data-chart-range="{range_value}"{active_class}>{label}</button>'
+        )
+    buttons = "".join(button_items)
+    price_context = ""
+    if symbol:
+        price_class = (
+            "positive"
+            if today_return is not None and float(today_return) >= 0
+            else "negative"
+        )
+        price_context = (
+            f'<h3><span>{html.escape(str(symbol).upper())}</span> '
+            f'<b>{_optional_money(latest_price)}</b> '
+            f'<em class="{price_class}">({_optional_signed_percent(today_return)})</em></h3>'
+        )
+    else:
+        price_context = "<h3>Price wave in context</h3>"
+    return f"""<section class="kline-chart-card" data-active-chart-range="{active_range}">
+      <div class="chart-heading"><div><small>Daily K-line · switched by range</small>{price_context}</div>
       <span class="chart-signal {signal_class}">{html.escape(signal_label)} {signal_probability}</span></div>
-      <svg class="kline-chart" viewBox="0 0 {width} {height}" data-plot-left="{left}" data-plot-top="{top}" data-plot-width="{plot_width:.1f}" data-plot-height="{volume_bottom - top:.1f}" data-candle-count="{len(candles)}" role="img" aria-label="{html.escape(signal_label)} evidence on daily candlestick chart">
-        {''.join(grid)}{''.join(zones)}{target_zone}{cost_line}{''.join(candle_shapes)}{pivot_line}
-        <line class="volume-divider" x1="{left}" y1="{volume_top - 5}" x2="{left + plot_width}" y2="{volume_top - 5}"/>
-        {date_labels}
-        <line class="chart-crosshair vertical" data-chart-crosshair-x x1="{left}" y1="{top}" x2="{left}" y2="{volume_bottom}"/>
-        <line class="chart-crosshair horizontal" data-chart-crosshair-y x1="{left}" y1="{top}" x2="{left + plot_width}" y2="{top}"/>
-        {''.join(candle_hitboxes)}
-      </svg>
+      {chart_svgs}
       <div class="chart-tooltip" aria-live="polite" hidden></div>
       <div class="chart-range-tabs" aria-label="Chart time range">
-        <button type="button" data-chart-range="5">1D</button>
-        <button type="button" data-chart-range="7">1W</button>
-        <button type="button" data-chart-range="21">1M</button>
-        <button type="button" data-chart-range="63">3M</button>
-        <button type="button" data-chart-range="126" class="active">YTD</button>
-        <button type="button" data-chart-range="252">1Y</button>
+        {buttons}
       </div>
-      <small class="chart-zoom-hint">Use 1D/1W/1M tabs or pinch/scroll on the chart itself. Double-click resets.</small>
       <div class="chart-legend"><span class="support-key">Support zone</span><span class="resistance-key">Resistance zone</span><span class="cost-key">Average cost</span><span class="wave-key">Active wave</span><span>Volume</span></div>
     </section>"""
 
@@ -1273,6 +1322,9 @@ def build_dashboard(
                 "data_quality_status"
             ),
             record.get("average_cost"),
+            record.get("symbol", ""),
+            display_price,
+            today_return,
         )
         return_class = (
             "positive"
@@ -1398,12 +1450,12 @@ def build_dashboard(
               data-sort-signal="{signal_rank}">
               <span class="holding-identity" data-label="Symbol" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
               <span class="holding-spark" data-label="Trend">{mini_sparkline}</span>
-              <span class="today-pill {today_return_class}" data-label="Today %"><b>{_optional_signed_percent(today_return)}</b></span>
+              <span class="today-pill {today_return_class}" data-label="Today %"><small>Today</small><b>{_optional_signed_percent(today_return)}</b></span>
               <span class="holding-today-cash {today_return_class}" data-label="Today $"><b>{_signed_compact_money(today_dollars)}</b></span>
-              <span class="holding-current {today_return_class}" data-label="Price"><b>${display_price:,.2f}</b></span>
-              <span class="{display_return_class}" data-label="Gain"><b>{_optional_signed_percent(display_unrealized_return)}</b></span>
+              <span class="holding-current {today_return_class}" data-label="Price"><small>Price</small><b>${display_price:,.2f}</b></span>
+              <span class="{display_return_class}" data-label="Gain"><small>Total</small><b>{_optional_signed_percent(display_unrealized_return)}</b></span>
               <span data-label="Portfolio"><b>{_percent(record.get("portfolio_weight"))}</b></span>
-              <span class="decision-signal {signal_class}" data-label="Prediction" title="{html.escape(signal_source)}"><strong>{signal_label}</strong><b>{signal_percent}</b></span>
+              <span class="decision-signal {signal_class}" data-label="Prediction" title="{html.escape(signal_source)}"><small>Prediction</small><strong>{signal_label}</strong><b>{signal_percent}</b></span>
             </button>"""
         )
         board_rows[signal_label].append(
@@ -1871,7 +1923,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-holdings-list {{ container-type:inline-size; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr)); position:relative }}
 .portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; display:grid; font:inherit; gap:10px; grid-template-columns:minmax(86px,1.1fr) 74px 78px minmax(76px,.9fr) minmax(74px,.8fr) 68px 78px 78px; min-height:64px; overflow:hidden; padding:10px 14px; text-align:left; width:100% }}
 .portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
-.portfolio-holding-card strong {{ font-size:18px; letter-spacing:-.25px }} .portfolio-holding-card small {{ color:#9aa0a6; display:block; font-size:13px; line-height:1.18; margin-top:2px }} .portfolio-holding-card b {{ display:block; font-size:15px; letter-spacing:-.1px; white-space:nowrap }}
+.portfolio-holding-card strong {{ font-size:18px; letter-spacing:-.25px }} .portfolio-holding-card small {{ color:#9aa0a6; display:block; font-size:10px; font-weight:700; letter-spacing:.15px; line-height:1.1; margin-bottom:2px }} .holding-identity small {{ font-size:13px; font-weight:500; letter-spacing:0; margin:2px 0 0 }} .portfolio-holding-card b {{ display:block; font-size:15px; letter-spacing:-.1px; white-space:nowrap }}
 .portfolio-holding-card>span {{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
 .portfolio-holding-card>span::before {{ color:var(--muted); content:attr(data-label); display:none; font-size:9px; font-weight:700; letter-spacing:.18px; margin-bottom:2px }}
 .holding-current b {{ font-size:18px; font-weight:850; letter-spacing:-.35px }} .holding-current.positive b {{ color:var(--green) }} .holding-current.negative b {{ color:var(--red) }}
@@ -1879,12 +1931,13 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holding-spark {{ align-items:center; color:#79818a; display:flex; justify-content:center }}
 .holding-spark::after {{ content:none }}
 .holding-today-cash.positive b {{ color:var(--green) }} .holding-today-cash.negative b {{ color:var(--red) }}
-.today-pill {{ align-items:center; border:1px solid currentColor; border-radius:9px; display:flex; justify-content:center; min-height:32px; padding:5px 8px }}
+.today-pill {{ align-items:center; border:1px solid currentColor; border-radius:9px; display:flex; flex-direction:column; justify-content:center; min-height:38px; padding:4px 8px }}
 .today-pill.positive {{ background:var(--green); border-color:var(--green); color:#001f08 }} .today-pill.negative {{ background:#ff5000; border-color:#ff5000; color:#050505 }}
+.today-pill small {{ color:inherit; font-size:9px; margin:0; opacity:.68 }}
 .today-pill b {{ color:inherit; font-size:16px; font-weight:700; text-align:center }}
 .mini-sparkline {{ display:block; height:26px; width:70px }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }}
 .portfolio-holding-card .decision-signal {{ align-items:center; border-radius:7px; display:grid; grid-template-columns:auto 1fr; min-width:0; padding:5px 7px }} .portfolio-holding-card .decision-signal strong {{ font-size:10px }} .portfolio-holding-card .decision-signal b {{ font-size:13px }}
-.portfolio-holding-card .decision-signal small {{ font-size:8.5px; line-height:1.1 }}
+.portfolio-holding-card .decision-signal small {{ font-size:8.5px; grid-column:1 / -1; line-height:1.1; margin:0 0 2px }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
 .pressure-mini b {{ color:var(--red) }}
 .priority-board-panel {{ margin-top:16px }} .priority-board-panel>summary {{ align-items:center; background:#0b0b0b; border:1px solid var(--line); border-radius:10px; cursor:pointer; display:flex; justify-content:space-between; list-style:none; padding:13px 15px }}
@@ -1924,8 +1977,8 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .health-status.low {{ background:var(--green-dim); color:var(--green) }} .health-status.medium {{ background:#2b240f; color:var(--amber) }} .health-status.high {{ background:#321214; color:var(--red) }}
 .board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }} .today-pill.positive b,.today-pill.negative b {{ color:inherit }}
 .drawer-backdrop {{ background:rgba(0,0,0,.78); display:none; inset:0; position:fixed; z-index:20 }} .drawer-backdrop.open {{ display:block }}
-.drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:1040px; overflow:auto; padding:24px; position:fixed; right:0; top:0; transform:translateX(105%); transition:transform .2s ease; width:min(96vw,1040px); z-index:30 }}
-.drawer.open {{ transform:none !important }} .drawer-close {{ background:#171717; border:1px solid var(--line); border-radius:999px; color:var(--text); cursor:pointer; display:block; font:inherit; margin-left:auto; padding:7px 12px; position:sticky; top:0; z-index:2 }}
+.drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:1040px; overflow:auto; padding:24px; position:fixed; right:-105vw; top:0; transition:none; width:min(96vw,1040px); z-index:30 }}
+.drawer.open {{ right:0 !important }} .drawer-close {{ background:#171717; border:1px solid var(--line); border-radius:999px; color:var(--text); cursor:pointer; display:block; font:inherit; margin-left:auto; padding:7px 12px; position:sticky; top:0; z-index:2 }}
 .drawer-heading {{ align-items:center; display:flex; justify-content:space-between; gap:12px; margin:34px 0 18px }} .drawer-heading h2 {{ display:inline; font-size:32px; margin:0 10px 0 0 }}
 .holding-detail {{ overflow-wrap:anywhere; padding:0 }} .detail-title {{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px }}
 .position-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:1px; grid-template-columns:1.4fr repeat(5,1fr); margin:0 0 14px; overflow:hidden }}
@@ -1956,9 +2009,9 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .info-tip::after {{ background:#222; border:1px solid #555; border-radius:6px; bottom:29px; color:#ddd; content:attr(data-tip); display:none; font-size:11px; font-weight:500; line-height:1.35; padding:8px; position:absolute; right:-6px; text-transform:none; width:240px; z-index:5 }}
 .info-tip:hover::after,.info-tip:focus::after {{ display:block }} .info-tip:focus {{ border-color:#aaa; outline:none }}
 .kline-chart-card {{ background:#0b0b0b; border:1px solid var(--line); border-radius:10px; margin:0 0 12px; padding:13px; position:relative }}
-.chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ font-size:17px; margin:1px 0 0 }}
+.chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ align-items:baseline; display:flex; flex-wrap:wrap; gap:7px; font-size:17px; margin:1px 0 0 }} .chart-heading h3 b {{ font-size:21px }} .chart-heading h3 em {{ font-style:normal }} .chart-heading h3 em.positive {{ color:var(--green) }} .chart-heading h3 em.negative {{ color:var(--red) }}
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
-.kline-chart {{ display:block; height:auto; overflow:visible; touch-action:none; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
+.kline-chart {{ display:block; height:auto; overflow:visible; width:100% }} .chart-grid {{ stroke:#242424; stroke-width:1 }} .axis-label {{ fill:#777; font-size:8px }} .date-label {{ text-anchor:middle }}
 .support-zone {{ fill:rgba(0,200,5,.14); stroke:rgba(0,200,5,.42); stroke-width:.8 }} .resistance-zone {{ fill:rgba(255,90,95,.25); stroke:rgba(255,90,95,.72); stroke-width:1.1 }} .upper-resistance-zone {{ fill:rgba(255,90,95,.16); stroke:rgba(255,90,95,.8); stroke-dasharray:5 4; stroke-width:1.1 }}
 .zone-label {{ fill:#ddd; font-size:8px; font-weight:850; paint-order:stroke; stroke:#050505; stroke-width:1.5px; text-transform:uppercase }} .pressure-label {{ fill:var(--red) }} .support-label {{ fill:var(--green) }}
 .zone-label-bg.pressure-label {{ fill:rgba(60,15,18,.86); stroke:rgba(255,90,95,.5) }} .zone-label-bg.support-label {{ fill:rgba(0,45,14,.86); stroke:rgba(0,200,5,.45) }}
@@ -1973,7 +2026,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .chart-crosshair {{ display:none; pointer-events:none; stroke:#e6e6e6; stroke-dasharray:3 3; stroke-width:.9; opacity:.7 }} .chart-crosshair.active {{ display:block }}
 .chart-tooltip {{ background:#050505; border:1px solid #555; border-radius:8px; box-shadow:0 10px 28px rgba(0,0,0,.45); color:var(--text); font-size:11px; left:12px; min-width:190px; padding:8px 10px; pointer-events:none; position:absolute; top:50px; z-index:4 }}
 .chart-tooltip b,.chart-tooltip span {{ display:block }} .chart-tooltip span {{ color:var(--muted); margin-top:2px }}
-.volume-divider {{ stroke:#333; stroke-width:1 }} .chart-range-tabs {{ align-items:center; display:flex; gap:22px; justify-content:center; margin:11px 0 8px }} .chart-range-tabs button {{ background:transparent; border:0; border-radius:8px; color:var(--green); cursor:pointer; font:inherit; font-size:13px; font-weight:800; padding:7px 10px }} .chart-range-tabs button.active {{ background:var(--green); color:#001f08 }} .chart-zoom-hint {{ color:var(--muted); display:block; font-size:10px; margin:4px 0 5px; text-align:center }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
+.volume-divider {{ stroke:#333; stroke-width:1 }} .chart-range-tabs {{ align-items:center; display:flex; gap:22px; justify-content:center; margin:11px 0 8px }} .chart-range-tabs button {{ background:transparent; border:0; border-radius:8px; color:var(--green); cursor:pointer; font:inherit; font-size:13px; font-weight:800; padding:7px 10px }} .chart-range-tabs button.active {{ background:var(--green); color:#001f08 }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
 .chart-legend .support-key::before {{ background:var(--green) }} .chart-legend .resistance-key::before {{ background:var(--red) }} .chart-legend .wave-key::before {{ background:var(--amber) }} .chart-legend .cost-key::before {{ background:#e6e6e6 }}
 .chart-unavailable {{ background:#111; border-radius:7px; color:var(--muted); margin-bottom:12px; padding:18px }}
 .advanced-details {{ border-top:1px solid var(--line); margin-top:12px; padding-top:8px }} .advanced-details summary {{ color:var(--muted); cursor:pointer; font-weight:650; padding:8px 0 }} .advanced-details[open] summary {{ color:var(--text) }}
@@ -2171,6 +2224,7 @@ const backdrop = document.querySelector(".drawer-backdrop");
 const detailPanels = [...document.querySelectorAll(".holding-detail")];
 const closeDrawer = () => {{
   drawer.classList.remove("open");
+  drawer.style.right = "-105vw";
   drawer.setAttribute("aria-hidden", "true");
   backdrop.classList.remove("open");
   detailPanels.forEach((panel) => panel.hidden = true);
@@ -2178,6 +2232,7 @@ const closeDrawer = () => {{
 document.querySelectorAll("[data-detail-target]").forEach((button) => button.addEventListener("click", () => {{
   detailPanels.forEach((panel) => panel.hidden = panel.id !== button.dataset.detailTarget);
   drawer.classList.add("open");
+  drawer.style.right = "0px";
   drawer.setAttribute("aria-hidden", "false");
   backdrop.classList.add("open");
   drawer.scrollTop = 0;
@@ -2188,113 +2243,61 @@ document.addEventListener("keydown", (event) => {{
 }});
 
 document.querySelectorAll(".kline-chart-card").forEach((card) => {{
-  const svg = card.querySelector(".kline-chart");
   const tooltip = card.querySelector(".chart-tooltip");
-  const vertical = card.querySelector("[data-chart-crosshair-x]");
-  const horizontal = card.querySelector("[data-chart-crosshair-y]");
-  const hitboxes = [...card.querySelectorAll(".candle-hitbox")];
+  const charts = [...card.querySelectorAll(".kline-chart")];
   const rangeButtons = [...card.querySelectorAll("[data-chart-range]")];
-  if (!svg || !tooltip || !vertical || !horizontal || hitboxes.length === 0) return;
-  const viewBox = svg.viewBox.baseVal;
-  const baseViewBox = {{ x: viewBox.x, y: viewBox.y, width: viewBox.width, height: viewBox.height }};
-  const plotLeft = Number(svg.dataset.plotLeft || 18);
-  const plotTop = Number(svg.dataset.plotTop || 28);
-  const plotWidth = Number(svg.dataset.plotWidth || 778);
-  const plotHeight = Number(svg.dataset.plotHeight || 362);
-  const candleCount = Number(svg.dataset.candleCount || hitboxes.length || 1);
-  const minWidth = Math.max(plotWidth / candleCount * 5, 90);
-  const minHeight = 110;
-  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-  const applyViewBox = (nextX, nextY, nextWidth, nextHeight) => {{
-    svg.setAttribute("viewBox", `${{nextX.toFixed(1)}} ${{nextY.toFixed(1)}} ${{nextWidth.toFixed(1)}} ${{nextHeight.toFixed(1)}}`);
+  if (!tooltip || charts.length === 0) return;
+  const hidePoint = () => {{
+    tooltip.hidden = true;
+    charts.forEach((chart) => {{
+      chart.querySelector("[data-chart-crosshair-x]")?.classList.remove("active");
+      chart.querySelector("[data-chart-crosshair-y]")?.classList.remove("active");
+    }});
   }};
-  const applyRange = (sessions) => {{
-    const wanted = Math.min(candleCount, Number(sessions || candleCount));
-    const xStep = plotWidth / candleCount;
-    const nextWidth = clamp(wanted * xStep + 56, minWidth, baseViewBox.width);
-    const rightEdge = plotLeft + plotWidth + 70;
-    const nextX = clamp(rightEdge - nextWidth, baseViewBox.x, baseViewBox.x + baseViewBox.width - nextWidth);
-    card.dataset.activeChartRange = String(wanted);
-    applyViewBox(nextX, baseViewBox.y, nextWidth, baseViewBox.height);
+  const showRange = (range) => {{
+    charts.forEach((chart) => {{
+      chart.toggleAttribute("hidden", chart.dataset.chartRange !== range);
+    }});
+    card.dataset.activeChartRange = range;
+    hidePoint();
   }};
-  const resetZoom = () => {{
-    applyRange(126);
-  }};
-  const handleChartWheel = (event) => {{
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const oldWidth = svg.viewBox.baseVal.width || baseViewBox.width;
-    const oldX = svg.viewBox.baseVal.x || baseViewBox.x;
-    const oldHeight = svg.viewBox.baseVal.height || baseViewBox.height;
-    const oldY = svg.viewBox.baseVal.y || baseViewBox.y;
-    const pointerRatio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-    const pointerYRatio = clamp((event.clientY - rect.top) / rect.height, 0, 1);
-    const factor = event.deltaY > 0 ? 1.14 : 0.86;
-    const nextWidth = clamp(oldWidth * factor, minWidth, baseViewBox.width);
-    const nextHeight = clamp(oldHeight * factor, minHeight, baseViewBox.height);
-    const pointerValue = oldX + oldWidth * pointerRatio;
-    const pointerYValue = oldY + oldHeight * pointerYRatio;
-    const nextX = clamp(pointerValue - nextWidth * pointerRatio, baseViewBox.x, baseViewBox.x + baseViewBox.width - nextWidth);
-    const nextY = clamp(pointerYValue - nextHeight * pointerYRatio, baseViewBox.y, baseViewBox.y + baseViewBox.height - nextHeight);
-    applyViewBox(nextX, nextY, nextWidth, nextHeight);
-  }};
-  svg.addEventListener("wheel", handleChartWheel, {{ passive:false, capture:true }});
-  card.addEventListener("wheel", handleChartWheel, {{ passive:false, capture:true }});
-  ["gesturestart", "gesturechange", "gestureend"].forEach((eventName) => {{
-    svg.addEventListener(eventName, (event) => {{
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.scale && eventName === "gesturechange") {{
-        handleChartWheel({{
-          clientX: event.clientX || svg.getBoundingClientRect().left + svg.getBoundingClientRect().width / 2,
-          clientY: event.clientY || svg.getBoundingClientRect().top + svg.getBoundingClientRect().height / 2,
-          deltaY: event.scale > 1 ? -1 : 1,
-          preventDefault: () => {{}},
-          stopPropagation: () => {{}}
-        }});
-      }}
-    }}, {{ passive:false, capture:true }});
-  }});
   rangeButtons.forEach((button) => {{
     button.addEventListener("click", () => {{
       rangeButtons.forEach((item) => item.classList.toggle("active", item === button));
-      applyRange(button.dataset.chartRange);
+      showRange(button.dataset.chartRange);
     }});
   }});
-  card.addEventListener("dblclick", resetZoom);
-  resetZoom();
-  const showPoint = (hitbox) => {{
-    const x = Number(hitbox.dataset.x);
-    const y = Number(hitbox.dataset.closeY);
-    vertical.setAttribute("x1", x.toFixed(1));
-    vertical.setAttribute("x2", x.toFixed(1));
-    horizontal.setAttribute("y1", y.toFixed(1));
-    horizontal.setAttribute("y2", y.toFixed(1));
-    vertical.classList.add("active");
-    horizontal.classList.add("active");
-    tooltip.hidden = false;
-    tooltip.innerHTML = `<b>${{hitbox.dataset.date}}</b><span>O ${{hitbox.dataset.open}} · H ${{hitbox.dataset.high}} · L ${{hitbox.dataset.low}}</span><span>C ${{hitbox.dataset.close}} · Vol ${{hitbox.dataset.volume}}</span>`;
-    const rect = svg.getBoundingClientRect();
-    const currentBox = svg.viewBox.baseVal;
-    const left = Math.min(Math.max(((x - currentBox.x) / currentBox.width) * rect.width + 10, 8), Math.max(8, rect.width - 215));
-    const top = Math.min(Math.max(((y - currentBox.y) / currentBox.height) * rect.height - 58, 8), Math.max(8, rect.height - 82));
-    tooltip.style.left = `${{left}}px`;
-    tooltip.style.top = `${{top}}px`;
-  }};
-  const hidePoint = () => {{
-    tooltip.hidden = true;
-    vertical.classList.remove("active");
-    horizontal.classList.remove("active");
-  }};
-  hitboxes.forEach((hitbox) => {{
-    hitbox.addEventListener("pointerenter", () => showPoint(hitbox));
-    hitbox.addEventListener("pointermove", () => showPoint(hitbox));
-    hitbox.addEventListener("focus", () => showPoint(hitbox));
-    hitbox.addEventListener("blur", hidePoint);
+  charts.forEach((svg) => {{
+    const vertical = svg.querySelector("[data-chart-crosshair-x]");
+    const horizontal = svg.querySelector("[data-chart-crosshair-y]");
+    const hitboxes = [...svg.querySelectorAll(".candle-hitbox")];
+    if (!vertical || !horizontal || hitboxes.length === 0) return;
+    const showPoint = (hitbox) => {{
+      const x = Number(hitbox.dataset.x);
+      const y = Number(hitbox.dataset.closeY);
+      vertical.setAttribute("x1", x.toFixed(1));
+      vertical.setAttribute("x2", x.toFixed(1));
+      horizontal.setAttribute("y1", y.toFixed(1));
+      horizontal.setAttribute("y2", y.toFixed(1));
+      vertical.classList.add("active");
+      horizontal.classList.add("active");
+      tooltip.hidden = false;
+      tooltip.innerHTML = `<b>${{hitbox.dataset.date}}</b><span>O ${{hitbox.dataset.open}} · H ${{hitbox.dataset.high}} · L ${{hitbox.dataset.low}}</span><span>C ${{hitbox.dataset.close}} · Vol ${{hitbox.dataset.volume}}</span>`;
+      const rect = svg.getBoundingClientRect();
+      const currentBox = svg.viewBox.baseVal;
+      const left = Math.min(Math.max(((x - currentBox.x) / currentBox.width) * rect.width + 10, 8), Math.max(8, rect.width - 215));
+      const top = Math.min(Math.max(((y - currentBox.y) / currentBox.height) * rect.height - 58, 8), Math.max(8, rect.height - 82));
+      tooltip.style.left = `${{left}}px`;
+      tooltip.style.top = `${{top}}px`;
+    }};
+    hitboxes.forEach((hitbox) => {{
+      hitbox.addEventListener("pointerenter", () => showPoint(hitbox));
+      hitbox.addEventListener("pointermove", () => showPoint(hitbox));
+      hitbox.addEventListener("focus", () => showPoint(hitbox));
+      hitbox.addEventListener("blur", hidePoint);
+    }});
+    svg.addEventListener("pointerleave", hidePoint);
   }});
-  svg.addEventListener("pointerleave", hidePoint);
 }});
 </script>
 </body></html>"""
