@@ -131,6 +131,110 @@ def _mini_sparkline(
     )
 
 
+def _portfolio_value_history(
+    records: list[dict],
+    chart_prices: dict[str, list[Price]],
+    max_points: int = 252,
+) -> list[tuple[date, float]]:
+    dated_values: dict[date, float] = {}
+    dated_coverage: dict[date, int] = {}
+    holding_count = 0
+    for record in records:
+        shares = float(record.get("shares") or 0)
+        raw_symbol = str(record.get("symbol", ""))
+        symbol = raw_symbol.upper()
+        history = chart_prices.get(raw_symbol, []) or chart_prices.get(symbol, [])
+        if shares <= 0 or not history:
+            continue
+        holding_count += 1
+        for item in history[-max_points:]:
+            if item.close is None or float(item.close) <= 0:
+                continue
+            dated_values[item.date] = dated_values.get(item.date, 0.0) + (
+                float(item.close) * shares
+            )
+            dated_coverage[item.date] = dated_coverage.get(item.date, 0) + 1
+    if not dated_values:
+        return []
+    min_coverage = max(1, int(max(1, holding_count) * 0.55))
+    points = [
+        (day, value)
+        for day, value in sorted(dated_values.items())
+        if dated_coverage.get(day, 0) >= min_coverage
+    ]
+    return points[-max_points:]
+
+
+def _portfolio_value_chart(points: list[tuple[date, float]], css_class: str) -> str:
+    if len(points) < 2:
+        return '<div class="account-chart-empty">Portfolio history is not available yet.</div>'
+    width, height, pad_x, pad_y = 920, 260, 8, 18
+    values = [value for _, value in points if value > 0]
+    low, high = min(values), max(values)
+    span = high - low or max(high * 0.01, 1)
+    step = (width - pad_x * 2) / (len(points) - 1)
+    coords = []
+    area_coords = [f"{pad_x},{height - pad_y}"]
+    for index, (_, value) in enumerate(points):
+        x = pad_x + index * step
+        y = pad_y + (high - value) / span * (height - pad_y * 2)
+        coords.append(f"{x:.1f},{y:.1f}")
+        area_coords.append(f"{x:.1f},{y:.1f}")
+    area_coords.append(f"{width - pad_x},{height - pad_y}")
+    grid = "".join(
+        f'<line x1="{pad_x}" x2="{width - pad_x}" y1="{pad_y + index * (height - pad_y * 2) / 3:.1f}" '
+        f'y2="{pad_y + index * (height - pad_y * 2) / 3:.1f}"/>'
+        for index in range(4)
+    )
+    first_label = points[0][0].strftime("%b %-d")
+    last_label = points[-1][0].strftime("%b %-d")
+    return (
+        f'<svg class="account-value-chart {html.escape(css_class)}" viewBox="0 0 {width} {height}" '
+        f'role="img" aria-label="Approximate account value history">'
+        f'<g class="account-grid">{grid}</g>'
+        f'<polygon class="account-area" points="{" ".join(area_coords)}"/>'
+        f'<polyline class="account-line" points="{" ".join(coords)}"/>'
+        f'<text x="{pad_x}" y="{height - 2}">{html.escape(first_label)}</text>'
+        f'<text x="{width - pad_x}" y="{height - 2}" text-anchor="end">{html.escape(last_label)}</text>'
+        f"</svg>"
+    )
+
+
+def _portfolio_account_overview(
+    totals: dict[str, float],
+    history: list[tuple[date, float]],
+    model_status: str,
+    latest_price_date: str,
+    poor_or_stale: int,
+) -> str:
+    market_value = totals.get("market_value", 0.0)
+    today_dollars = totals.get("today_dollars", 0.0)
+    gain_dollars = totals.get("gain_dollars", 0.0)
+    cost_basis = totals.get("cost_basis", 0.0)
+    prior_value = market_value - today_dollars
+    today_pct = today_dollars / prior_value if prior_value > 0 else None
+    gain_pct = gain_dollars / cost_basis if cost_basis > 0 else None
+    today_class = "positive" if today_dollars >= 0 else "negative"
+    gain_class = "positive" if gain_dollars >= 0 else "negative"
+    chart = _portfolio_value_chart(history, today_class)
+    return f"""
+    <section class="account-overview" aria-label="Account overview">
+      <div class="account-copy">
+        <small>Individual</small>
+        <h2>${market_value:,.2f}</h2>
+        <p class="{today_class}"><b>{_signed_money(today_dollars)}</b> ({_optional_signed_percent(today_pct)}) today</p>
+      </div>
+      <div class="account-chart-wrap">{chart}</div>
+      <div class="account-stats" aria-label="Account summary">
+        <div><small>Total gain/loss</small><b class="{gain_class}">{_signed_money(gain_dollars)}</b><span>{_optional_signed_percent(gain_pct)}</span></div>
+        <div><small>Cost basis</small><b>{_optional_money(cost_basis)}</b><span>From current holdings</span></div>
+        <div><small>Latest prices</small><b>{html.escape(latest_price_date)}</b><span>{poor_or_stale} stale or degraded symbols</span></div>
+        <div><small>Model health</small><b><span class="health-status {html.escape(model_status.lower())}">{html.escape(model_status)}</span></b><span>Read-only signal engine</span></div>
+      </div>
+      <p class="account-note">History is an approximate replay using today's share counts and available daily closes.</p>
+    </section>"""
+
+
 def _health_value(value: object) -> str:
     if isinstance(value, bool):
         return "Yes" if value else "No"
@@ -1406,6 +1510,12 @@ def build_dashboard(
     chart_payloads = {"version": 1, "source": "dashboard-v3", "symbols": {}}
     portfolio_rows = []
     detail_panels = []
+    portfolio_totals = {
+        "market_value": 0.0,
+        "cost_basis": 0.0,
+        "gain_dollars": 0.0,
+        "today_dollars": 0.0,
+    }
     for index, record in enumerate(records):
         alert = record.get("alert", {})
         action = alert.get("action", "UNKNOWN")
@@ -1467,6 +1577,13 @@ def build_dashboard(
             if previous_close is not None and shares > 0
             else None
         )
+        portfolio_totals["market_value"] += market_value
+        if record.get("cost_basis") is not None:
+            portfolio_totals["cost_basis"] += float(record.get("cost_basis") or 0)
+        if gain_dollars is not None:
+            portfolio_totals["gain_dollars"] += float(gain_dollars)
+        if today_dollars is not None:
+            portfolio_totals["today_dollars"] += float(today_dollars)
         wave = {
             **wave_snapshot.get(record.get("symbol", ""), {}),
             **_next_resistance_zone(
@@ -1658,13 +1775,14 @@ def build_dashboard(
               data-sort-recent="{float(recent_momentum or 0):.6f}"
               data-sort-confidence="{confidence_sort:.6f}"
               data-sort-signal="{signal_rank}">
-              <span class="holding-identity" data-label="Symbol" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
+              <span class="holding-identity" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
               <span class="holding-spark" data-label="Trend">{mini_sparkline}</span>
-              <span class="today-pill {today_return_class}" data-label="Today %"><b>{_optional_signed_percent(today_return)}</b></span>
+              <span class="today-pill {today_return_class}" data-label="Today return %"><b>{_optional_signed_percent(today_return)}</b></span>
               <span class="holding-today-cash {today_return_class}" data-label="Today $"><b>{_signed_compact_money(today_dollars)}</b></span>
+              <span class="holding-market-value" data-label="Market Value"><small>Market Value</small><b>${market_value:,.2f}</b></span>
+              <span class="holding-weight" data-label="Weight"><small>Weight</small><b>{_percent(record.get("portfolio_weight"))}</b></span>
+              <span class="{display_return_class} holding-gain-loss" data-label="Gain/Loss"><small>Gain/Loss</small><b>{_optional_signed_percent(display_unrealized_return)}</b></span>
               <span class="holding-current {today_return_class}" data-label="Price"><small>Price</small><b>${display_price:,.2f}</b></span>
-              <span class="{display_return_class}" data-label="Gain"><small>Total</small><b>{_optional_signed_percent(display_unrealized_return)}</b></span>
-              <span data-label="Portfolio"><b>{_percent(record.get("portfolio_weight"))}</b></span>
             </button>"""
         )
         board_rows[signal_label].append(
@@ -1750,14 +1868,14 @@ def build_dashboard(
         if row.get("data_quality_status") != "GOOD" or row.get("status") != "FRESH"
     )
     model_status = str((model_health or {}).get("overall_status", "UNKNOWN"))
-    portfolio_pulse = f"""
-    <section class="portfolio-pulse" aria-label="Compact model and opportunity summary">
-      <div><small>Model health</small><b><span class="health-status {model_status.lower()}">{html.escape(model_status)}</span></b><span>{len((model_health or {}).get("failed_gates", []))} failed · {len((model_health or {}).get("pending_gates", []))} pending</span></div>
-      <div><small>Latest prices</small><b>{html.escape(latest_price_date)}</b><span>{poor_or_stale} stale or degraded symbols</span></div>
-      <button type="button" class="pulse-card opportunities-card" data-open-opportunities>
-        <small>Opportunities</small><b>{len(sorted_board_rows["BUY"])} buy · {len(sorted_board_rows["SELL"])} sell</b><span>Top: buy {html.escape(top_buy)} · sell {html.escape(top_sell)}</span>
-      </button>
-    </section>"""
+    account_history = _portfolio_value_history(records, chart_prices)
+    portfolio_account_overview = _portfolio_account_overview(
+        portfolio_totals,
+        account_history,
+        model_status,
+        latest_price_date,
+        poor_or_stale,
+    )
     portfolio_holdings = f"""
     <section class="portfolio-holdings-panel" aria-label="All portfolio holdings">
       <div class="holdings-toolbar">
@@ -1767,8 +1885,8 @@ def build_dashboard(
             <option value="today-desc" selected>Today Return %</option>
             <option value="today-dollars-desc">Today Return $</option>
             <option value="value-desc">Market value</option>
-            <option value="gain-desc">Total return %</option>
-            <option value="gain-dollars-desc">Total return $</option>
+            <option value="gain-desc">Gain/Loss %</option>
+            <option value="gain-dollars-desc">Gain/Loss $</option>
             <option value="recent-desc">12-1 momentum</option>
             <option value="weight-desc">Portfolio weight</option>
             <option value="confidence-desc">Signal confidence</option>
@@ -1782,8 +1900,8 @@ def build_dashboard(
       </div>
     </section>"""
     prioritized_board = f"""
-    <details class="priority-board-panel" id="opportunities-board">
-      <summary><span>Opportunities board</span><small>JIRA-style BUY / SELL / WAIT lanes</small></summary>
+    <section class="priority-board-panel" id="opportunities-board">
+      <div class="priority-board-heading"><div><small>JIRA-style BUY / SELL / WAIT lanes</small><h2>Opportunities</h2></div><p>{len(sorted_board_rows["BUY"])} buy · {len(sorted_board_rows["SELL"])} sell · top buy {html.escape(top_buy)} · top sell {html.escape(top_sell)}</p></div>
     <section class="decision-board" aria-label="Prioritized directional signals">
       <section class="signal-column buy-column">
         <header><div><small>Highest confidence first</small><h3>BUY</h3></div><b>{len(sorted_board_rows["BUY"])}</b></header>
@@ -1797,7 +1915,7 @@ def build_dashboard(
         <summary><div><small>Direction not proven</small><h3>WAIT</h3></div><b>{len(sorted_board_rows["WAIT"])}</b></summary>
         <div class="signal-stack">{''.join(sorted_board_rows["WAIT"]) or '<p class="empty-state">No holdings are waiting.</p>'}</div>
       </details>
-    </section></details>"""
+    </section></section>"""
 
     current_analogs = []
     for record in records:
@@ -2126,21 +2244,23 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-board {{ margin:12px 0 24px }}
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
-.portfolio-pulse {{ display:grid; gap:10px; grid-template-columns:repeat(3,1fr); margin:14px 0 4px }}
-.portfolio-pulse div,.portfolio-pulse button {{ background:var(--panel); border:1px solid var(--line); border-radius:10px; color:var(--text); font:inherit; padding:13px 15px; text-align:left }}
-.portfolio-pulse button {{ cursor:pointer }}
-.portfolio-pulse button:hover,.portfolio-pulse button:focus-visible {{ background:#101010; border-color:#3b3b3b; outline:none }}
-.opportunities-card {{ position:relative }}
-.opportunities-card::after {{ color:var(--green); content:"Open"; font-size:11px; font-weight:850; position:absolute; right:14px; top:13px }}
-.portfolio-pulse small {{ color:var(--muted); display:block; font-size:10px; font-weight:800; letter-spacing:.4px; text-transform:uppercase }}
-.portfolio-pulse b {{ display:block; font-size:18px; margin-top:3px }} .portfolio-pulse span {{ color:var(--muted); display:block; font-size:12px; margin-top:3px }}
+.account-overview {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px 0 14px; overflow:hidden; padding:22px 24px 14px }}
+.account-copy small {{ color:var(--muted); display:block; font-size:18px; font-weight:650; margin-bottom:2px }} .account-copy h2 {{ font-size:44px; letter-spacing:-1.8px; line-height:1; margin:0 }}
+.account-copy p {{ color:var(--muted); margin:9px 0 0 }} .account-copy p.positive b,.account-stats .positive {{ color:var(--green) }} .account-copy p.negative b,.account-stats .negative {{ color:var(--red) }}
+.account-chart-wrap {{ margin:12px 0 10px; min-height:230px }} .account-value-chart {{ display:block; height:auto; width:100% }}
+.account-grid line {{ stroke:#252525; stroke-width:1 }} .account-line {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:3 }}
+.account-area {{ fill:currentColor; opacity:.08 }} .account-value-chart.positive {{ color:var(--green) }} .account-value-chart.negative {{ color:var(--red) }} .account-value-chart text {{ fill:var(--muted); font-size:11px }}
+.account-chart-empty {{ align-items:center; background:#0b0b0b; border-radius:10px; color:var(--muted); display:flex; min-height:230px; justify-content:center }}
+.account-stats {{ border-top:1px solid var(--line); display:grid; gap:0; grid-template-columns:repeat(4,1fr); margin-top:8px }}
+.account-stats div {{ border-right:1px solid var(--line); padding:14px 16px }} .account-stats div:first-child {{ padding-left:0 }} .account-stats div:last-child {{ border-right:0 }}
+.account-stats small {{ color:var(--muted); display:block; font-size:11px; font-weight:700 }} .account-stats b {{ display:block; font-size:18px; margin-top:3px }} .account-stats span {{ color:var(--muted); display:block; font-size:12px; margin-top:2px }} .account-note {{ color:var(--muted); font-size:12px; margin:2px 0 0 }}
 .portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:10px 0 16px; overflow:hidden }}
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ container-type:inline-size; display:grid; grid-template-columns:1fr; position:relative }}
-.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); border-left:3px solid transparent; color:var(--text); cursor:pointer; display:grid; font:inherit; gap:12px; grid-template-columns:minmax(92px,1fr) 92px 92px 92px 82px 88px; min-height:66px; overflow:hidden; padding:11px 16px 11px 13px; text-align:left; width:100% }}
+.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); border-left:3px solid transparent; color:var(--text); cursor:pointer; display:grid; font:inherit; gap:9px; grid-template-columns:minmax(86px,1fr) 82px 84px 80px 100px 66px 86px 92px; min-height:68px; overflow:hidden; padding:11px 14px 11px 12px; text-align:left; width:100% }}
 .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.12),rgba(0,200,5,.025) 38%,transparent 72%); border-left-color:var(--green) }}
 .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.14),rgba(255,90,95,.03) 38%,transparent 72%); border-left-color:var(--red) }}
 .portfolio-holding-card.signal-wait {{ background:linear-gradient(90deg,rgba(245,182,66,.08),rgba(245,182,66,.018) 34%,transparent 70%); border-left-color:#55481b }}
@@ -2148,20 +2268,20 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-holding-card strong {{ font-size:18px; letter-spacing:-.25px }} .portfolio-holding-card small {{ color:#9aa0a6; display:block; font-size:10px; font-weight:700; letter-spacing:.15px; line-height:1.1; margin-bottom:2px }} .holding-identity small {{ font-size:13px; font-weight:500; letter-spacing:0; margin:2px 0 0 }} .portfolio-holding-card b {{ display:block; font-size:15px; letter-spacing:-.1px; white-space:nowrap }}
 .portfolio-holding-card>span {{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
 .portfolio-holding-card>span::before {{ color:var(--muted); content:attr(data-label); display:none; font-size:9px; font-weight:700; letter-spacing:.18px; margin-bottom:2px }}
-.holding-current b {{ font-size:18px; font-weight:850; letter-spacing:-.35px }} .holding-current.positive b {{ color:var(--green) }} .holding-current.negative b {{ color:var(--red) }}
+.portfolio-holding-card .holding-market-value,.portfolio-holding-card .holding-weight,.portfolio-holding-card .holding-gain-loss,.portfolio-holding-card .holding-current,.portfolio-holding-card .holding-today-cash {{ text-align:right }}
+.holding-current {{ justify-self:end }} .holding-current b {{ font-size:18px; font-weight:850; letter-spacing:-.35px }} .holding-current.positive b {{ color:var(--green) }} .holding-current.negative b {{ color:var(--red) }}
 .holding-return.positive b,.positive b {{ color:var(--green) }} .holding-return.negative b,.negative b {{ color:var(--red) }}
-.holding-spark {{ align-items:center; color:#79818a; display:flex; justify-content:center }}
+.holding-spark {{ align-items:center; color:#79818a; display:flex; justify-content:flex-start }}
 .holding-spark::after {{ content:none }}
-.holding-today-cash,.portfolio-holding-card>span[data-label="Portfolio"] {{ display:none }}
 .holding-today-cash.positive b {{ color:var(--green) }} .holding-today-cash.negative b {{ color:var(--red) }}
-.today-pill {{ align-items:center; border:1px solid currentColor; border-radius:9px; display:flex; justify-content:center; min-height:38px; padding:4px 8px }}
+.today-pill {{ align-items:center; border:1px solid currentColor; border-radius:9px; display:flex; justify-content:center; min-height:38px; padding:4px 7px }}
 .today-pill.positive {{ background:var(--green); border-color:var(--green); color:#001f08 }} .today-pill.negative {{ background:#ff5000; border-color:#ff5000; color:#050505 }}
 .today-pill b {{ color:inherit; font-size:16px; font-weight:700; text-align:center }}
 .mini-sparkline {{ display:block; height:28px; width:86px }} .mini-sparkline.positive {{ color:var(--green) }} .mini-sparkline.negative {{ color:#ff5000 }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }} .mini-sparkline-baseline {{ stroke:#666; stroke-dasharray:2 3; stroke-linecap:round; stroke-width:1 }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
 .pressure-mini b {{ color:var(--red) }}
-.priority-board-panel {{ margin-top:16px }} .priority-board-panel>summary {{ align-items:center; background:#0b0b0b; border:1px solid var(--line); border-radius:10px; cursor:pointer; display:flex; justify-content:space-between; list-style:none; padding:13px 15px }}
-.priority-board-panel>summary::-webkit-details-marker {{ display:none }} .priority-board-panel>summary span {{ color:var(--text); font-weight:800 }} .priority-board-panel>summary small {{ color:var(--muted) }}
+.priority-board-panel {{ margin-top:16px }} .priority-board-heading {{ align-items:end; display:flex; justify-content:space-between; gap:16px; margin:8px 0 14px }}
+.priority-board-heading small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .priority-board-heading h2 {{ font-size:28px; margin:2px 0 0 }} .priority-board-heading p {{ color:var(--muted); margin:0 }}
 .decision-board {{ align-items:start; display:grid; gap:12px; grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:16px }}
 .signal-column {{ background:var(--panel); border:1px solid var(--line); border-radius:10px; min-width:0; overflow:hidden }}
 .signal-column header,.signal-column summary {{ align-items:center; display:flex; justify-content:space-between; list-style:none; padding:14px 15px }}
@@ -2263,38 +2383,40 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.15),rgba(255,90,95,.035) 40%,#050505 78%) }}
   .portfolio-holding-card.signal-wait {{ background:linear-gradient(90deg,rgba(245,182,66,.09),rgba(245,182,66,.02) 36%,#050505 76%) }}
 }} @media(max-width:1280px) and (min-width:900px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(82px,1fr) 78px 82px 84px; min-height:68px }}
-  .portfolio-holding-card>span[data-label="Gain"] {{ display:none }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(82px,1fr) 78px 80px 86px 56px 78px 78px; min-height:68px }}
+  .holding-today-cash {{ display:none }}
 }} @media(max-width:1080px) {{
   .portfolio-holding-card {{ min-height:68px }}
 }} @media(max-width:899px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
-  .portfolio-pulse {{ grid-template-columns:1fr }}
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 86px 88px 88px 76px 78px; min-height:72px; padding:13px 12px }}
+  .account-stats {{ grid-template-columns:repeat(2,1fr) }} .account-stats div:nth-child(2n) {{ border-right:0 }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 88px 86px 92px 58px 78px 90px; min-height:72px; padding:13px 12px }}
+  .holding-today-cash {{ display:none }}
   .portfolio-holding-card>span::before {{ display:none }}
-  .today-pill {{ justify-self:end; min-width:84px }}
+  .today-pill {{ justify-self:start; min-width:84px }}
   .holding-row {{ grid-template-columns:80px 1fr; gap:10px }}
   .board-action {{ display:none }} .board-basics {{ grid-column:1 / -1; margin-top:3px }}
 }} @media(max-width:700px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) minmax(86px,1.05fr) 96px 92px 76px }}
-  .portfolio-holding-card .decision-signal {{ display:none }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) 90px 86px 58px 88px 92px }}
+  .holding-market-value {{ display:none }}
   .holding-spark .mini-sparkline {{ height:38px; width:92px }}
 }} @media(max-width:620px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) minmax(86px,1.05fr) 96px 92px }}
-  .portfolio-holding-card>span[data-label="Gain"] {{ display:none }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) 90px 86px 92px }}
+  .holding-weight,.holding-gain-loss {{ display:none }}
 }} @media(max-width:600px) {{
   main {{ padding:24px 12px 60px }} .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr }}
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
   .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }}
-  .portfolio-pulse {{ display:none }} .board-intro p {{ display:none }}
+  .account-overview {{ padding:18px 16px 12px }} .account-copy h2 {{ font-size:36px }} .account-stats {{ grid-template-columns:1fr 1fr }} .board-intro p {{ display:none }}
   .interactive-kline {{ height:380px }}
   .chart-range-tabs {{ gap:9px; justify-content:space-between }} .chart-range-tabs button {{ font-size:12px; padding:6px 7px }}
   .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
 }} @media(max-width:460px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(84px,1fr) minmax(82px,1.05fr) 92px }}
-  .holding-current {{ display:none }}
+  .portfolio-holding-card {{ gap:7px; grid-template-columns:minmax(78px,1fr) 64px 78px 82px; padding-left:9px; padding-right:9px }}
+  .holding-spark .mini-sparkline {{ height:30px; width:64px }}
+  .today-pill b {{ font-size:14px }} .holding-current b {{ font-size:16px }}
 }}
 </style>
 </head>
@@ -2303,13 +2425,17 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <p class="sub">Read-only decision support · {html.escape(model_label)} · generated {html.escape(generated)}</p>
 <nav class="tabs" role="tablist" aria-label="Dashboard sections">
   <button type="button" class="tab-button active" data-tab-target="portfolio" role="tab" aria-selected="true">Portfolio</button>
+  <button type="button" class="tab-button" data-tab-target="opportunities" role="tab" aria-selected="false">Opportunities</button>
   <button type="button" class="tab-button" data-tab-target="research" role="tab" aria-selected="false">Research</button>
   <button type="button" class="tab-button" data-tab-target="health" role="tab" aria-selected="false">Health &amp; Risk</button>
 </nav>
 <section id="tab-portfolio" class="tab-view active" role="tabpanel">
-<div class="board-intro"><div><h2>Portfolio Board</h2><p>Robinhood-style holdings first · prediction shown on every stock · click any row for details</p></div>
-<p>Our edge is prediction quality: confidence is visible on the row, evidence stays in details.</p></div>
-<section class="portfolio-board">{portfolio_pulse}{portfolio_holdings}{prioritized_board}</section>
+<div class="board-intro"><div><h2>Account Overview</h2><p>Robinhood-style account view · holdings below · click any row for details</p></div>
+<p>Rows use subtle signal color; detailed predictions live in Opportunities.</p></div>
+<section class="portfolio-board">{portfolio_account_overview}{portfolio_holdings}</section>
+</section>
+<section id="tab-opportunities" class="tab-view" role="tabpanel" hidden>
+{prioritized_board}
 </section>
 <section id="tab-research" class="tab-view" role="tabpanel" hidden>
 <section class="panel"><h2>Displayed Direction Forecast Validation</h2>
@@ -2446,13 +2572,6 @@ const sortHoldings = () => {{
 }};
 portfolioSort?.addEventListener("change", sortHoldings);
 sortHoldings();
-
-const opportunitiesBoard = document.getElementById("opportunities-board");
-document.querySelectorAll("[data-open-opportunities]").forEach((button) => button.addEventListener("click", () => {{
-  if (!opportunitiesBoard) return;
-  opportunitiesBoard.open = true;
-  opportunitiesBoard.scrollIntoView({{ behavior: "smooth", block: "start" }});
-}}));
 
 const drawer = document.getElementById("holding-drawer");
 const backdrop = document.querySelector(".drawer-backdrop");
