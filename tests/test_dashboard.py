@@ -581,7 +581,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('"symbol":"__ACCOUNT__"', page)
         self.assertIn('data-chart-range="1W"', page)
 
-    def test_dashboard_gates_stale_robinhood_account_summary(self):
+    def test_dashboard_warns_but_keeps_stale_robinhood_account_view_visible(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             alerts = root / "alerts.jsonl"
@@ -615,24 +615,18 @@ class DashboardTests(unittest.TestCase):
 
             page = build_dashboard(alerts, account_summary_path=summary)
 
-        self.assertIn('class="robinhood-connect-page"', page)
-        self.assertIn('data-robinhood-auth-required="true"', page)
-        self.assertIn("Sign in and connect portfolio data", page)
-        self.assertIn("Stock Investor login", page)
-        self.assertIn("Connect broker with OAuth/provider", page)
-        self.assertIn("Direct Robinhood username/password login is not a supported target.", page)
-        self.assertIn("Prototype: MCP setup guide", page)
-        self.assertIn("this static dashboard cannot pull MCP data by itself", page)
-        self.assertIn(
-            "This page never asks for, collects, or stores your Robinhood password, MFA code, cookies, or tokens.",
-            page,
-        )
+        self.assertIn('class="account-connection-notice"', page)
+        self.assertIn('data-account-data-stale="true"', page)
+        self.assertIn("Account data needs refresh", page)
+        self.assertIn("Showing the last imported read-only portfolio for now.", page)
+        self.assertIn("Login/connect work is shelved.", page)
         self.assertNotIn('type="password"', page)
         self.assertNotIn("robinhood.com/login", page)
-        self.assertNotIn('class="account-overview"', page)
-        self.assertNotIn('class="portfolio-holdings-panel"', page)
-        self.assertNotIn('id="holding-detail-0"', page)
-        self.assertNotIn("<h2>$750.00</h2>", page)
+        self.assertNotIn('class="robinhood-connect-page"', page)
+        self.assertIn('class="account-overview"', page)
+        self.assertIn('class="portfolio-holdings-panel"', page)
+        self.assertIn('id="holding-detail-0"', page)
+        self.assertIn("<h2>$750.00</h2>", page)
 
     def test_dashboard_does_not_blend_evidence_across_model_versions(self):
         with tempfile.TemporaryDirectory() as directory:
