@@ -617,8 +617,13 @@ class DashboardTests(unittest.TestCase):
 
         self.assertIn('class="robinhood-connect-page"', page)
         self.assertIn('data-robinhood-auth-required="true"', page)
-        self.assertIn("Connect Robinhood to view your live portfolio", page)
-        self.assertIn("This page never collects or stores your Robinhood password.", page)
+        self.assertIn("Reconnect Robinhood inside Codex", page)
+        self.assertIn("Browser login at robinhood.com does not authorize", page)
+        self.assertIn("Open MCP setup guide", page)
+        self.assertIn(
+            "This page never asks for, collects, or stores your Robinhood password.",
+            page,
+        )
         self.assertNotIn('class="account-overview"', page)
         self.assertNotIn('class="portfolio-holdings-panel"', page)
         self.assertNotIn('id="holding-detail-0"', page)

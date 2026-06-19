@@ -209,19 +209,19 @@ def _robinhood_connect_page(state: dict) -> str:
     return f"""
     <section class="robinhood-connect-page" data-robinhood-auth-required="true" aria-label="Connect Robinhood">
       <div class="connect-shell">
-        <div class="connect-brand"><span class="connect-logo">↗</span><b>Robinhood</b></div>
-        <h2>Connect Robinhood to view your live portfolio</h2>
-        <p>{html.escape(detail)} We will not show stale account totals, margin, or position board data as if they were current.</p>
+        <div class="connect-brand"><span class="connect-logo">↗</span><b>Robinhood MCP</b></div>
+        <h2>Reconnect Robinhood inside Codex</h2>
+        <p>{html.escape(detail)} Browser login at robinhood.com does not authorize the local dashboard, because the MCP token lives in the AI platform connection, not in browser cookies.</p>
         <div class="connect-actions">
-          <a class="connect-primary" href="https://robinhood.com/login" target="_blank" rel="noreferrer">Open Robinhood</a>
-          <button type="button" class="connect-secondary" onclick="window.location.reload()">Refresh after auth</button>
+          <a class="connect-primary" href="https://robinhood.com/us/en/support/articles/agentic-trading-overview/" target="_blank" rel="noreferrer">Open MCP setup guide</a>
+          <button type="button" class="connect-secondary" onclick="window.location.reload()">Refresh after Codex import</button>
         </div>
         <ol>
-          <li>Authenticate the Robinhood MCP connection in Codex when prompted.</li>
-          <li>Refresh the local dashboard so it can rebuild from fresh read-only account data.</li>
-          <li>Margin, buying power, account candles, and holdings will reappear only after the summary is fresh.</li>
+          <li>In Codex, open MCP servers and authenticate the Robinhood Trading MCP connection.</li>
+          <li>Ask Codex to refresh Robinhood data; the static dashboard cannot pull MCP data by itself.</li>
+          <li>Margin, buying power, account candles, and holdings reappear only after a fresh read-only import.</li>
         </ol>
-        <small>Last local account import: {html.escape(str(imported))}. This page never collects or stores your Robinhood password.</small>
+        <small>Last local account import: {html.escape(str(imported))}. This page never asks for, collects, or stores your Robinhood password.</small>
       </div>
     </section>"""
 
