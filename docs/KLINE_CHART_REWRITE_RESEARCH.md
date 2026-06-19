@@ -19,13 +19,14 @@ The next version should be a chart runtime, not another SVG patch.
 The detail chart should feel close to Robinhood's chart experience while keeping
 our unique overlays:
 
-- Show selectable ranges: `1D`, `1W`, `1M`, `3M`, `YTD`, `1Y`, `5Y`, `MAX`
-  where data exists.
-- Use range-appropriate bars:
-  - `1D`: intraday line/candles when intraday data exists; otherwise latest
-    daily context with clear "daily fallback" label.
-  - `1W` and longer: candlestick bars from daily OHLCV; aggregate to weekly or
-    monthly only when the selected range is too dense.
+- Show selectable candle intervals: Daily, Weekly, Monthly, Quarterly, YTD,
+  Yearly, 5 years, and All where data exists.
+- Use interval-appropriate bars:
+  - Daily: all available daily OHLCV candles, with the initial viewport focused
+    on recent candles.
+  - Weekly, Monthly, Quarterly, and Yearly: aggregate from the full available
+    daily history.
+  - YTD and 5 years: retain their calendar-window meaning.
 - Always draw support and resistance zones as visible horizontal bands.
 - Draw average cost, current price, buy/sell zone, active wave, and forecast
   markers without hiding candles.
@@ -121,18 +122,21 @@ M085B completes when:
   de-duplicated by `forecast_id` with outcome records preferred over raw
   forecast records.
 - Overlay bands for support/resistance/target zones.
-- Range buttons for `1D`, `1W`, `1M`, `3M`, `YTD`, `1Y`, `5Y`, and `MAX`;
-  unavailable long ranges are disabled.
-- 1D daily fallback is explicit until intraday bars are added.
-- Browser verification on the fixed local URL confirmed HOOD range switching:
-  YTD 116 bars, 1W 7 bars, and 1M 21 bars, with three overlay zones and no
-  console errors.
+- Range buttons for Daily, Weekly, Monthly, Quarterly, YTD, Yearly, 5 years,
+  and All; unavailable long ranges are disabled.
+- The chart renders all available history for each interval, then sets an
+  initial recent viewport. Dragging is clamped at the first and last available
+  candle so users do not scroll into blank space.
+- Browser verification on the fixed local URL confirmed drawer chart switching:
+  Monthly and Quarterly buttons update active state, aggregation status, and
+  canvases with no console errors.
 - Live sidecar verification on `http://127.0.0.1:8765/data/private/dashboard-v3.html`
   confirmed 26 symbols with forecast markers. HOOD currently has six forecast
   markers, including 2026-06-12 SELL, 2026-06-16 SELL, and 2026-06-18 WAIT.
 
 ## Remaining Follow-Ups
 
-- Add real intraday bars for the `1D` view.
+- Add real intraday bars as a separate Daily-detail overlay when the provider
+  supports it cleanly.
 - Add relative-strength and volume annotations without crowding the chart.
 - Complete keyboard and screen-reader chart inspection support.

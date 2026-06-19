@@ -57,11 +57,14 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('data-active-chart-range="1M"', page)
         self.assertIn('data-chart-range="1D"', page)
         self.assertIn('data-chart-range="MAX"', page)
-        self.assertIn('data-chart-bars="21"', page)
+        self.assertIn(">Daily</button>", page)
+        self.assertIn(">Weekly</button>", page)
+        self.assertIn(">Monthly</button>", page)
+        self.assertIn(">Quarterly</button>", page)
         self.assertNotIn('class="kline-chart"', page)
         self.assertNotIn('class="candle-hitbox"', page)
         self.assertIn('class="chart-range-tabs"', page)
-        self.assertIn('data-chart-range="1M" data-chart-bars="21" class="active">1M</button>', page)
+        self.assertIn('data-chart-range="1M" data-chart-bars="1" class="active">Monthly</button>', page)
 
     def test_kline_payload_preserves_far_cost_basis_as_line_metadata(self):
         history = [
@@ -108,11 +111,28 @@ class DashboardTests(unittest.TestCase):
         ]
         ranges = _chart_ranges(history)
 
-        self.assertEqual(ranges["1W"]["raw_bar_count"], 7)
-        self.assertEqual(ranges["1M"]["raw_bar_count"], 21)
+        self.assertEqual(ranges["1D"]["label"], "Daily")
+        self.assertEqual(ranges["1D"]["raw_bar_count"], 760)
+        self.assertEqual(ranges["1W"]["label"], "Weekly")
+        self.assertEqual(ranges["1W"]["raw_bar_count"], 760)
+        self.assertEqual(ranges["1W"]["aggregation"], "weekly")
+        self.assertEqual(ranges["1M"]["aggregation"], "monthly")
+        self.assertEqual(ranges["3M"]["aggregation"], "quarterly")
+        self.assertEqual(ranges["1Y"]["aggregation"], "yearly")
+        self.assertEqual(ranges["1M"]["raw_bar_count"], 760)
+        self.assertGreater(ranges["1M"]["bar_count"], 1)
         self.assertEqual(ranges["YTD"]["start"], "2026-01-01")
         self.assertEqual(ranges["MAX"]["aggregation"], "weekly")
         self.assertLess(ranges["MAX"]["bar_count"], ranges["MAX"]["raw_bar_count"])
+
+    def test_kline_runtime_keeps_drag_inside_available_history(self):
+        runtime = Path("web/assets/kline-chart.js").read_text()
+
+        self.assertIn("fixLeftEdge: true", runtime)
+        self.assertIn("fixRightEdge: true", runtime)
+        self.assertIn("rightOffset: 0", runtime)
+        self.assertIn("function clampVisibleLogicalRange", runtime)
+        self.assertIn("range.initial_bar_count", runtime)
 
     def test_chart_payload_schema_and_dashboard_sidecar_are_written(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -153,7 +173,8 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(sidecar["symbols"]["ABC"]["symbol"], "ABC")
         self.assertIn("bars_daily", sidecar["symbols"]["ABC"])
         self.assertIn("ranges", sidecar["symbols"]["ABC"])
-        self.assertEqual(sidecar["symbols"]["ABC"]["ranges"]["1D"]["fallback_reason"], "Daily fallback: intraday bars are not available yet.")
+        self.assertEqual(sidecar["symbols"]["ABC"]["ranges"]["1D"]["label"], "Daily")
+        self.assertIsNone(sidecar["symbols"]["ABC"]["ranges"]["1D"]["fallback_reason"])
         self.assertIn('data-src="chart-payloads-v1.json"', dashboard_html)
         self.assertNotIn("bars_daily", dashboard_html)
 
@@ -1147,7 +1168,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("direction gate <b>BUY</b>", page)
         self.assertIn('class="interactive-kline"', page)
         self.assertIn('id="chart-payloads-v1"', page)
-        self.assertIn("Interactive K-line · switched by range", page)
+        self.assertIn("Interactive K-line · switched by candle interval", page)
         self.assertIn('data-chart-range="1D"', page)
         self.assertNotIn(">Advanced</button>", page)
         self.assertIn("Support zone", page)

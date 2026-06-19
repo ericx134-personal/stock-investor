@@ -183,8 +183,9 @@ Current execution queue:
 - [x] M085A Robinhood-style interactive K-line chart rewrite research and specification.
 - [x] M085B Replace hand-written SVG K-line chart with a full interactive chart runtime.
 - [x] M085 Mark historical forecasts and matured outcomes on K-line charts.
-- [x] M086 Add selectable 1D, 1W, 1M, 3M, YTD, and 1Y chart horizons with
-  data-driven redraw and recalculated visible price scale.
+- [x] M086 Add selectable Daily, Weekly, Monthly, Quarterly, YTD, Yearly,
+  5 years, and All chart intervals with data-driven redraw, recalculated
+  visible price scale, and drag boundaries clamped to available candles.
 - [ ] M087 Add relative-strength and volume annotations.
 - [ ] M088 Complete keyboard, screen-reader, and mobile chart support.
 - [ ] M089 Add concise-language and explanation usefulness tests.

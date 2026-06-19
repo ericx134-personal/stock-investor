@@ -360,11 +360,12 @@ def _account_chart_payload(
     if clean_intraday:
         payload["bars_intraday"] = clean_intraday
         payload["ranges"]["1D"] = {
-            "label": "1D",
+            "label": _chart_range_label("1D"),
             "available": True,
             "bar_count": len(clean_intraday),
             "raw_bar_count": len(clean_intraday),
             "aggregation": "none",
+            "initial_bar_count": min(180, len(clean_intraday)),
             "fallback_reason": "",
             "start": clean_intraday[0]["time"],
             "end": clean_intraday[-1]["time"],
@@ -391,9 +392,10 @@ def _range_buttons(payload: dict) -> str:
         range_payload = payload["ranges"].get(label, {})
         disabled = "" if range_payload.get("available") else " disabled"
         active_class = ' class="active"' if label == active_range and not disabled else ""
+        button_label = html.escape(str(range_payload.get("label") or _chart_range_label(label)))
         buttons.append(
             f'<button type="button" data-chart-range="{label}" data-chart-bars="{int(range_payload.get("bar_count", 0))}"'
-            f'{active_class}{disabled}>{label}</button>'
+            f'{active_class}{disabled}>{button_label}</button>'
         )
     return "".join(buttons)
 
@@ -874,9 +876,10 @@ def _kline_chart(
         range_payload = payload["ranges"].get(label, {})
         disabled = "" if range_payload.get("available") else " disabled"
         active_class = ' class="active"' if label == active_range and not disabled else ""
+        button_label = html.escape(str(range_payload.get("label") or _chart_range_label(label)))
         button_items.append(
             f'<button type="button" data-chart-range="{label}" data-chart-bars="{int(range_payload.get("bar_count", 0))}"'
-            f'{active_class}{disabled}>{label}</button>'
+            f'{active_class}{disabled}>{button_label}</button>'
         )
     buttons = "".join(button_items)
     price_context = ""
@@ -894,7 +897,7 @@ def _kline_chart(
     else:
         price_context = "<h3>Price wave in context</h3>"
     return f"""<section class="kline-chart-card" data-chart-symbol="{html.escape(symbol_key)}" data-active-chart-range="{html.escape(active_range)}">
-      <div class="chart-heading"><div><small>Interactive K-line · switched by range</small>{price_context}</div>
+      <div class="chart-heading"><div><small>Interactive K-line · switched by candle interval</small>{price_context}</div>
       <span class="chart-signal {signal_class}">{html.escape(signal_label)} {signal_probability}</span></div>
       <div class="interactive-kline" data-chart-root role="img" aria-label="{html.escape(symbol_key)} interactive candlestick chart"></div>
       <div class="chart-overlay" data-chart-overlay aria-hidden="true"></div>
@@ -1254,12 +1257,30 @@ def _chart_bar(item: Price) -> dict:
     }
 
 
+def _chart_range_label(range_key: str) -> str:
+    return {
+        "1D": "Daily",
+        "1W": "Weekly",
+        "1M": "Monthly",
+        "3M": "Quarterly",
+        "YTD": "YTD",
+        "1Y": "Yearly",
+        "5Y": "5 years",
+        "MAX": "All",
+    }.get(range_key, range_key)
+
+
 def _aggregate_chart_bars(bars: list[dict], bucket: str) -> list[dict]:
     grouped: dict[date, list[dict]] = {}
     for bar in bars:
         bar_date = date.fromisoformat(str(bar["time"]))
         if bucket == "monthly":
             key = date(bar_date.year, bar_date.month, 1)
+        elif bucket == "quarterly":
+            quarter_month = ((bar_date.month - 1) // 3) * 3 + 1
+            key = date(bar_date.year, quarter_month, 1)
+        elif bucket == "yearly":
+            key = date(bar_date.year, 1, 1)
         else:
             key = bar_date - timedelta(days=bar_date.weekday())
         grouped.setdefault(key, []).append(bar)
@@ -1279,7 +1300,13 @@ def _aggregate_chart_bars(bars: list[dict], bucket: str) -> list[dict]:
     return aggregated
 
 
-def _chart_range(label: str, bars: list[dict], fallback_reason: str | None = None) -> dict:
+def _chart_range(
+    label: str,
+    bars: list[dict],
+    fallback_reason: str | None = None,
+    aggregation: str | None = None,
+    initial_bar_count: int | None = None,
+) -> dict:
     if not bars:
         return {
             "label": label,
@@ -1287,19 +1314,26 @@ def _chart_range(label: str, bars: list[dict], fallback_reason: str | None = Non
             "bar_count": 0,
             "raw_bar_count": 0,
             "aggregation": "none",
+            "initial_bar_count": 0,
             "fallback_reason": fallback_reason,
         }
-    aggregation = "none"
+    selected_aggregation = aggregation or "none"
     visible_bars = bars
-    if len(bars) > 600:
-        aggregation = "monthly" if len(bars) > 1260 else "weekly"
-        visible_bars = _aggregate_chart_bars(bars, aggregation)
+    if selected_aggregation != "none":
+        visible_bars = _aggregate_chart_bars(bars, selected_aggregation)
+    elif len(bars) > 600:
+        selected_aggregation = "monthly" if len(bars) > 1260 else "weekly"
+        visible_bars = _aggregate_chart_bars(bars, selected_aggregation)
     return {
         "label": label,
         "available": True,
         "bar_count": len(visible_bars),
         "raw_bar_count": len(bars),
-        "aggregation": aggregation,
+        "aggregation": selected_aggregation,
+        "initial_bar_count": min(
+            len(visible_bars),
+            max(1, int(initial_bar_count or len(visible_bars))),
+        ),
         "fallback_reason": fallback_reason,
         "start": bars[0]["time"],
         "end": bars[-1]["time"],
@@ -1314,21 +1348,47 @@ def _chart_ranges(history: list[Price]) -> dict[str, dict]:
     ]
     return {
         "1D": _chart_range(
-            "1D",
-            daily_bars[-min(5, len(daily_bars)) :],
-            "Daily fallback: intraday bars are not available yet.",
+            _chart_range_label("1D"),
+            daily_bars,
+            initial_bar_count=160,
         ),
-        "1W": _chart_range("1W", daily_bars[-min(7, len(daily_bars)) :]),
-        "1M": _chart_range("1M", daily_bars[-min(21, len(daily_bars)) :]),
-        "3M": _chart_range("3M", daily_bars[-min(63, len(daily_bars)) :]),
-        "YTD": _chart_range("YTD", ytd_bars or daily_bars[-min(126, len(daily_bars)) :]),
-        "1Y": _chart_range("1Y", daily_bars[-min(252, len(daily_bars)) :]),
+        "1W": _chart_range(
+            _chart_range_label("1W"),
+            daily_bars,
+            aggregation="weekly",
+            initial_bar_count=130,
+        ),
+        "1M": _chart_range(
+            _chart_range_label("1M"),
+            daily_bars,
+            aggregation="monthly",
+            initial_bar_count=96,
+        ),
+        "3M": _chart_range(
+            _chart_range_label("3M"),
+            daily_bars,
+            aggregation="quarterly",
+            initial_bar_count=56,
+        ),
+        "YTD": _chart_range(
+            _chart_range_label("YTD"),
+            ytd_bars or daily_bars[-min(126, len(daily_bars)) :],
+            initial_bar_count=len(ytd_bars) if ytd_bars else 126,
+        ),
+        "1Y": _chart_range(
+            _chart_range_label("1Y"),
+            daily_bars,
+            aggregation="yearly",
+            initial_bar_count=40,
+        ),
         "5Y": _chart_range(
-            "5Y",
+            _chart_range_label("5Y"),
             daily_bars[-min(1260, len(daily_bars)) :] if len(daily_bars) > 252 else [],
             "Need more than one year of daily bars before showing 5Y.",
+            aggregation="monthly",
+            initial_bar_count=80,
         ),
-        "MAX": _chart_range("MAX", daily_bars),
+        "MAX": _chart_range(_chart_range_label("MAX"), daily_bars, initial_bar_count=260),
     }
 
 
@@ -1474,9 +1534,7 @@ def _kline_chart_payload(
         "quality": {
             "ohlcv_bars": len(clean_history),
             "intraday_available": False,
-            "fallback_reasons": [
-                "1D uses daily fallback until intraday bars are available."
-            ],
+            "fallback_reasons": [],
         },
     }
 

@@ -128,6 +128,11 @@
       let key;
       if (aggregation === "monthly") {
         key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-01`;
+      } else if (aggregation === "quarterly") {
+        const quarterMonth = Math.floor(date.getUTCMonth() / 3) * 3 + 1;
+        key = `${date.getUTCFullYear()}-${String(quarterMonth).padStart(2, "0")}-01`;
+      } else if (aggregation === "yearly") {
+        key = `${date.getUTCFullYear()}-01-01`;
       } else {
         const monday = new Date(date);
         monday.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
@@ -156,24 +161,18 @@
     }
     const daily = payload.bars_daily || [];
     if (!daily.length) return [];
-    let selected = [];
+    let selected = daily;
     if (rangeName === "YTD") {
       const latestYear = parseDate(daily[daily.length - 1].time).getUTCFullYear();
       selected = daily.filter((bar) => parseDate(bar.time).getUTCFullYear() === latestYear);
-    } else if (rangeName === "MAX") {
-      selected = daily;
-    } else {
-      const windows = { "1D": 5, "1W": 7, "1M": 21, "3M": 63, "1Y": 252, "5Y": 1260 };
-      selected = daily.slice(-Math.min(windows[rangeName] || daily.length, daily.length));
+    } else if (rangeName === "5Y") {
+      selected = daily.slice(-Math.min(1260, daily.length));
     }
     return aggregateBars(selected, range.aggregation);
   }
 
   function allBarsForRange(payload, rangeName) {
-    if (!payload || !payload.ranges || !payload.ranges[rangeName]) return [];
-    const daily = payload.bars_daily || [];
-    if (!daily.length) return [];
-    return aggregateBars(daily, payload.ranges[rangeName].aggregation);
+    return rangeBars(payload, rangeName);
   }
 
   function readableMinimumBars(root, rangeName) {
@@ -195,7 +194,7 @@
   function visibleBarCount(payload, rangeName, renderedBars, root) {
     const range = payload && payload.ranges ? payload.ranges[rangeName] : null;
     if (!range) return Math.min(renderedBars.length, readableMinimumBars(root, rangeName));
-    const requested = Number(range.bar_count || range.raw_bar_count || renderedBars.length);
+    const requested = Number(range.initial_bar_count || range.bar_count || range.raw_bar_count || renderedBars.length);
     const readable = readableMinimumBars(root, rangeName);
     if (rangeName === "1D" && payload.bars_intraday && payload.bars_intraday.length) {
       return Math.max(1, Math.min(readable, renderedBars.length));
@@ -206,7 +205,7 @@
   function barSpacingFor(root, visibleCount) {
     const width = root ? root.clientWidth : 760;
     const referenceBars = Math.max(visibleCount, 1);
-    return Math.max(1.8, Math.min(4.2, width / referenceBars));
+    return Math.max(1.35, Math.min(4.2, width / referenceBars));
   }
 
   function activeRange(payload) {
@@ -353,6 +352,37 @@
     tooltip.style.top = `${Math.max(70, param.point.y + 8)}px`;
   }
 
+  function clampVisibleLogicalRange(state) {
+    if (state.clampingRange || !state.renderedBarCount || state.renderedBarCount < 1) return;
+    const timeScale = state.chart.timeScale();
+    const visible = timeScale.getVisibleLogicalRange ? timeScale.getVisibleLogicalRange() : null;
+    if (!visible || visible.from === undefined || visible.to === undefined) return;
+    const first = 0;
+    const last = state.renderedBarCount - 1;
+    const width = Math.max(0, Math.min(visible.to - visible.from, last - first));
+    let from = Number(visible.from);
+    let to = Number(visible.to);
+    if (from >= first && to <= last) return;
+    if (width <= 0 || state.renderedBarCount <= 1) {
+      from = first;
+      to = last;
+    } else if (from < first) {
+      from = first;
+      to = first + width;
+    } else if (to > last) {
+      to = last;
+      from = last - width;
+    }
+    from = Math.max(first, from);
+    to = Math.min(last, to);
+    state.clampingRange = true;
+    timeScale.setVisibleLogicalRange({ from, to });
+    requestAnimationFrame(() => {
+      state.clampingRange = false;
+      updateOverlays(state);
+    });
+  }
+
   function renderRange(card, rangeName) {
     const state = stateByCard.get(card);
     if (!state) return;
@@ -375,6 +405,7 @@
     }));
     const lineData = candles.map((bar) => ({ time: bar.time, value: bar.close }));
     state.candleByTime = new Map(candles.map((bar) => [String(bar.time), bar]));
+    state.renderedBarCount = bars.length;
     state.candles.setData(candles);
     state.line.setData(lineData);
     state.volume.setData(volume);
@@ -393,11 +424,12 @@
     setStatus(card, statusParts.join(" ") || "");
     state.chart.timeScale().applyOptions({
       barSpacing: barSpacingFor(root, visibleCount),
-      rightOffset: 3,
+      rightOffset: 0,
     });
-    const to = bars.length + 1;
-    const from = Math.max(0, to - visibleCount);
+    const to = Math.max(0, bars.length - 1);
+    const from = bars.length <= visibleCount ? 0 : Math.max(0, to - visibleCount + 1);
     state.chart.timeScale().setVisibleLogicalRange({ from, to });
+    clampVisibleLogicalRange(state);
     requestAnimationFrame(() => updateOverlays(state));
   }
 
@@ -434,9 +466,10 @@
       timeScale: {
         barSpacing: 5,
         borderVisible: false,
-        fixLeftEdge: false,
-        fixRightEdge: false,
-        rightOffset: 3,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        rightBarStaysOnScroll: true,
+        rightOffset: 0,
       },
       crosshair: {
         mode:
@@ -494,10 +527,13 @@
       markerApi: null,
       priceLines: [],
       candleByTime: new Map(),
+      renderedBarCount: 0,
+      clampingRange: false,
       mode: card.dataset.chartMode || "candles",
     };
     chart.subscribeCrosshairMove((param) => renderTooltip(state, param));
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+      clampVisibleLogicalRange(state);
       requestAnimationFrame(() => updateOverlays(state));
     });
     stateByCard.set(card, state);
