@@ -442,6 +442,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Displayed Direction Forecast Validation", page)
         self.assertIn("Explicit Model-Health Gates", page)
         self.assertIn("Per-Symbol Price Freshness", page)
+        self.assertIn("Symbol lifecycle", page)
         self.assertIn("Test provider · declared", page)
         self.assertIn("Read Only", page)
         self.assertIn("wave-direction-v1", page)

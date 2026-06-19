@@ -56,9 +56,9 @@ Near-term product goals:
 
 Current execution queue:
 
-- P1: M017 symbol-change, merger, and delisting detection.
+- P1: M078 first-observed-forecast tracking for every holding.
 - P2: M061-M063 market-regime conditioning only after stability gates pass.
-- P2: M078 first-observed-forecast tracking for every holding.
+- P2: M058 target-zone touch-rate replay and post-touch outcomes.
 
 ## Phase 1: Measurement Foundation
 
@@ -81,7 +81,7 @@ Current execution queue:
 - [x] M014 Detect suspicious one-session gaps and classify likely corporate actions.
 - [x] M015 Track adjusted/unadjusted price semantics per provider.
 - [x] M016 Detect splits and preserve cost-basis reconciliation warnings.
-- [ ] M017 Detect symbol changes, mergers, and delistings.
+- [x] M017 Detect symbol changes, mergers, and delistings.
 - [x] M018 Add deterministic hashes for every input data batch.
 - [x] M019 Build a per-symbol data-quality scorecard.
 - [x] M020 Block forecasts and charts when required inputs fail quality gates.

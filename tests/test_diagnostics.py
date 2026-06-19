@@ -84,6 +84,9 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(report["symbols"][0]["data_quality_status"], "REVIEW")
         self.assertEqual(report["symbols"][1]["data_quality_status"], "POOR")
         self.assertEqual(report["data_quality_status_counts"], {"POOR": 1, "REVIEW": 1})
+        self.assertEqual(report["symbols"][0]["symbol_lifecycle_status"], "OK")
+        self.assertEqual(report["symbols"][1]["symbol_lifecycle_status"], "REVIEW")
+        self.assertEqual(report["symbols_with_symbol_lifecycle_risk"], ["B"])
         self.assertEqual(
             infer_price_source("prices.csv", "licensed-provider")["confidence"],
             "DECLARED",
@@ -93,6 +96,28 @@ class DiagnosticTests(unittest.TestCase):
         declared_adjustment = infer_price_source("prices.csv", adjustment_type="all")
         self.assertEqual(declared_adjustment["adjustment_type"], "all")
         self.assertEqual(declared_adjustment["adjustment_confidence"], "DECLARED")
+
+    def test_price_health_flags_symbol_lifecycle_risk_when_benchmark_continues(self):
+        expected_sessions = {date(2026, 1, day) for day in range(1, 12)}
+        report = build_price_health_report(
+            {
+                "OLD": [
+                    Price(date(2026, 1, 1), 10, 10, 10, 10, 100),
+                    Price(date(2026, 1, 2), 10, 10, 10, 10, 100),
+                ]
+            },
+            {"OLD"},
+            as_of=date(2026, 1, 11),
+            source=infer_price_source("prices.csv", "test-provider"),
+            expected_sessions=expected_sessions,
+            expected_session_source="SPY",
+        )
+        row = report["symbols"][0]
+        self.assertEqual(row["symbol_lifecycle_status"], "REVIEW")
+        self.assertEqual(row["expected_sessions_after_latest_count"], 9)
+        self.assertIn("symbol change", row["symbol_lifecycle_reasons"][0])
+        self.assertEqual(report["symbols_with_symbol_lifecycle_risk"], ["OLD"])
+        self.assertEqual(row["data_quality_status"], "POOR")
 
     def test_model_health_separates_failures_from_pending_evidence(self):
         summary = build_model_health_summary(

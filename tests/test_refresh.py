@@ -135,6 +135,7 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(manifest["price_source"]["confidence"], "UNKNOWN")
         self.assertEqual(sum(manifest["price_health_status_counts"].values()), 1)
         self.assertEqual(sum(manifest["data_quality_status_counts"].values()), 1)
+        self.assertEqual(manifest["symbols_with_symbol_lifecycle_risk"], [])
         self.assertIn(manifest["status"], {"BLOCKED", "DEGRADED", "PENDING", "READY"})
         self.assertIn("decisions", manifest["artifacts"])
         self.assertIn("decision_outcomes", manifest["artifacts"])

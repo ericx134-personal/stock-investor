@@ -11,6 +11,7 @@ from .fundamentals import FundamentalSnapshot
 
 ACTIONABLE_ACTIONS = {"BUY_CANDIDATE", "ADD_CANDIDATE", "REVIEW", "TRIM_REVIEW"}
 COMMON_SPLIT_RATIOS = (2, 3, 4, 5, 10)
+SYMBOL_LIFECYCLE_STALE_SESSIONS = 5
 
 
 def _possible_split_ratio(close_ratio: float) -> str | None:
@@ -57,6 +58,38 @@ def infer_price_source(
         "confidence": "UNKNOWN",
         "adjustment_type": adjustment,
         "adjustment_confidence": "DECLARED" if adjustment_type else "UNKNOWN",
+    }
+
+
+def _symbol_lifecycle_assessment(
+    *,
+    latest: Price | None,
+    recent_expected: set[date],
+) -> dict:
+    if latest is None:
+        return {
+            "symbol_lifecycle_status": "REVIEW",
+            "symbol_lifecycle_reasons": [
+                "Held symbol has no price history; verify ticker, merger, delisting, or provider mapping."
+            ],
+            "expected_sessions_after_latest_count": None,
+            "expected_sessions_after_latest_dates": [],
+        }
+    expected_after_latest = sorted(
+        session for session in recent_expected if session > latest.date
+    )
+    reasons = []
+    if len(expected_after_latest) >= SYMBOL_LIFECYCLE_STALE_SESSIONS:
+        reasons.append(
+            "Benchmark kept trading after this symbol stopped updating; verify symbol change, merger, delisting, or provider mapping."
+        )
+    return {
+        "symbol_lifecycle_status": "REVIEW" if reasons else "OK",
+        "symbol_lifecycle_reasons": reasons,
+        "expected_sessions_after_latest_count": len(expected_after_latest),
+        "expected_sessions_after_latest_dates": [
+            item.isoformat() for item in expected_after_latest[-10:]
+        ],
     }
 
 
@@ -132,6 +165,9 @@ def build_price_health_report(
             if relevant_expected
             else None
         )
+        lifecycle = _symbol_lifecycle_assessment(
+            latest=latest, recent_expected=recent_expected
+        )
         ohlcv_coverage = ohlcv_rows / len(history) if history else 0.0
         quality_score = 1.0
         if status != "FRESH":
@@ -144,6 +180,8 @@ def build_price_health_report(
             quality_score -= 0.25
         if suspicious_range_dates or suspicious_close_gaps:
             quality_score -= 0.1
+        if lifecycle["symbol_lifecycle_status"] == "REVIEW":
+            quality_score -= 0.25
         quality_score = max(0.0, quality_score)
         quality_status = (
             "GOOD" if quality_score >= 0.9 else "REVIEW" if quality_score >= 0.6 else "POOR"
@@ -172,6 +210,14 @@ def build_price_health_report(
                 "missing_session_count": len(missing_sessions),
                 "missing_session_dates": [item.isoformat() for item in missing_sessions[-10:]],
                 "session_coverage_rate": session_coverage,
+                "symbol_lifecycle_status": lifecycle["symbol_lifecycle_status"],
+                "symbol_lifecycle_reasons": lifecycle["symbol_lifecycle_reasons"],
+                "expected_sessions_after_latest_count": lifecycle[
+                    "expected_sessions_after_latest_count"
+                ],
+                "expected_sessions_after_latest_dates": lifecycle[
+                    "expected_sessions_after_latest_dates"
+                ],
                 "data_quality_score": quality_score,
                 "data_quality_status": quality_status,
                 "source": source["name"],
@@ -206,6 +252,11 @@ def build_price_health_report(
                 item["classification"] == "POSSIBLE_SPLIT"
                 for item in row["suspicious_close_gaps"]
             )
+        ],
+        "symbols_with_symbol_lifecycle_risk": [
+            row["symbol"]
+            for row in rows
+            if row["symbol_lifecycle_status"] == "REVIEW"
         ],
         "data_quality_status_counts": dict(
             sorted(Counter(row["data_quality_status"] for row in rows).items())

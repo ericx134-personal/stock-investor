@@ -380,6 +380,13 @@ the expected-session calendar. Each held symbol is compared only from its first
 available date through its latest date. If the benchmark calendar is missing,
 the system refuses to claim session completeness.
 
+Symbol-lifecycle diagnostics compare each held ticker's latest price date to
+the same benchmark calendar. If a held ticker has no price history, or the
+benchmark continues for at least five sessions after that ticker stops updating,
+the symbol is marked `REVIEW` for possible ticker change, merger, delisting, or
+provider-mapping failure. This is a risk flag, not a claim that a corporate
+action has occurred.
+
 Hard-invalid OHLCV relationships are rejected during CSV loading: non-positive
 prices, negative volume, high below low/open/close, or low above open/close.
 An intraday high/low range above 50% is retained but marked suspicious for

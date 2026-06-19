@@ -570,6 +570,9 @@ def run_refresh(
         "symbols_with_suspicious_ohlcv": price_health["symbols_with_suspicious_ohlcv"],
         "symbols_with_suspicious_close_gaps": price_health["symbols_with_suspicious_close_gaps"],
         "symbols_with_possible_splits": price_health["symbols_with_possible_splits"],
+        "symbols_with_symbol_lifecycle_risk": price_health[
+            "symbols_with_symbol_lifecycle_risk"
+        ],
         "data_quality_status_counts": price_health["data_quality_status_counts"],
         "action_counts": dict(sorted(actions.items())),
         "actionable_rate": diagnostic["actionable_rate"],
