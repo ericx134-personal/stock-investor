@@ -209,19 +209,36 @@ def _robinhood_connect_page(state: dict) -> str:
     return f"""
     <section class="robinhood-connect-page" data-robinhood-auth-required="true" aria-label="Connect Robinhood">
       <div class="connect-shell">
-        <div class="connect-brand"><span class="connect-logo">↗</span><b>Robinhood MCP</b></div>
-        <h2>Reconnect Robinhood inside Codex</h2>
-        <p>{html.escape(detail)} Browser login at robinhood.com does not authorize the local dashboard, because the MCP token lives in the AI platform connection, not in browser cookies.</p>
-        <div class="connect-actions">
-          <a class="connect-primary" href="https://robinhood.com/us/en/support/articles/agentic-trading-overview/" target="_blank" rel="noreferrer">Open MCP setup guide</a>
-          <button type="button" class="connect-secondary" onclick="window.location.reload()">Refresh after Codex import</button>
+        <div class="connect-brand"><span class="connect-logo">↗</span><b>Stock Investor</b></div>
+        <h2>Sign in and connect portfolio data</h2>
+        <p>{html.escape(detail)} This is the production-style gate for the future app. It will use a Stock Investor account plus a supported broker connector; it will not ask for your Robinhood password.</p>
+        <div class="login-grid">
+          <section class="login-card app-login-card" aria-label="Stock Investor app login">
+            <small>APP ACCOUNT</small>
+            <h3>Stock Investor login</h3>
+            <label>Email
+              <input type="email" autocomplete="username" placeholder="you@example.com" disabled>
+            </label>
+            <button type="button" class="connect-primary" disabled>Continue with secure app login</button>
+            <p>Disabled in this static local dashboard until we add a backend auth service. This is our app login, not a broker password form.</p>
+          </section>
+          <section class="login-card broker-card" aria-label="Broker connection">
+            <small>BROKER CONNECTION</small>
+            <h3>Connect holdings safely</h3>
+            <button type="button" class="connect-primary" disabled>Connect broker with OAuth/provider</button>
+            <p>Production iOS/Web should use an official broker OAuth or regulated aggregation provider. Direct Robinhood username/password login is not a supported target.</p>
+            <a class="connect-secondary" href="https://robinhood.com/us/en/support/articles/agentic-trading-overview/" target="_blank" rel="noreferrer">Prototype: MCP setup guide</a>
+          </section>
         </div>
-        <ol>
-          <li>In Codex, open MCP servers and authenticate the Robinhood Trading MCP connection.</li>
-          <li>Ask Codex to refresh Robinhood data; the static dashboard cannot pull MCP data by itself.</li>
-          <li>Margin, buying power, account candles, and holdings reappear only after a fresh read-only import.</li>
-        </ol>
-        <small>Last local account import: {html.escape(str(imported))}. This page never asks for, collects, or stores your Robinhood password.</small>
+        <div class="prototype-note">
+          <b>Current local prototype</b>
+          <ol>
+            <li>Authenticate the Robinhood Trading MCP inside Codex, not in this browser page.</li>
+            <li>Ask Codex to refresh Robinhood data; this static dashboard cannot pull MCP data by itself.</li>
+            <li>Margin, buying power, account candles, and holdings reappear only after a fresh read-only import.</li>
+          </ol>
+        </div>
+        <small>Last local account import: {html.escape(str(imported))}. This page never asks for, collects, or stores your Robinhood password, MFA code, cookies, or tokens.</small>
       </div>
     </section>"""
 
@@ -2453,12 +2470,15 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
 .robinhood-connect-page {{ align-items:center; display:flex; justify-content:center; min-height:660px; padding:42px 12px }}
-.connect-shell {{ background:#050505; border:1px solid #22282d; border-radius:18px; box-shadow:0 28px 70px rgba(0,0,0,.5); max-width:520px; padding:34px; width:100% }}
+.connect-shell {{ background:#050505; border:1px solid #22282d; border-radius:18px; box-shadow:0 28px 70px rgba(0,0,0,.5); max-width:920px; padding:34px; width:100% }}
 .connect-brand {{ align-items:center; color:#fff; display:flex; font-size:18px; font-weight:800; gap:10px; margin-bottom:22px }} .connect-logo {{ align-items:center; background:var(--green); border-radius:12px; color:#001f08; display:flex; font-size:24px; font-weight:900; height:42px; justify-content:center; width:42px }}
 .connect-shell h2 {{ font-size:34px; letter-spacing:-1.3px; line-height:1.08; margin:0 0 12px }} .connect-shell p {{ color:#b7b7b7; font-size:16px; margin:0 0 22px }}
-.connect-actions {{ display:flex; flex-wrap:wrap; gap:12px; margin:0 0 22px }} .connect-primary,.connect-secondary {{ border-radius:999px; cursor:pointer; font:inherit; font-weight:800; padding:12px 18px; text-decoration:none }}
-.connect-primary {{ background:var(--green); color:#001f08 }} .connect-secondary {{ background:#151515; border:1px solid #333; color:var(--text) }}
-.connect-shell ol {{ color:#d9d9d9; margin:0 0 18px; padding-left:20px }} .connect-shell li {{ margin:8px 0 }} .connect-shell small {{ color:var(--muted); display:block }}
+.connect-actions {{ display:flex; flex-wrap:wrap; gap:12px; margin:0 0 22px }} .connect-primary,.connect-secondary {{ border-radius:999px; cursor:pointer; display:inline-flex; font:inherit; font-weight:800; justify-content:center; padding:12px 18px; text-decoration:none }}
+.connect-primary {{ background:var(--green); border:0; color:#001f08 }} .connect-primary:disabled {{ background:#243326; color:#7a8b7d; cursor:not-allowed }} .connect-secondary {{ background:#151515; border:1px solid #333; color:var(--text) }}
+.login-grid {{ display:grid; gap:14px; grid-template-columns:repeat(2,minmax(0,1fr)); margin:22px 0 }}
+.login-card {{ background:#0b0b0b; border:1px solid var(--line); border-radius:14px; display:grid; gap:12px; padding:18px }} .login-card small {{ color:var(--green); font-size:10px; font-weight:850; letter-spacing:.7px; text-transform:uppercase }} .login-card h3 {{ font-size:22px; letter-spacing:-.5px; margin:0 }} .login-card p {{ color:var(--muted); font-size:13px; margin:0 }}
+.login-card label {{ color:#cfcfcf; display:grid; font-size:12px; font-weight:800; gap:7px }} .login-card input {{ background:#050505; border:1px solid #333; border-radius:10px; color:var(--text); font:inherit; padding:12px }} .login-card input:disabled {{ color:#666 }}
+.prototype-note {{ background:#080808; border:1px solid #202020; border-radius:12px; color:#d9d9d9; margin:4px 0 18px; padding:16px }} .prototype-note b {{ display:block; margin-bottom:4px }} .prototype-note ol,.connect-shell ol {{ margin:0; padding-left:20px }} .connect-shell li {{ margin:8px 0 }} .connect-shell small {{ color:var(--muted); display:block }}
 .account-overview {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px 0 14px; overflow:hidden; padding:22px 24px 14px }}
 .account-copy small {{ color:var(--muted); display:block; font-size:18px; font-weight:650; margin-bottom:2px }} .account-copy h2 {{ font-size:44px; letter-spacing:-1.8px; line-height:1; margin:0 }}
 .account-copy p {{ color:var(--muted); margin:9px 0 0 }} .account-copy p.positive b,.account-stats .positive {{ color:var(--green) }} .account-copy p.negative b,.account-stats .negative {{ color:var(--red) }}
@@ -2631,6 +2651,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
   .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }}
+  .login-grid {{ grid-template-columns:1fr }} .connect-shell {{ padding:24px 18px }} .connect-shell h2 {{ font-size:28px }}
   .account-overview {{ padding:18px 16px 12px }} .account-copy h2 {{ font-size:36px }} .account-stats {{ grid-template-columns:1fr 1fr }} .account-kline-card .interactive-kline {{ height:320px }} .board-intro p {{ display:none }}
   .interactive-kline {{ height:380px }}
   .chart-range-tabs {{ gap:9px; justify-content:space-between }} .chart-range-tabs button {{ font-size:12px; padding:6px 7px }}

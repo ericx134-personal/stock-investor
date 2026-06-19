@@ -74,6 +74,12 @@ one of these paths:
 
 The app should never ask for or store a Robinhood password.
 
+The dashboard's connection gate should therefore look like a production app
+login, but its broker section must route to a supported connector. A Stock
+Investor account login can authenticate the user to our app; it must not be
+presented as a Robinhood login unless Robinhood later provides an official
+OAuth/partner flow for that exact purpose.
+
 ## Read-Only Refresh Flow
 
 Use Robinhood reads to collect:
