@@ -159,16 +159,16 @@
 
   function readableMinimumBars(root, rangeName) {
     const width = root ? root.clientWidth : 760;
-    const fit = Math.max(36, Math.floor(width / 7));
+    const fit = Math.max(54, Math.floor(width / 5));
     const floors = {
-      "1D": 48,
-      "1W": 64,
-      "1M": 84,
-      "3M": 112,
-      "YTD": 150,
-      "1Y": 170,
-      "5Y": 190,
-      "MAX": 210,
+      "1D": 60,
+      "1W": 84,
+      "1M": 112,
+      "3M": 140,
+      "YTD": 180,
+      "1Y": 210,
+      "5Y": 230,
+      "MAX": 260,
     };
     return Math.min(fit, floors[rangeName] || fit);
   }
@@ -184,7 +184,7 @@
   function barSpacingFor(root, visibleCount) {
     const width = root ? root.clientWidth : 760;
     const referenceBars = Math.max(visibleCount, 1);
-    return Math.max(2.4, Math.min(5.2, width / referenceBars));
+    return Math.max(1.8, Math.min(4.2, width / referenceBars));
   }
 
   function activeRange(payload) {

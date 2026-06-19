@@ -2438,12 +2438,12 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
 .account-connection-notice {{ background:#211604; border:1px solid #5d3d09; border-radius:12px; color:#f6d49a; display:grid; gap:4px; margin:10px 0 12px; padding:13px 16px }}
 .account-connection-notice b {{ color:#ffb84d; font-size:15px }} .account-connection-notice span {{ color:#f0d8b2 }} .account-connection-notice small {{ color:#c2a984 }}
-.account-overview {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px 0 14px; overflow:hidden; padding:22px 24px 14px }}
-.account-copy small {{ color:var(--muted); display:block; font-size:18px; font-weight:650; margin-bottom:2px }} .account-copy h2 {{ font-size:44px; letter-spacing:-1.8px; line-height:1; margin:0 }}
+.account-overview {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px auto 18px; max-width:1120px; overflow:hidden; padding:18px 22px 12px }}
+.account-copy small {{ color:var(--muted); display:block; font-size:15px; font-weight:650; margin-bottom:2px }} .account-copy h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:0 }}
 .account-copy p {{ color:var(--muted); margin:9px 0 0 }} .account-copy p.positive b,.account-stats .positive {{ color:var(--green) }} .account-copy p.negative b,.account-stats .negative {{ color:var(--red) }}
-.account-chart-wrap {{ margin:12px 0 10px; min-height:360px }} .account-value-chart {{ display:block; height:auto; width:100% }}
+.account-chart-wrap {{ margin:10px 0 8px; min-height:280px }} .account-value-chart {{ display:block; height:auto; width:100% }}
 .account-kline-card {{ background:transparent; border:0; border-radius:0; margin:0; padding:0 }}
-.account-kline-card .interactive-kline {{ height:360px; margin-top:0 }}
+.account-kline-card .interactive-kline {{ height:280px; margin-top:0 }}
 .account-kline-card .chart-range-tabs {{ border-top:1px solid var(--line); justify-content:flex-start; margin:8px 0 0; padding-top:8px }}
 .account-chart-legend {{ display:none }}
 .account-grid line {{ stroke:#252525; stroke-width:1 }} .account-line {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:3 }}
@@ -2475,7 +2475,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .today-pill {{ align-items:center; border:1px solid currentColor; border-radius:9px; display:flex; justify-content:center; min-height:38px; padding:4px 7px }}
 .today-pill.positive {{ background:var(--green); border-color:var(--green); color:#001f08 }} .today-pill.negative {{ background:#ff5000; border-color:#ff5000; color:#050505 }}
 .today-pill b {{ color:inherit; font-size:16px; font-weight:700; text-align:center }}
-.mini-sparkline {{ display:block; height:28px; width:86px }} .mini-sparkline.positive {{ color:var(--green) }} .mini-sparkline.negative {{ color:#ff5000 }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }} .mini-sparkline-baseline {{ stroke:#666; stroke-dasharray:2 3; stroke-linecap:round; stroke-width:1 }}
+.mini-sparkline {{ display:block; height:28px; width:86px }} .mini-sparkline.positive {{ color:var(--green) }} .mini-sparkline.negative {{ color:#ff5000 }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.65 }} .mini-sparkline-baseline {{ stroke:#666; stroke-dasharray:2 3; stroke-linecap:round; stroke-width:.8 }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
 .pressure-mini b {{ color:var(--red) }}
 .priority-board-panel {{ margin-top:16px }} .priority-board-heading {{ align-items:end; display:flex; justify-content:space-between; gap:16px; margin:8px 0 14px }}
@@ -2581,11 +2581,15 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.15),rgba(255,90,95,.035) 40%,#050505 78%) }}
   .portfolio-holding-card.signal-wait {{ background:#050505 }}
 }} @media(max-width:1299px) and (min-width:1100px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(82px,1fr) 68px 74px 72px 74px; min-height:68px }}
-  .holding-today-cash,.holding-market-value,.holding-weight {{ display:none }}
-}} @media(max-width:1099px) and (min-width:900px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(82px,1fr) 66px 74px 76px; min-height:68px; padding-left:12px; padding-right:12px }}
+  .portfolio-holding-card {{ gap:7px; grid-template-columns:minmax(76px,1fr) 58px 70px 70px; min-height:68px; padding-left:12px; padding-right:12px }}
+  .holding-spark .mini-sparkline {{ width:58px }}
   .holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss {{ display:none }}
+  .today-pill {{ min-height:34px; padding:4px 6px }} .today-pill b {{ font-size:14px }} .holding-current b {{ font-size:16px }}
+}} @media(max-width:1099px) and (min-width:900px) {{
+  .portfolio-holding-card {{ gap:7px; grid-template-columns:minmax(74px,1fr) 54px 68px 68px; min-height:68px; padding-left:10px; padding-right:10px }}
+  .holding-spark .mini-sparkline {{ width:54px }}
+  .holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss {{ display:none }}
+  .today-pill {{ min-height:34px; padding:4px 6px }} .today-pill b {{ font-size:13px }} .holding-current b {{ font-size:15px }}
 }} @media(max-width:1080px) {{
   .portfolio-holding-card {{ min-height:68px }}
 }} @media(max-width:899px) {{
@@ -2610,7 +2614,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
   .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }}
-  .account-overview {{ padding:18px 16px 12px }} .account-copy h2 {{ font-size:36px }} .account-stats {{ grid-template-columns:1fr 1fr }} .account-kline-card .interactive-kline {{ height:320px }} .board-intro p {{ display:none }}
+  .account-overview {{ padding:16px 16px 12px }} .account-copy h2 {{ font-size:34px }} .account-chart-wrap {{ min-height:260px }} .account-stats {{ grid-template-columns:1fr 1fr }} .account-kline-card .interactive-kline {{ height:260px }} .board-intro p {{ display:none }}
   .interactive-kline {{ height:380px }}
   .chart-range-tabs {{ gap:9px; justify-content:space-between }} .chart-range-tabs button {{ font-size:12px; padding:6px 7px }}
   .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
@@ -2743,6 +2747,39 @@ tabButtons.forEach((button) => button.addEventListener("click", () => {{
 
 const portfolioSort = document.getElementById("portfolio-sort");
 const portfolioList = document.querySelector("[data-portfolio-holdings]");
+const arrangePortfolioRows = (rows) => {{
+  rows.forEach((row) => {{
+    row.style.gridColumn = "";
+    row.style.gridRow = "";
+  }});
+  if (!portfolioList) return;
+  const twoColumn = window.matchMedia("(min-width: 900px)").matches;
+  if (!twoColumn) {{
+    rows.forEach((row) => portfolioList.appendChild(row));
+    return;
+  }}
+  const gainers = rows.filter((row) => Number(row.dataset.sortToday || 0) >= 0);
+  const losers = rows.filter((row) => Number(row.dataset.sortToday || 0) < 0);
+  let leftRows = [];
+  let rightRows = [];
+  if (gainers.length && losers.length) {{
+    leftRows = gainers;
+    rightRows = losers;
+  }} else {{
+    const split = Math.ceil(rows.length / 2);
+    leftRows = rows.slice(0, split);
+    rightRows = rows.slice(split);
+  }}
+  [...leftRows, ...rightRows].forEach((row) => portfolioList.appendChild(row));
+  leftRows.forEach((row, index) => {{
+    row.style.gridColumn = "1";
+    row.style.gridRow = String(index + 1);
+  }});
+  rightRows.forEach((row, index) => {{
+    row.style.gridColumn = "2";
+    row.style.gridRow = String(index + 1);
+  }});
+}};
 const sortHoldings = () => {{
   if (!portfolioSort || !portfolioList) return;
   const [field, direction] = portfolioSort.value.split("-");
@@ -2767,10 +2804,20 @@ const sortHoldings = () => {{
     const rightValue = Number(right.dataset[datasetKey] || 0);
     return direction === "asc" ? leftValue - rightValue : rightValue - leftValue;
   }});
-  rows.forEach((row) => portfolioList.appendChild(row));
+  arrangePortfolioRows(rows);
 }};
 portfolioSort?.addEventListener("change", sortHoldings);
 sortHoldings();
+window.StockInvestorKline?.initVisibleCharts();
+let portfolioResizeFrame = null;
+window.addEventListener("resize", () => {{
+  if (portfolioResizeFrame) return;
+  portfolioResizeFrame = window.requestAnimationFrame(() => {{
+    portfolioResizeFrame = null;
+    sortHoldings();
+    window.StockInvestorKline?.initVisibleCharts();
+  }});
+}});
 
 const drawer = document.getElementById("holding-drawer");
 const backdrop = document.querySelector(".drawer-backdrop");
