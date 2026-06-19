@@ -76,6 +76,9 @@
     if (type === "HistogramSeries" && chart.addHistogramSeries) {
       return chart.addHistogramSeries(options);
     }
+    if (type === "LineSeries" && chart.addLineSeries) {
+      return chart.addLineSeries(options);
+    }
     throw new Error(`Unsupported Lightweight Charts series API: ${type}`);
   }
 
@@ -89,15 +92,28 @@
 
   function formatVolume(value) {
     const number = Number(value || 0);
-    if (number >= 1_000_000_000) return `${(number / 1_000_000_000).toFixed(1)}B`;
-    if (number >= 1_000_000) return `${(number / 1_000_000).toFixed(1)}M`;
-    if (number >= 1_000) return `${(number / 1_000).toFixed(1)}K`;
+    if (number >= 1000000000) return `${(number / 1000000000).toFixed(1)}B`;
+    if (number >= 1000000) return `${(number / 1000000).toFixed(1)}M`;
+    if (number >= 1000) return `${(number / 1000).toFixed(1)}K`;
     return number.toFixed(0);
   }
 
   function parseDate(value) {
+    if (typeof value === "number") return new Date(value * 1000);
     const parts = String(value).split("-").map((part) => Number(part));
     return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  }
+
+  function formatTimeLabel(value) {
+    if (typeof value === "number") {
+      return new Date(value * 1000).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
+    return value;
   }
 
   function isoDate(date) {
@@ -135,6 +151,9 @@
     if (!payload || !payload.ranges || !payload.ranges[rangeName]) return [];
     const range = payload.ranges[rangeName];
     if (range.bars) return range.bars;
+    if (rangeName === "1D" && payload.bars_intraday && payload.bars_intraday.length) {
+      return payload.bars_intraday;
+    }
     const daily = payload.bars_daily || [];
     if (!daily.length) return [];
     let selected = [];
@@ -159,9 +178,9 @@
 
   function readableMinimumBars(root, rangeName) {
     const width = root ? root.clientWidth : 760;
-    const fit = Math.max(54, Math.floor(width / 5));
+    const fit = Math.max(54, Math.floor(width / 4));
     const floors = {
-      "1D": 60,
+      "1D": 120,
       "1W": 84,
       "1M": 112,
       "3M": 140,
@@ -178,6 +197,9 @@
     if (!range) return Math.min(renderedBars.length, readableMinimumBars(root, rangeName));
     const requested = Number(range.bar_count || range.raw_bar_count || renderedBars.length);
     const readable = readableMinimumBars(root, rangeName);
+    if (rangeName === "1D" && payload.bars_intraday && payload.bars_intraday.length) {
+      return Math.max(1, Math.min(readable, renderedBars.length));
+    }
     return Math.max(1, Math.min(Math.max(requested, readable), renderedBars.length));
   }
 
@@ -242,18 +264,20 @@
   }
 
   function renderPriceLines(state) {
-    for (const line of state.priceLines) {
+    for (const item of state.priceLines) {
       try {
-        state.candles.removePriceLine(line);
+        item.series.removePriceLine(item.line);
       } catch (_error) {
         /* ignore stale library handles */
       }
     }
     state.priceLines = [];
+    const lineSeries = state.mode === "line" ? state.line : state.candles;
     for (const line of state.payload.lines || []) {
       if (line.price === null || line.price === undefined) continue;
-      state.priceLines.push(
-        state.candles.createPriceLine({
+      state.priceLines.push({
+        series: lineSeries,
+        line: lineSeries.createPriceLine({
           price: Number(line.price),
           color: lineColor(line),
           lineWidth: line.type === "current" ? 2 : 1,
@@ -263,10 +287,10 @@
             window.LightweightCharts.LineStyle.Dashed !== undefined
               ? window.LightweightCharts.LineStyle.Dashed
               : 2,
-          axisLabelVisible: true,
-          title: line.label,
-        })
-      );
+          axisLabelVisible: line.type === "current",
+          title: "",
+        }),
+      });
     }
   }
 
@@ -314,14 +338,15 @@
       tooltip.hidden = true;
       return;
     }
-    const candle = param.seriesData && param.seriesData.get ? param.seriesData.get(state.candles) : null;
+    const candleFromSeries = param.seriesData && param.seriesData.get ? param.seriesData.get(state.candles) : null;
+    const candle = candleFromSeries || state.candleByTime.get(String(param.time));
     const volume = param.seriesData && param.seriesData.get ? param.seriesData.get(state.volume) : null;
     if (!candle) {
       tooltip.hidden = true;
       return;
     }
     tooltip.hidden = false;
-    tooltip.innerHTML = `<b>${param.time}</b><span>O ${formatMoney(candle.open)} · H ${formatMoney(candle.high)} · L ${formatMoney(candle.low)}</span><span>C ${formatMoney(candle.close)} · Vol ${formatVolume(volume && volume.value)}</span>`;
+    tooltip.innerHTML = `<b>${formatTimeLabel(param.time)}</b><span>O ${formatMoney(candle.open)} · H ${formatMoney(candle.high)} · L ${formatMoney(candle.low)}</span><span>C ${formatMoney(candle.close)} · Vol ${formatVolume(volume && volume.value)}</span>`;
     const root = state.card.querySelector("[data-chart-root]");
     const rootWidth = root ? root.clientWidth : 0;
     tooltip.style.left = `${Math.min(Math.max(param.point.x + 12, 8), Math.max(8, rootWidth - 230))}px`;
@@ -333,7 +358,7 @@
     if (!state) return;
     const range = state.payload.ranges ? state.payload.ranges[rangeName] : null;
     if (!range || !range.available) return;
-    const bars = allBarsForRange(state.payload, rangeName);
+    const bars = rangeBars(state.payload, rangeName);
     const root = card.querySelector("[data-chart-root]");
     const visibleCount = visibleBarCount(state.payload, rangeName, bars, root);
     const candles = bars.map((bar) => ({
@@ -348,8 +373,12 @@
       value: Number(bar.volume || 0),
       color: Number(bar.close) >= Number(bar.open) ? "rgba(0,200,5,.32)" : "rgba(255,90,95,.32)",
     }));
+    const lineData = candles.map((bar) => ({ time: bar.time, value: bar.close }));
+    state.candleByTime = new Map(candles.map((bar) => [String(bar.time), bar]));
     state.candles.setData(candles);
+    state.line.setData(lineData);
     state.volume.setData(volume);
+    applyChartMode(state, state.mode || card.dataset.chartMode || "candles");
     renderPriceLines(state);
     renderMarkers(state, bars);
     card.dataset.activeChartRange = rangeName;
@@ -369,6 +398,18 @@
     const to = bars.length + 1;
     const from = Math.max(0, to - visibleCount);
     state.chart.timeScale().setVisibleLogicalRange({ from, to });
+    requestAnimationFrame(() => updateOverlays(state));
+  }
+
+  function applyChartMode(state, mode) {
+    state.mode = mode === "line" ? "line" : "candles";
+    state.card.dataset.chartMode = state.mode;
+    state.candles.applyOptions({ visible: state.mode !== "line" });
+    state.line.applyOptions({ visible: state.mode === "line" });
+    state.card.querySelectorAll("[data-chart-mode]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.chartMode === state.mode);
+    });
+    renderPriceLines(state);
     requestAnimationFrame(() => updateOverlays(state));
   }
 
@@ -393,8 +434,8 @@
       timeScale: {
         barSpacing: 5,
         borderVisible: false,
-        fixLeftEdge: true,
-        fixRightEdge: true,
+        fixLeftEdge: false,
+        fixRightEdge: false,
         rightOffset: 3,
       },
       crosshair: {
@@ -424,11 +465,21 @@
       wickUpColor: "#69727d",
       wickDownColor: "#69727d",
       priceLineVisible: false,
+      lastValueVisible: false,
+    });
+    const line = addSeries(chart, "LineSeries", {
+      color: GREEN,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      visible: false,
     });
     const volume = addSeries(chart, "HistogramSeries", {
       priceFormat: { type: "volume" },
       priceScaleId: "",
       base: 0,
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
     volume.priceScale().applyOptions({
       scaleMargins: { top: 0.82, bottom: 0 },
@@ -438,9 +489,12 @@
       payload,
       chart,
       candles,
+      line,
       volume,
       markerApi: null,
       priceLines: [],
+      candleByTime: new Map(),
+      mode: card.dataset.chartMode || "candles",
     };
     chart.subscribeCrosshairMove((param) => renderTooltip(state, param));
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
@@ -485,6 +539,9 @@
     if (!state) return;
     card.querySelectorAll("[data-chart-range]").forEach((button) => {
       button.addEventListener("click", () => renderRange(card, button.dataset.chartRange));
+    });
+    card.querySelectorAll("[data-chart-mode]").forEach((button) => {
+      button.addEventListener("click", () => applyChartMode(state, button.dataset.chartMode));
     });
     renderRange(card, activeRange(payload));
   }

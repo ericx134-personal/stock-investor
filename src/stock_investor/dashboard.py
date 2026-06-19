@@ -271,11 +271,63 @@ def _portfolio_account_history(
     return points[-max_points:]
 
 
+def _portfolio_account_intraday_bars(
+    records: list[dict],
+    latest_quotes: dict[str, dict],
+    cash_balance: float = 0.0,
+    max_points: int = 420,
+) -> list[dict]:
+    intraday_values: dict[int, float] = {}
+    intraday_coverage: dict[int, int] = {}
+    holding_count = 0
+    for record in records:
+        shares = float(record.get("shares") or 0)
+        raw_symbol = str(record.get("symbol", ""))
+        symbol = raw_symbol.upper()
+        quote = latest_quotes.get(raw_symbol) or latest_quotes.get(symbol) or {}
+        path = quote.get("intraday_path") or []
+        if shares <= 0 or not path:
+            continue
+        holding_count += 1
+        for point in path:
+            point_time = point.get("time")
+            price = _safe_float(point.get("price"))
+            if point_time is None or price is None or price <= 0:
+                continue
+            timestamp = int(float(point_time))
+            intraday_values[timestamp] = intraday_values.get(timestamp, 0.0) + price * shares
+            intraday_coverage[timestamp] = intraday_coverage.get(timestamp, 0) + 1
+    if not intraday_values or holding_count <= 0:
+        return []
+    min_coverage = max(1, int(max(1, holding_count) * 0.55))
+    bars = []
+    previous_close = None
+    for timestamp, value in sorted(intraday_values.items()):
+        if intraday_coverage.get(timestamp, 0) < min_coverage:
+            continue
+        close = value + cash_balance
+        open_value = previous_close if previous_close is not None else close
+        bars.append(
+            {
+                "time": timestamp,
+                "open": open_value,
+                "high": max(open_value, close),
+                "low": min(open_value, close),
+                "close": close,
+                "volume": 0.0,
+                "source": "intraday_quote_path",
+            }
+        )
+        previous_close = close
+    return bars[-max_points:] if len(bars) >= 2 else []
+
+
 def _account_chart_payload(
     history: list[Price],
     account_value: float,
     today_return: float | None,
     payload_registry: dict | None,
+    intraday_bars: list[dict] | None = None,
 ) -> dict | None:
     clean_history = [
         item
@@ -297,6 +349,29 @@ def _account_chart_payload(
         today_return,
         [],
     )
+    clean_intraday = [
+        bar
+        for bar in (intraday_bars or [])
+        if bar.get("open") is not None
+        and bar.get("high") is not None
+        and bar.get("low") is not None
+        and bar.get("close") is not None
+    ]
+    if clean_intraday:
+        payload["bars_intraday"] = clean_intraday
+        payload["ranges"]["1D"] = {
+            "label": "1D",
+            "available": True,
+            "bar_count": len(clean_intraday),
+            "raw_bar_count": len(clean_intraday),
+            "aggregation": "none",
+            "fallback_reason": "",
+            "start": clean_intraday[0]["time"],
+            "end": clean_intraday[-1]["time"],
+            "source": "intraday_quote_path",
+        }
+        payload["quality"]["intraday_available"] = True
+        payload["quality"]["fallback_reasons"] = []
     payload["display_name"] = "Account"
     payload["signal"] = {"label": "ACCOUNT", "class": "wait", "probability": None}
     if payload_registry is not None:
@@ -328,9 +403,10 @@ def _account_kline_card(
     account_value: float,
     today_return: float | None,
     payload_registry: dict | None,
+    intraday_bars: list[dict] | None = None,
 ) -> str:
     payload = _account_chart_payload(
-        history, account_value, today_return, payload_registry
+        history, account_value, today_return, payload_registry, intraday_bars
     )
     if not payload:
         return '<div class="account-chart-empty">Account history is not available yet.</div>'
@@ -339,14 +415,20 @@ def _account_kline_card(
         if payload["ranges"].get(payload["default_range"], {}).get("available")
         else "1M"
     )
-    return f"""<section class="kline-chart-card account-kline-card" data-chart-symbol="__ACCOUNT__" data-active-chart-range="{html.escape(active_range)}">
+    return f"""<section class="kline-chart-card account-kline-card" data-chart-symbol="__ACCOUNT__" data-active-chart-range="{html.escape(active_range)}" data-chart-mode="candles">
       <div class="interactive-kline" data-chart-root role="img" aria-label="Account interactive candlestick chart"></div>
       <div class="chart-overlay" data-chart-overlay aria-hidden="true"></div>
       <div class="chart-tooltip" aria-live="polite" hidden></div>
       <div class="chart-status" data-chart-status>Loading local chart runtime…</div>
       <div class="chart-fallback" data-chart-fallback hidden>Interactive account chart unavailable; chart data is still recorded in the payload.</div>
-      <div class="chart-range-tabs" aria-label="Account chart time range">
-        {_range_buttons(payload)}
+      <div class="chart-controls">
+        <div class="chart-range-tabs" aria-label="Account chart time range">
+          {_range_buttons(payload)}
+        </div>
+        <div class="chart-mode-tabs" aria-label="Account chart display type">
+          <button type="button" data-chart-mode="candles" class="active">Candle</button>
+          <button type="button" data-chart-mode="line">Line</button>
+        </div>
       </div>
       <div class="chart-legend account-chart-legend"><span>Account OHLC</span><span>Approximate volume</span></div>
     </section>"""
@@ -393,10 +475,12 @@ def _portfolio_account_overview(
     history: list[Price],
     account_summary: dict,
     payload_registry: dict | None,
+    intraday_bars: list[dict] | None = None,
 ) -> str:
     holdings_value = totals.get("market_value", 0.0)
     cash_balance = float(account_summary.get("total_cash", 0.0) or 0.0)
     buying_power = float(account_summary.get("total_buying_power", 0.0) or 0.0)
+    margin_used = max(0.0, -cash_balance)
     account_value = holdings_value + cash_balance
     today_dollars = totals.get("today_dollars", 0.0)
     gain_dollars = totals.get("gain_dollars", 0.0)
@@ -408,10 +492,10 @@ def _portfolio_account_overview(
     gain_pct = gain_dollars / basis_for_return if basis_for_return > 0 else None
     today_class = "positive" if today_dollars >= 0 else "negative"
     gain_class = "positive" if gain_dollars >= 0 else "negative"
-    cash_class = "negative" if cash_balance < 0 else "positive"
-    chart = _account_kline_card(history, account_value, today_pct, payload_registry)
-    cash_label = "Margin used" if cash_balance < 0 else "Cash"
-    cash_display = _optional_money(abs(cash_balance) if cash_balance < 0 else cash_balance)
+    margin_class = "negative" if margin_used > 0 else "positive"
+    chart = _account_kline_card(
+        history, account_value, today_pct, payload_registry, intraday_bars
+    )
     return f"""
     <section class="account-overview" aria-label="Account overview">
       <div class="account-copy">
@@ -421,12 +505,12 @@ def _portfolio_account_overview(
       </div>
       <div class="account-chart-wrap">{chart}</div>
       <div class="account-stats" aria-label="Account summary">
-        <div><small>Holdings value</small><b>{_optional_money(holdings_value)}</b><span>Gross stock exposure</span></div>
-        <div><small>{cash_label}</small><b class="{cash_class}">{cash_display}</b><span>From Robinhood summary</span></div>
-        <div><small>Gain/Loss</small><b class="{gain_class}">{_signed_money(gain_dollars)}</b><span>{_optional_signed_percent(gain_pct)} cash-aware</span></div>
+        <div><small>Account value</small><b>{_optional_money(account_value)}</b><span>Holdings minus margin used</span></div>
+        <div><small>Margin used</small><b class="{margin_class}">{_optional_money(margin_used)}</b><span>From Robinhood summary</span></div>
+        <div><small>Gain/Loss</small><b class="{gain_class}">{_signed_money(gain_dollars)}</b><span>{_optional_signed_percent(gain_pct)} margin-aware</span></div>
         <div><small>Buying power</small><b>{_optional_money(buying_power)}</b><span>Read-only account data</span></div>
       </div>
-      <p class="account-note">Account candles are approximate: current share counts × daily OHLC, plus cash/margin.</p>
+      <p class="account-note">Account candles are approximate: current share counts × OHLC, margin-adjusted.</p>
     </section>"""
 
 
@@ -2055,10 +2139,16 @@ def build_dashboard(
     top_sell = (
         sorted_signal_tuples["SELL"][0][2] if sorted_signal_tuples["SELL"] else "none"
     )
+    account_cash_balance = float(account_summary.get("total_cash", 0.0) or 0.0)
     account_history = _portfolio_account_history(
         records,
         chart_prices,
-        float(account_summary.get("total_cash", 0.0) or 0.0),
+        account_cash_balance,
+    )
+    account_intraday_bars = _portfolio_account_intraday_bars(
+        records,
+        latest_quotes,
+        account_cash_balance,
     )
     portfolio_account_overview = (
         _account_connection_notice(account_connection)
@@ -2067,6 +2157,7 @@ def build_dashboard(
             account_history,
             account_summary,
             chart_payloads["symbols"],
+            account_intraday_bars,
         )
     )
     portfolio_holdings = f"""
@@ -2438,13 +2529,17 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
 .account-connection-notice {{ background:#211604; border:1px solid #5d3d09; border-radius:12px; color:#f6d49a; display:grid; gap:4px; margin:10px 0 12px; padding:13px 16px }}
 .account-connection-notice b {{ color:#ffb84d; font-size:15px }} .account-connection-notice span {{ color:#f0d8b2 }} .account-connection-notice small {{ color:#c2a984 }}
-.account-overview {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px auto 18px; max-width:1120px; overflow:hidden; padding:18px 22px 12px }}
+.account-overview {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px 0 18px; max-width:1120px; overflow:hidden; padding:18px 22px 12px }}
 .account-copy small {{ color:var(--muted); display:block; font-size:15px; font-weight:650; margin-bottom:2px }} .account-copy h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:0 }}
 .account-copy p {{ color:var(--muted); margin:9px 0 0 }} .account-copy p.positive b,.account-stats .positive {{ color:var(--green) }} .account-copy p.negative b,.account-stats .negative {{ color:var(--red) }}
-.account-chart-wrap {{ margin:10px 0 8px; min-height:280px }} .account-value-chart {{ display:block; height:auto; width:100% }}
+.account-chart-wrap {{ margin:10px 0 8px; min-height:280px; width:100% }} .account-value-chart {{ display:block; height:auto; width:100% }}
 .account-kline-card {{ background:transparent; border:0; border-radius:0; margin:0; padding:0 }}
 .account-kline-card .interactive-kline {{ height:280px; margin-top:0 }}
-.account-kline-card .chart-range-tabs {{ border-top:1px solid var(--line); justify-content:flex-start; margin:8px 0 0; padding-top:8px }}
+.account-kline-card .chart-controls {{ align-items:center; border-top:1px solid var(--line); display:flex; gap:14px; justify-content:space-between; margin:8px 0 0; padding-top:8px }}
+.account-kline-card .chart-range-tabs {{ justify-content:flex-start; margin:0; padding-top:0 }}
+.chart-mode-tabs {{ align-items:center; display:flex; gap:6px }}
+.chart-mode-tabs button {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--muted); cursor:pointer; font:inherit; font-size:12px; font-weight:800; padding:6px 10px }}
+.chart-mode-tabs button.active {{ background:var(--green); border-color:var(--green); color:#001f08 }}
 .account-chart-legend {{ display:none }}
 .account-grid line {{ stroke:#252525; stroke-width:1 }} .account-line {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:3 }}
 .account-area {{ fill:currentColor; opacity:.08 }} .account-value-chart.positive {{ color:var(--green) }} .account-value-chart.negative {{ color:var(--red) }} .account-value-chart text {{ fill:var(--muted); font-size:11px }}
@@ -2458,7 +2553,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ container-type:inline-size; display:grid; grid-template-columns:1fr; position:relative }}
-.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); border-left:3px solid transparent; color:var(--text); cursor:pointer; display:grid; font:inherit; gap:9px; grid-template-columns:minmax(86px,1fr) 82px 84px 80px 100px 66px 86px 92px; min-height:68px; overflow:hidden; padding:11px 14px 11px 12px; text-align:left; width:100% }}
+.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); border-left:3px solid transparent; color:var(--text); cursor:pointer; display:grid; font:inherit; gap:9px; grid-template-columns:minmax(86px,1fr) 82px 84px 80px 100px 66px 86px 92px; min-height:68px; min-width:0; overflow:hidden; padding:11px 14px 11px 12px; text-align:left; width:100% }}
 .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.12),rgba(0,200,5,.025) 38%,transparent 72%); border-left-color:var(--green) }}
 .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.14),rgba(255,90,95,.03) 38%,transparent 72%); border-left-color:var(--red) }}
 .portfolio-holding-card.signal-wait {{ border-left-color:transparent }}
@@ -2576,7 +2671,9 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 .note {{ color:var(--muted); font-size:13px }} @media(min-width:900px) {{
   .portfolio-holdings-list {{ background:transparent; column-gap:22px; grid-template-columns:repeat(2,minmax(0,1fr)); position:relative; row-gap:0 }}
   .portfolio-holdings-list::before {{ background:#3a3a3a; bottom:0; box-shadow:0 0 0 1px rgba(255,255,255,.04); content:""; left:50%; position:absolute; top:0; width:2px; z-index:1 }}
-  .portfolio-holding-card {{ background:#050505; min-height:68px; padding:12px 18px }}
+  .portfolio-holding-card {{ background:#050505; gap:8px; grid-template-columns:minmax(112px,1.15fr) 86px 88px 104px 64px 82px 92px; min-height:68px; padding:12px 14px }}
+  .holding-today-cash {{ display:none }}
+  .holding-spark .mini-sparkline {{ width:86px }}
   .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.13),rgba(0,200,5,.03) 40%,#050505 78%) }}
   .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.15),rgba(255,90,95,.035) 40%,#050505 78%) }}
   .portfolio-holding-card.signal-wait {{ background:#050505 }}

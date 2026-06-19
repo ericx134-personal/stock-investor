@@ -30,6 +30,11 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - Preserve every forecast and model version. Never rewrite failed predictions.
 - Require focused tests, the full test suite, a real-data refresh, artifact
   inspection, documentation, and a reversible commit for completion.
+- Keep Robinhood MCP authenticated and online for read-only account refreshes.
+  If the MCP tool session reports stale OAuth after a successful local
+  `codex mcp login robinhood`, reconnect the MCP client or continue from a
+  fresh thread with the same repository state; never place trades or call
+  Robinhood write actions.
 - Promote a model only when it improves sealed forward evidence without
   materially worsening calibration, drawdown, coverage, or stability.
 

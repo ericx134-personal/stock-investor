@@ -431,10 +431,11 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('row.style.gridColumn = "1"', page)
         self.assertIn("window.StockInvestorKline?.initVisibleCharts();", page)
         self.assertIn('class="account-overview"', page)
-        self.assertIn("Holdings value", page)
+        self.assertIn("Account value", page)
+        self.assertIn("Margin used", page)
         self.assertIn("Gain/Loss", page)
         self.assertIn("Buying power", page)
-        self.assertIn("Cash", page)
+        self.assertNotIn("<small>Cash</small>", page)
         self.assertIn('data-tab-target="opportunities"', page)
         self.assertNotIn("Latest prices", page)
         self.assertIn("Opportunities", page)
@@ -560,7 +561,20 @@ class DashboardTests(unittest.TestCase):
             )
             quotes = root / "latest-quotes.json"
             quotes.write_text(
-                json.dumps({"ABC": {"price": 105, "previous_close": 100, "today_return": 0.05}})
+                json.dumps(
+                    {
+                        "ABC": {
+                            "price": 105,
+                            "previous_close": 100,
+                            "today_return": 0.05,
+                            "intraday_path": [
+                                {"time": 1_787_000_000, "price": 100},
+                                {"time": 1_787_000_060, "price": 104},
+                                {"time": 1_787_000_120, "price": 105},
+                            ],
+                        }
+                    }
+                )
             )
             summary = root / "summary.json"
             summary.write_text(
@@ -579,9 +593,13 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("$250.00", page)
         self.assertIn("Buying power", page)
         self.assertIn("$100.00", page)
-        self.assertIn("cash-aware", page)
+        self.assertIn("margin-aware", page)
         self.assertIn('data-chart-symbol="__ACCOUNT__"', page)
         self.assertIn('"symbol":"__ACCOUNT__"', page)
+        self.assertIn('"bars_intraday"', page)
+        self.assertIn('"source":"intraday_quote_path"', page)
+        self.assertIn('data-chart-mode="candles"', page)
+        self.assertIn('data-chart-mode="line"', page)
         self.assertIn('data-chart-range="1W"', page)
 
     def test_dashboard_warns_but_keeps_stale_robinhood_account_view_visible(self):
