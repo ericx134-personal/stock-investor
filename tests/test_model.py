@@ -58,6 +58,7 @@ class ModelRegistryTests(unittest.TestCase):
         promotion_gate_ids = {gate["id"] for gate in payload["promotion_gates"]}
         self.assertIn("sealed_forward_samples", promotion_gate_ids)
         self.assertIn("time_period_stability", promotion_gate_ids)
+        self.assertIn("market_regime_stability", promotion_gate_ids)
         self.assertIn("false_discovery_control", promotion_gate_ids)
         rollback_gate_ids = {gate["id"] for gate in payload["rollback_gates"]}
         self.assertIn("write_action_violation", rollback_gate_ids)

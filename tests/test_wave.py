@@ -15,6 +15,7 @@ from stock_investor.wave import (
     build_wave_conditional_scorecard,
     build_wave_expanding_window_scorecard,
     build_wave_expanding_window_validation,
+    build_wave_market_regime_stability_scorecard,
     build_wave_scorecard,
     build_wave_time_decay_scorecard,
     build_wave_time_period_stability_scorecard,
@@ -435,6 +436,74 @@ class WaveTests(unittest.TestCase):
             rows[0]["directional_classifications"],
             ["BUY", "SELL"],
         )
+
+    def test_market_regime_stability_blocks_conflicting_regime_evidence(self):
+        start = date(2025, 1, 1)
+        benchmark = []
+        close = 100.0
+        for offset in range(390):
+            current = start + timedelta(days=offset)
+            if offset < 130:
+                close *= 1.003
+            elif offset < 260:
+                close *= 0.996
+            else:
+                close *= 1.055 if offset % 2 else 0.95
+            benchmark.append(Price(current, close))
+        outcomes = []
+        for index in range(10):
+            outcomes.append(
+                {
+                    "symbol": f"BULL{index}",
+                    "regime": "Advancing wave",
+                    "horizon": "21d",
+                    "signal_date": (start + timedelta(days=80 + index)).isoformat(),
+                    "forward_return": 0.1,
+                    "excess_return": 0.05,
+                    "max_gain": 0.12,
+                    "max_loss": -0.02,
+                }
+            )
+            outcomes.append(
+                {
+                    "symbol": f"BEAR{index}",
+                    "regime": "Advancing wave",
+                    "horizon": "21d",
+                    "signal_date": (start + timedelta(days=210 + index)).isoformat(),
+                    "forward_return": -0.1,
+                    "excess_return": -0.05,
+                    "max_gain": 0.02,
+                    "max_loss": -0.12,
+                }
+            )
+            outcomes.append(
+                {
+                    "symbol": f"VOL{index}",
+                    "regime": "Advancing wave",
+                    "horizon": "21d",
+                    "signal_date": (start + timedelta(days=340 + index)).isoformat(),
+                    "forward_return": 0.08,
+                    "excess_return": 0.04,
+                    "max_gain": 0.11,
+                    "max_loss": -0.04,
+                }
+            )
+
+        rows = build_wave_market_regime_stability_scorecard(outcomes, benchmark)
+
+        self.assertEqual(rows[0]["stability_version"], "wave-market-regime-stability-v1")
+        self.assertEqual(rows[0]["status"], "BLOCK_PROMOTION_CONFLICT")
+        self.assertEqual(rows[0]["robust_market_regime_count"], 3)
+        self.assertEqual(
+            [item["market_regime"] for item in rows[0]["market_regime_results"]],
+            ["bull", "bear", "sideways", "high_volatility"],
+        )
+        by_market = {
+            item["market_regime"]: item
+            for item in rows[0]["market_regime_results"]
+        }
+        self.assertEqual(by_market["high_volatility"]["observations"], 10)
+        self.assertEqual(rows[0]["directional_classifications"], ["BUY", "SELL"])
 
     def test_blocked_wait_forecast_keeps_probability_schema(self):
         forecast = build_directional_forecasts(

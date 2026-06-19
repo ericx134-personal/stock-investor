@@ -125,7 +125,7 @@ Current execution queue:
 - [x] M043 Create fixed train, development, and sealed test periods.
 - [x] M044 Add expanding-window walk-forward validation.
 - [x] M045 Add time-period stability checks.
-- [ ] M046 Add bull, bear, sideways, and high-volatility stability checks.
+- [x] M046 Add bull, bear, sideways, and high-volatility stability checks.
 - [ ] M047 Add sector-level stability checks.
 - [ ] M048 Add sensitivity analysis around every promoted threshold.
 - [x] M049 Define formal model promotion, probation, retirement, and rollback gates.

@@ -5,7 +5,7 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
-from statistics import median
+from statistics import median, pstdev
 
 from .data import Price
 from .io import atomic_write_text
@@ -20,9 +20,15 @@ DIRECTION_RATE_COMPARISON_VERSION = "direction-rate-comparison-v1"
 WAVE_TIME_DECAY_VERSION = "wave-time-decay-v1"
 WAVE_EXPANDING_VALIDATION_VERSION = "wave-expanding-validation-v1"
 WAVE_TIME_PERIOD_STABILITY_VERSION = "wave-time-period-stability-v1"
+WAVE_MARKET_REGIME_STABILITY_VERSION = "wave-market-regime-stability-v1"
 WAVE_OUTCOME_WINDOWS = (21, 63, 126)
 PRICE_ZONE_REPLAY_HORIZON = 5
 TIME_DECAY_HALF_LIFE_DAYS = 365
+MARKET_REGIME_LOOKBACK_SESSIONS = 63
+BULL_MARKET_RETURN_THRESHOLD = 0.08
+BEAR_MARKET_RETURN_THRESHOLD = -0.08
+HIGH_VOLATILITY_THRESHOLD = 0.35
+MARKET_REGIME_BUCKETS = ("bull", "bear", "sideways", "high_volatility")
 MIN_WAVE_HISTORY = 126
 MIN_REVERSAL = 0.08
 MIN_ROBUST_OBSERVATIONS = 10
@@ -1172,6 +1178,158 @@ def build_wave_time_period_stability_scorecard(
                     "Block promotion unless at least two fixed periods have enough "
                     "observations and produce non-conflicting directional and "
                     "relative classifications."
+                ),
+            }
+        )
+    return rows
+
+
+def _market_regime_context_by_date(
+    benchmark_history: list[Price],
+    *,
+    lookback_sessions: int = MARKET_REGIME_LOOKBACK_SESSIONS,
+    bull_return_threshold: float = BULL_MARKET_RETURN_THRESHOLD,
+    bear_return_threshold: float = BEAR_MARKET_RETURN_THRESHOLD,
+    high_volatility_threshold: float = HIGH_VOLATILITY_THRESHOLD,
+) -> dict[str, dict]:
+    if lookback_sessions <= 1:
+        raise ValueError("lookback_sessions must be greater than 1")
+    clean_history = [
+        item
+        for item in sorted(benchmark_history, key=lambda item: item.date)
+        if item.close is not None and float(item.close) > 0
+    ]
+    context = {}
+    for index in range(lookback_sessions, len(clean_history)):
+        window = clean_history[index - lookback_sessions : index + 1]
+        closes = [float(item.close) for item in window]
+        daily_returns = [
+            closes[offset] / closes[offset - 1] - 1
+            for offset in range(1, len(closes))
+            if closes[offset - 1] > 0
+        ]
+        trailing_return = closes[-1] / closes[0] - 1
+        annualized_volatility = (
+            pstdev(daily_returns) * (252 ** 0.5)
+            if len(daily_returns) > 1
+            else 0.0
+        )
+        if annualized_volatility >= high_volatility_threshold:
+            market_regime = "high_volatility"
+        elif trailing_return >= bull_return_threshold:
+            market_regime = "bull"
+        elif trailing_return <= bear_return_threshold:
+            market_regime = "bear"
+        else:
+            market_regime = "sideways"
+        context[clean_history[index].date.isoformat()] = {
+            "market_regime": market_regime,
+            "lookback_sessions": lookback_sessions,
+            "trailing_return": trailing_return,
+            "annualized_volatility": annualized_volatility,
+            "bull_return_threshold": bull_return_threshold,
+            "bear_return_threshold": bear_return_threshold,
+            "high_volatility_threshold": high_volatility_threshold,
+        }
+    return context
+
+
+def _empty_market_regime_result(market_regime: str) -> dict:
+    return {
+        "market_regime": market_regime,
+        "observations": 0,
+        "directional_evidence_classification": "WAIT",
+        "evidence_classification": "INCONCLUSIVE",
+        "positive_rate": None,
+        "mean_return": None,
+        "beat_benchmark_rate": None,
+        "mean_excess_return": None,
+    }
+
+
+def build_wave_market_regime_stability_scorecard(
+    outcomes: list[dict],
+    benchmark_history: list[Price],
+    *,
+    min_regime_observations: int = MIN_ROBUST_OBSERVATIONS,
+) -> list[dict]:
+    """Check whether wave evidence survives point-in-time market regimes."""
+    market_context = _market_regime_context_by_date(benchmark_history)
+    if not market_context:
+        return []
+    grouped = defaultdict(list)
+    for outcome in outcomes:
+        context = market_context.get(str(outcome["signal_date"]))
+        if not context:
+            continue
+        grouped[(outcome["regime"], outcome["horizon"])].append(
+            {
+                **outcome,
+                "market_regime": context["market_regime"],
+                "market_regime_context": context,
+            }
+        )
+    rows = []
+    for (wave_regime, horizon), values in sorted(grouped.items()):
+        market_regime_results = []
+        for market_regime in MARKET_REGIME_BUCKETS:
+            regime_values = [
+                item for item in values if item["market_regime"] == market_regime
+            ]
+            if not regime_values:
+                market_regime_results.append(
+                    _empty_market_regime_result(market_regime)
+                )
+                continue
+            market_regime_results.append(
+                _walk_forward_scorecard_row(
+                    regime_values,
+                    {"market_regime": market_regime},
+                    include_leave_one_out=False,
+                )
+            )
+        robust_regimes = [
+            item
+            for item in market_regime_results
+            if int(item.get("observations", 0)) >= min_regime_observations
+        ]
+        directional_classes = sorted(
+            {
+                str(item.get("directional_evidence_classification"))
+                for item in robust_regimes
+            }
+        )
+        relative_classes = sorted(
+            {str(item.get("evidence_classification")) for item in robust_regimes}
+        )
+        if len(robust_regimes) < 2:
+            status = "BLOCK_PROMOTION_INSUFFICIENT_REGIMES"
+        elif len(directional_classes) > 1 or len(relative_classes) > 1:
+            status = "BLOCK_PROMOTION_CONFLICT"
+        else:
+            status = "PASS"
+        rows.append(
+            {
+                "stability_version": WAVE_MARKET_REGIME_STABILITY_VERSION,
+                "experiment_version": WAVE_EXPERIMENT_VERSION,
+                "feature_version": WAVE_FEATURE_VERSION,
+                "regime": wave_regime,
+                "horizon": horizon,
+                "market_regime_count": len(MARKET_REGIME_BUCKETS),
+                "robust_market_regime_count": len(robust_regimes),
+                "min_regime_observations": min_regime_observations,
+                "market_regime_lookback_sessions": MARKET_REGIME_LOOKBACK_SESSIONS,
+                "bull_return_threshold": BULL_MARKET_RETURN_THRESHOLD,
+                "bear_return_threshold": BEAR_MARKET_RETURN_THRESHOLD,
+                "high_volatility_threshold": HIGH_VOLATILITY_THRESHOLD,
+                "directional_classifications": directional_classes,
+                "relative_classifications": relative_classes,
+                "market_regime_results": market_regime_results,
+                "status": status,
+                "failure_gate": (
+                    "Block promotion unless at least two point-in-time market "
+                    "regimes have enough observations and produce non-conflicting "
+                    "directional and relative classifications."
                 ),
             }
         )

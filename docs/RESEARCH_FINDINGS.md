@@ -895,6 +895,24 @@ periods produce non-conflicting directional and relative classifications. Until
 sealed-test outcomes mature, most rows should remain blocked for insufficient
 period evidence.
 
+## Wave Market-Regime Stability V1
+
+M046 adds `wave-market-regime-stability-v1`, generated as
+`wave-market-regime-stability-scorecard.json` during every refresh. It classifies
+SPY point-in-time market context at each historical wave signal date with a
+63-session lookback: high volatility first, then bull, bear, or sideways by
+trailing benchmark return. The scorecard compares directional and SPY-relative
+evidence classifications inside bull, bear, sideways, and high-volatility
+buckets for each structural wave regime and horizon.
+
+Predeclared hypothesis: structural-wave evidence that is robust enough for
+promotion should not depend on only one broad-market state. Validation gate:
+at least two market-regime buckets must each have enough observations and must
+not produce conflicting directional or relative classifications. Failure gate:
+promotion is blocked when robust buckets disagree or when too few market
+regimes have enough observations. This artifact is a stability audit, not a
+new live signal.
+
 ## Model Governance V1
 
 M049 adds `models/model-governance-v1.json`, a machine-readable lifecycle
@@ -905,10 +923,10 @@ and quarterly review cadence.
 
 Decision rule: promotion requires a frozen candidate, sealed forward samples,
 calibration, directional precision, cross-symbol stability, time-period
-stability, false-discovery control, and operational reliability. Rollback is
-mandatory for any write-action violation, private-data exposure, forecast
-rewrite, unsafe promotion, or BUY/SELL label emitted from blocked required
-price data.
+stability, market-regime stability, false-discovery control, and operational
+reliability. Rollback is mandatory for any write-action violation, private-data
+exposure, forecast rewrite, unsafe promotion, or BUY/SELL label emitted from
+blocked required price data.
 
 ## Dashboard Compact Pulse
 

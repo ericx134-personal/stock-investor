@@ -77,10 +77,10 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 
 ## F. Benchmark And Regime Research
 
-- [ ] F001 Add broad-market SPY regime classification.
+- [x] F001 Add broad-market SPY regime classification.
 - [ ] F002 Add growth-stock QQQ regime classification.
 - [ ] F003 Add small-cap IWM regime classification.
-- [ ] F004 Measure signals separately in bull, bear, and sideways markets.
+- [x] F004 Measure signals separately in bull, bear, and sideways markets.
 - [ ] F005 Measure signals separately in high- and low-volatility markets.
 - [ ] F006 Measure signals separately above and below market trend.
 - [ ] F007 Add sector ETF benchmarks where mappings are available.

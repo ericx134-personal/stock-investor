@@ -67,6 +67,7 @@ from .wave import (
     build_wave_scorecard,
     build_wave_expanding_window_scorecard,
     build_wave_expanding_window_validation,
+    build_wave_market_regime_stability_scorecard,
     build_wave_time_decay_scorecard,
     build_wave_time_period_stability_scorecard,
     build_wave_walk_forward_outcomes,
@@ -157,6 +158,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "wave_conditional_scorecard": output_dir / "wave-conditional-scorecard.json",
         "wave_time_decay_scorecard": output_dir / "wave-time-decay-scorecard.json",
         "wave_time_period_stability_scorecard": output_dir / "wave-time-period-stability-scorecard.json",
+        "wave_market_regime_stability_scorecard": output_dir / "wave-market-regime-stability-scorecard.json",
         "wave_expanding_validation": output_dir / "wave-expanding-validation.json",
         "wave_expanding_validation_scorecard": output_dir / "wave-expanding-validation-scorecard.json",
         "price_zone_replay": output_dir / "price-zone-replay.json",
@@ -306,6 +308,12 @@ def run_refresh(
             evaluation_periods,
         )
     )
+    wave_market_regime_stability_scorecard = (
+        build_wave_market_regime_stability_scorecard(
+            wave_experiment_outcomes,
+            prices.get(benchmark_symbol or "", []),
+        )
+    )
     wave_expanding_validation = build_wave_expanding_window_validation(
         wave_experiment_outcomes
     )
@@ -319,6 +327,10 @@ def run_refresh(
     _write_json(
         wave_time_period_stability_scorecard,
         paths["wave_time_period_stability_scorecard"],
+    )
+    _write_json(
+        wave_market_regime_stability_scorecard,
+        paths["wave_market_regime_stability_scorecard"],
     )
     _write_json(wave_expanding_validation, paths["wave_expanding_validation"])
     _write_json(
@@ -420,6 +432,9 @@ def run_refresh(
             "wave_time_decay_scorecard": len(wave_time_decay_scorecard),
             "wave_time_period_stability_scorecard": len(
                 wave_time_period_stability_scorecard
+            ),
+            "wave_market_regime_stability_scorecard": len(
+                wave_market_regime_stability_scorecard
             ),
             "wave_expanding_validation_scorecard": len(
                 wave_expanding_validation_scorecard
@@ -596,6 +611,9 @@ def run_refresh(
         "wave_time_decay_scorecard_rows": len(wave_time_decay_scorecard),
         "wave_time_period_stability_scorecard_rows": len(
             wave_time_period_stability_scorecard
+        ),
+        "wave_market_regime_stability_scorecard_rows": len(
+            wave_market_regime_stability_scorecard
         ),
         "wave_expanding_validation_count": len(wave_expanding_validation),
         "wave_expanding_validation_scorecard_rows": len(

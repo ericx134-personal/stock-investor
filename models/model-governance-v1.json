@@ -64,6 +64,11 @@
       "minimum_evidence": "Fixed train, development, and sealed periods do not produce conflicting directional or relative classifications."
     },
     {
+      "id": "market_regime_stability",
+      "status_required": "pass",
+      "minimum_evidence": "Bull, bear, sideways, and high-volatility market regimes do not produce conflicting directional or relative classifications."
+    },
+    {
       "id": "false_discovery_control",
       "status_required": "pass",
       "minimum_evidence": "Experiment families with medium or high multiple-testing risk have false-discovery correction or sealed replication."
