@@ -746,6 +746,7 @@ def _dashboard(
     price_health_path: str | None,
     prices_path: str | None,
     latest_quotes_path: str | None,
+    account_summary_path: str | None,
 ) -> int:
     write_dashboard(
         build_dashboard(
@@ -770,6 +771,7 @@ def _dashboard(
             price_health_path=price_health_path,
             prices_path=prices_path,
             latest_quotes_path=latest_quotes_path,
+            account_summary_path=account_summary_path,
         ),
         output_path,
     )
@@ -1100,6 +1102,7 @@ def main() -> int:
     dashboard_parser.add_argument("--price-health")
     dashboard_parser.add_argument("--prices")
     dashboard_parser.add_argument("--latest-quotes")
+    dashboard_parser.add_argument("--account-summary")
 
     refresh_parser = subparsers.add_parser(
         "refresh",
@@ -1294,6 +1297,7 @@ def main() -> int:
             args.price_health,
             args.prices,
             args.latest_quotes,
+            args.account_summary,
         )
     if args.command == "refresh":
         return _refresh(

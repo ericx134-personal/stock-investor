@@ -415,8 +415,8 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("75%", page)
         self.assertIn("Bearish / trim review", page)
         self.assertIn("K-line evidence", page)
-        self.assertIn("Account Overview", page)
-        self.assertIn("Robinhood-style account view", page)
+        self.assertNotIn("<h2>Account Overview</h2>", page)
+        self.assertNotIn("Robinhood-style account view", page)
         self.assertIn('id="portfolio-sort"', page)
         self.assertIn('data-portfolio-holdings', page)
         self.assertIn('class="portfolio-holding-card signal-wait"', page)
@@ -428,10 +428,12 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Today Return $", page)
         self.assertIn("sortHoldings", page)
         self.assertIn('class="account-overview"', page)
-        self.assertIn("Total gain/loss", page)
+        self.assertIn("Holdings value", page)
+        self.assertIn("Gain/Loss", page)
+        self.assertIn("Buying power", page)
+        self.assertIn("Cash", page)
         self.assertIn('data-tab-target="opportunities"', page)
-        self.assertIn("Model health", page)
-        self.assertIn("Latest prices", page)
+        self.assertNotIn("Latest prices", page)
         self.assertIn("Opportunities", page)
         self.assertIn("2026-01-01", page)
         self.assertIn('class="decision-board"', page)
@@ -521,6 +523,106 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("<div><small>Shares</small><b>10</b></div>", page)
         self.assertIn("<small>10 shares</small>", page)
         self.assertNotIn("<span>More</span>", page)
+
+    def test_dashboard_account_overview_uses_margin_summary_and_account_chart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            alerts = root / "alerts.jsonl"
+            alerts.write_text(
+                json.dumps(
+                    {
+                        "symbol": "ABC",
+                        "shares": 10,
+                        "average_cost": 90,
+                        "cost_basis": 900,
+                        "market_value": 1000,
+                        "portfolio_weight": 1.2,
+                        "latest_close": 100,
+                        "unrealized_return": 0.111111,
+                        "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                        "technicals": {"return_12_to_1": 0.25},
+                    }
+                )
+                + "\n"
+            )
+            prices = root / "prices.csv"
+            start = date(2026, 1, 1)
+            prices.write_text(
+                "date,symbol,close,open,high,low,volume\n"
+                + "".join(
+                    f"{(start + timedelta(days=index)).isoformat()},ABC,{100 + index:.2f},"
+                    f"{99 + index:.2f},{102 + index:.2f},{98 + index:.2f},100000\n"
+                    for index in range(30)
+                )
+            )
+            quotes = root / "latest-quotes.json"
+            quotes.write_text(
+                json.dumps({"ABC": {"price": 105, "previous_close": 100, "today_return": 0.05}})
+            )
+            summary = root / "summary.json"
+            summary.write_text(
+                json.dumps({"total_cash": -250, "total_buying_power": 100})
+            )
+
+            page = build_dashboard(
+                alerts,
+                prices_path=prices,
+                latest_quotes_path=quotes,
+                account_summary_path=summary,
+            )
+
+        self.assertIn("<h2>$800.00</h2>", page)
+        self.assertIn("Margin used", page)
+        self.assertIn("$250.00", page)
+        self.assertIn("Buying power", page)
+        self.assertIn("$100.00", page)
+        self.assertIn("cash-aware", page)
+        self.assertIn('data-chart-symbol="__ACCOUNT__"', page)
+        self.assertIn('"symbol":"__ACCOUNT__"', page)
+        self.assertIn('data-chart-range="1W"', page)
+
+    def test_dashboard_gates_stale_robinhood_account_summary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            alerts = root / "alerts.jsonl"
+            alerts.write_text(
+                json.dumps(
+                    {
+                        "symbol": "ABC",
+                        "shares": 10,
+                        "average_cost": 90,
+                        "cost_basis": 900,
+                        "market_value": 1000,
+                        "portfolio_weight": 1.0,
+                        "latest_close": 100,
+                        "unrealized_return": 0.111111,
+                        "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                        "technicals": {},
+                    }
+                )
+                + "\n"
+            )
+            summary = root / "summary.json"
+            summary.write_text(
+                json.dumps(
+                    {
+                        "imported_at": "2026-01-01T00:00:00+00:00",
+                        "total_cash": -250,
+                        "total_buying_power": 100,
+                    }
+                )
+            )
+
+            page = build_dashboard(alerts, account_summary_path=summary)
+
+        self.assertIn('class="robinhood-connect-page"', page)
+        self.assertIn('data-robinhood-auth-required="true"', page)
+        self.assertIn("Connect Robinhood to view your live portfolio", page)
+        self.assertIn("This page never collects or stores your Robinhood password.", page)
+        self.assertNotIn('class="account-overview"', page)
+        self.assertNotIn('class="portfolio-holdings-panel"', page)
+        self.assertNotIn('id="holding-detail-0"', page)
+        self.assertNotIn("<h2>$750.00</h2>", page)
 
     def test_dashboard_does_not_blend_evidence_across_model_versions(self):
         with tempfile.TemporaryDirectory() as directory:

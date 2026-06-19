@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 import json
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from .data import Price, load_prices
@@ -131,12 +131,108 @@ def _mini_sparkline(
     )
 
 
-def _portfolio_value_history(
+def _load_account_summary(path: str | Path | None) -> dict:
+    if not path or not Path(path).exists():
+        return {}
+    payload = json.loads(Path(path).read_text())
+    return {
+        "total_cash": _safe_float(payload.get("total_cash")) or 0.0,
+        "total_buying_power": _safe_float(payload.get("total_buying_power")) or 0.0,
+        "account_count": int(payload.get("account_count") or 0),
+        "imported_at": str(payload.get("imported_at") or ""),
+        "requires_auth": bool(payload.get("requires_auth") or False),
+    }
+
+
+def _parse_utc_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _account_connection_state(
+    path: str | Path | None,
+    summary: dict,
+    *,
+    max_age_hours: int = 36,
+) -> dict:
+    if not path:
+        return {"requires_auth": False, "status": "not_configured", "detail": ""}
+    source = Path(path)
+    if not source.exists() or not summary:
+        return {
+            "requires_auth": True,
+            "status": "missing",
+            "detail": "No fresh Robinhood account summary was found.",
+            "imported_at": "",
+            "path": str(source),
+        }
+    imported_at = summary.get("imported_at") or ""
+    imported_dt = _parse_utc_datetime(imported_at)
+    if summary.get("requires_auth"):
+        return {
+            "requires_auth": True,
+            "status": "oauth_required",
+            "detail": "Robinhood MCP reported that OAuth authorization is required.",
+            "imported_at": imported_at,
+            "path": str(source),
+        }
+    if imported_dt is not None:
+        age = datetime.now(timezone.utc) - imported_dt
+        if age > timedelta(hours=max_age_hours):
+            hours = max(1, round(age.total_seconds() / 3600))
+            return {
+                "requires_auth": True,
+                "status": "stale",
+                "detail": f"Robinhood account data is {hours} hours old.",
+                "imported_at": imported_at,
+                "path": str(source),
+            }
+    return {
+        "requires_auth": False,
+        "status": "connected",
+        "detail": "Robinhood account summary is fresh enough for account-level totals.",
+        "imported_at": imported_at,
+        "path": str(source),
+    }
+
+
+def _robinhood_connect_page(state: dict) -> str:
+    imported = state.get("imported_at") or "never"
+    detail = state.get("detail") or "Robinhood account authorization is required."
+    return f"""
+    <section class="robinhood-connect-page" data-robinhood-auth-required="true" aria-label="Connect Robinhood">
+      <div class="connect-shell">
+        <div class="connect-brand"><span class="connect-logo">↗</span><b>Robinhood</b></div>
+        <h2>Connect Robinhood to view your live portfolio</h2>
+        <p>{html.escape(detail)} We will not show stale account totals, margin, or position board data as if they were current.</p>
+        <div class="connect-actions">
+          <a class="connect-primary" href="https://robinhood.com/login" target="_blank" rel="noreferrer">Open Robinhood</a>
+          <button type="button" class="connect-secondary" onclick="window.location.reload()">Refresh after auth</button>
+        </div>
+        <ol>
+          <li>Authenticate the Robinhood MCP connection in Codex when prompted.</li>
+          <li>Refresh the local dashboard so it can rebuild from fresh read-only account data.</li>
+          <li>Margin, buying power, account candles, and holdings will reappear only after the summary is fresh.</li>
+        </ol>
+        <small>Last local account import: {html.escape(str(imported))}. This page never collects or stores your Robinhood password.</small>
+      </div>
+    </section>"""
+
+
+def _portfolio_account_history(
     records: list[dict],
     chart_prices: dict[str, list[Price]],
-    max_points: int = 252,
-) -> list[tuple[date, float]]:
-    dated_values: dict[date, float] = {}
+    cash_balance: float = 0.0,
+    max_points: int = 1260,
+) -> list[Price]:
+    dated_values: dict[date, dict[str, float]] = {}
     dated_coverage: dict[date, int] = {}
     holding_count = 0
     for record in records:
@@ -148,34 +244,136 @@ def _portfolio_value_history(
             continue
         holding_count += 1
         for item in history[-max_points:]:
-            if item.close is None or float(item.close) <= 0:
+            if (
+                item.open is None
+                or item.high is None
+                or item.low is None
+                or item.close is None
+                or float(item.close) <= 0
+            ):
                 continue
-            dated_values[item.date] = dated_values.get(item.date, 0.0) + (
-                float(item.close) * shares
+            bucket = dated_values.setdefault(
+                item.date, {"open": 0.0, "high": 0.0, "low": 0.0, "close": 0.0, "volume": 0.0}
             )
+            bucket["open"] += float(item.open) * shares
+            bucket["high"] += float(item.high) * shares
+            bucket["low"] += float(item.low) * shares
+            bucket["close"] += float(item.close) * shares
+            bucket["volume"] += float(item.volume or 0)
             dated_coverage[item.date] = dated_coverage.get(item.date, 0) + 1
     if not dated_values:
         return []
     min_coverage = max(1, int(max(1, holding_count) * 0.55))
-    points = [
-        (day, value)
-        for day, value in sorted(dated_values.items())
-        if dated_coverage.get(day, 0) >= min_coverage
-    ]
+    points = []
+    for day, values in sorted(dated_values.items()):
+        if dated_coverage.get(day, 0) < min_coverage:
+            continue
+        points.append(
+            Price(
+                date=day,
+                open=values["open"] + cash_balance,
+                high=values["high"] + cash_balance,
+                low=values["low"] + cash_balance,
+                close=values["close"] + cash_balance,
+                volume=values["volume"],
+            )
+        )
     return points[-max_points:]
 
 
-def _portfolio_value_chart(points: list[tuple[date, float]], css_class: str) -> str:
+def _account_chart_payload(
+    history: list[Price],
+    account_value: float,
+    today_return: float | None,
+    payload_registry: dict | None,
+) -> dict | None:
+    clean_history = [
+        item
+        for item in history
+        if item.open is not None and item.high is not None and item.low is not None
+    ]
+    if len(clean_history) < 20:
+        return None
+    payload = _kline_chart_payload(
+        clean_history,
+        {},
+        "ACCOUNT",
+        "wait",
+        None,
+        None,
+        None,
+        "__ACCOUNT__",
+        account_value,
+        today_return,
+        [],
+    )
+    payload["display_name"] = "Account"
+    payload["signal"] = {"label": "ACCOUNT", "class": "wait", "probability": None}
+    if payload_registry is not None:
+        payload_registry[payload["symbol"]] = payload
+    return payload
+
+
+def _range_buttons(payload: dict) -> str:
+    range_order = ("1D", "1W", "1M", "3M", "YTD", "1Y", "5Y", "MAX")
+    active_range = (
+        payload["default_range"]
+        if payload["ranges"].get(payload["default_range"], {}).get("available")
+        else "1M"
+    )
+    buttons = []
+    for label in range_order:
+        range_payload = payload["ranges"].get(label, {})
+        disabled = "" if range_payload.get("available") else " disabled"
+        active_class = ' class="active"' if label == active_range and not disabled else ""
+        buttons.append(
+            f'<button type="button" data-chart-range="{label}" data-chart-bars="{int(range_payload.get("bar_count", 0))}"'
+            f'{active_class}{disabled}>{label}</button>'
+        )
+    return "".join(buttons)
+
+
+def _account_kline_card(
+    history: list[Price],
+    account_value: float,
+    today_return: float | None,
+    payload_registry: dict | None,
+) -> str:
+    payload = _account_chart_payload(
+        history, account_value, today_return, payload_registry
+    )
+    if not payload:
+        return '<div class="account-chart-empty">Account history is not available yet.</div>'
+    active_range = (
+        payload["default_range"]
+        if payload["ranges"].get(payload["default_range"], {}).get("available")
+        else "1M"
+    )
+    return f"""<section class="kline-chart-card account-kline-card" data-chart-symbol="__ACCOUNT__" data-active-chart-range="{html.escape(active_range)}">
+      <div class="interactive-kline" data-chart-root role="img" aria-label="Account interactive candlestick chart"></div>
+      <div class="chart-overlay" data-chart-overlay aria-hidden="true"></div>
+      <div class="chart-tooltip" aria-live="polite" hidden></div>
+      <div class="chart-status" data-chart-status>Loading local chart runtime…</div>
+      <div class="chart-fallback" data-chart-fallback hidden>Interactive account chart unavailable; chart data is still recorded in the payload.</div>
+      <div class="chart-range-tabs" aria-label="Account chart time range">
+        {_range_buttons(payload)}
+      </div>
+      <div class="chart-legend account-chart-legend"><span>Account OHLC</span><span>Approximate volume</span></div>
+    </section>"""
+
+
+def _portfolio_value_chart(points: list[Price], css_class: str) -> str:
     if len(points) < 2:
         return '<div class="account-chart-empty">Portfolio history is not available yet.</div>'
     width, height, pad_x, pad_y = 920, 260, 8, 18
-    values = [value for _, value in points if value > 0]
+    values = [float(item.close) for item in points if item.close is not None and float(item.close) > 0]
     low, high = min(values), max(values)
     span = high - low or max(high * 0.01, 1)
     step = (width - pad_x * 2) / (len(points) - 1)
     coords = []
     area_coords = [f"{pad_x},{height - pad_y}"]
-    for index, (_, value) in enumerate(points):
+    for index, item in enumerate(points):
+        value = float(item.close)
         x = pad_x + index * step
         y = pad_y + (high - value) / span * (height - pad_y * 2)
         coords.append(f"{x:.1f},{y:.1f}")
@@ -186,8 +384,8 @@ def _portfolio_value_chart(points: list[tuple[date, float]], css_class: str) -> 
         f'y2="{pad_y + index * (height - pad_y * 2) / 3:.1f}"/>'
         for index in range(4)
     )
-    first_label = points[0][0].strftime("%b %-d")
-    last_label = points[-1][0].strftime("%b %-d")
+    first_label = points[0].date.strftime("%b %-d")
+    last_label = points[-1].date.strftime("%b %-d")
     return (
         f'<svg class="account-value-chart {html.escape(css_class)}" viewBox="0 0 {width} {height}" '
         f'role="img" aria-label="Approximate account value history">'
@@ -202,36 +400,43 @@ def _portfolio_value_chart(points: list[tuple[date, float]], css_class: str) -> 
 
 def _portfolio_account_overview(
     totals: dict[str, float],
-    history: list[tuple[date, float]],
-    model_status: str,
-    latest_price_date: str,
-    poor_or_stale: int,
+    history: list[Price],
+    account_summary: dict,
+    payload_registry: dict | None,
 ) -> str:
-    market_value = totals.get("market_value", 0.0)
+    holdings_value = totals.get("market_value", 0.0)
+    cash_balance = float(account_summary.get("total_cash", 0.0) or 0.0)
+    buying_power = float(account_summary.get("total_buying_power", 0.0) or 0.0)
+    account_value = holdings_value + cash_balance
     today_dollars = totals.get("today_dollars", 0.0)
     gain_dollars = totals.get("gain_dollars", 0.0)
     cost_basis = totals.get("cost_basis", 0.0)
-    prior_value = market_value - today_dollars
+    net_basis = cost_basis + cash_balance
+    basis_for_return = net_basis if net_basis > 0 else cost_basis
+    prior_value = account_value - today_dollars
     today_pct = today_dollars / prior_value if prior_value > 0 else None
-    gain_pct = gain_dollars / cost_basis if cost_basis > 0 else None
+    gain_pct = gain_dollars / basis_for_return if basis_for_return > 0 else None
     today_class = "positive" if today_dollars >= 0 else "negative"
     gain_class = "positive" if gain_dollars >= 0 else "negative"
-    chart = _portfolio_value_chart(history, today_class)
+    cash_class = "negative" if cash_balance < 0 else "positive"
+    chart = _account_kline_card(history, account_value, today_pct, payload_registry)
+    cash_label = "Margin used" if cash_balance < 0 else "Cash"
+    cash_display = _optional_money(abs(cash_balance) if cash_balance < 0 else cash_balance)
     return f"""
     <section class="account-overview" aria-label="Account overview">
       <div class="account-copy">
         <small>Individual</small>
-        <h2>${market_value:,.2f}</h2>
+        <h2>${account_value:,.2f}</h2>
         <p class="{today_class}"><b>{_signed_money(today_dollars)}</b> ({_optional_signed_percent(today_pct)}) today</p>
       </div>
       <div class="account-chart-wrap">{chart}</div>
       <div class="account-stats" aria-label="Account summary">
-        <div><small>Total gain/loss</small><b class="{gain_class}">{_signed_money(gain_dollars)}</b><span>{_optional_signed_percent(gain_pct)}</span></div>
-        <div><small>Cost basis</small><b>{_optional_money(cost_basis)}</b><span>From current holdings</span></div>
-        <div><small>Latest prices</small><b>{html.escape(latest_price_date)}</b><span>{poor_or_stale} stale or degraded symbols</span></div>
-        <div><small>Model health</small><b><span class="health-status {html.escape(model_status.lower())}">{html.escape(model_status)}</span></b><span>Read-only signal engine</span></div>
+        <div><small>Holdings value</small><b>{_optional_money(holdings_value)}</b><span>Gross stock exposure</span></div>
+        <div><small>{cash_label}</small><b class="{cash_class}">{cash_display}</b><span>From Robinhood summary</span></div>
+        <div><small>Gain/Loss</small><b class="{gain_class}">{_signed_money(gain_dollars)}</b><span>{_optional_signed_percent(gain_pct)} cash-aware</span></div>
+        <div><small>Buying power</small><b>{_optional_money(buying_power)}</b><span>Read-only account data</span></div>
       </div>
-      <p class="account-note">History is an approximate replay using today's share counts and available daily closes.</p>
+      <p class="account-note">Account candles are approximate: current share counts × daily OHLC, plus cash/margin.</p>
     </section>"""
 
 
@@ -1290,6 +1495,7 @@ def build_dashboard(
     price_health_path: str | Path | None = None,
     prices_path: str | Path | None = None,
     latest_quotes_path: str | Path | None = None,
+    account_summary_path: str | Path | None = None,
 ) -> str:
     records = _latest_by_symbol(_load_jsonl(alerts_path))
     diagnostic = analyze_alert_burden(records)
@@ -1345,6 +1551,8 @@ def build_dashboard(
         if latest_quotes_path and Path(latest_quotes_path).exists()
         else {}
     )
+    account_summary = _load_account_summary(account_summary_path)
+    account_connection = _account_connection_state(account_summary_path, account_summary)
     wave_scorecard = (
         json.loads(Path(wave_scorecard_path).read_text())
         if wave_scorecard_path and Path(wave_scorecard_path).exists()
@@ -1857,26 +2065,22 @@ def build_dashboard(
     top_sell = (
         sorted_signal_tuples["SELL"][0][2] if sorted_signal_tuples["SELL"] else "none"
     )
-    price_rows = (price_health or {}).get("symbols", [])
-    latest_price_date = max(
-        (str(row.get("latest_date")) for row in price_rows if row.get("latest_date")),
-        default="unknown",
-    )
-    poor_or_stale = sum(
-        1
-        for row in price_rows
-        if row.get("data_quality_status") != "GOOD" or row.get("status") != "FRESH"
-    )
-    model_status = str((model_health or {}).get("overall_status", "UNKNOWN"))
-    account_history = _portfolio_value_history(records, chart_prices)
-    portfolio_account_overview = _portfolio_account_overview(
-        portfolio_totals,
-        account_history,
-        model_status,
-        latest_price_date,
-        poor_or_stale,
-    )
-    portfolio_holdings = f"""
+    if account_connection.get("requires_auth"):
+        portfolio_account_overview = _robinhood_connect_page(account_connection)
+        portfolio_holdings = ""
+    else:
+        account_history = _portfolio_account_history(
+            records,
+            chart_prices,
+            float(account_summary.get("total_cash", 0.0) or 0.0),
+        )
+        portfolio_account_overview = _portfolio_account_overview(
+            portfolio_totals,
+            account_history,
+            account_summary,
+            chart_payloads["symbols"],
+        )
+        portfolio_holdings = f"""
     <section class="portfolio-holdings-panel" aria-label="All portfolio holdings">
       <div class="holdings-toolbar">
         <div><small>Your holdings</small><h3>Portfolio</h3></div>
@@ -1916,6 +2120,10 @@ def build_dashboard(
         <div class="signal-stack">{''.join(sorted_board_rows["WAIT"]) or '<p class="empty-state">No holdings are waiting.</p>'}</div>
       </details>
     </section></section>"""
+    if account_connection.get("requires_auth"):
+        prioritized_board = _robinhood_connect_page(account_connection)
+        detail_panels = []
+        chart_payloads["symbols"] = {}
 
     current_analogs = []
     for record in records:
@@ -2244,10 +2452,21 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-board {{ margin:12px 0 24px }}
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
+.robinhood-connect-page {{ align-items:center; display:flex; justify-content:center; min-height:660px; padding:42px 12px }}
+.connect-shell {{ background:#050505; border:1px solid #22282d; border-radius:18px; box-shadow:0 28px 70px rgba(0,0,0,.5); max-width:520px; padding:34px; width:100% }}
+.connect-brand {{ align-items:center; color:#fff; display:flex; font-size:18px; font-weight:800; gap:10px; margin-bottom:22px }} .connect-logo {{ align-items:center; background:var(--green); border-radius:12px; color:#001f08; display:flex; font-size:24px; font-weight:900; height:42px; justify-content:center; width:42px }}
+.connect-shell h2 {{ font-size:34px; letter-spacing:-1.3px; line-height:1.08; margin:0 0 12px }} .connect-shell p {{ color:#b7b7b7; font-size:16px; margin:0 0 22px }}
+.connect-actions {{ display:flex; flex-wrap:wrap; gap:12px; margin:0 0 22px }} .connect-primary,.connect-secondary {{ border-radius:999px; cursor:pointer; font:inherit; font-weight:800; padding:12px 18px; text-decoration:none }}
+.connect-primary {{ background:var(--green); color:#001f08 }} .connect-secondary {{ background:#151515; border:1px solid #333; color:var(--text) }}
+.connect-shell ol {{ color:#d9d9d9; margin:0 0 18px; padding-left:20px }} .connect-shell li {{ margin:8px 0 }} .connect-shell small {{ color:var(--muted); display:block }}
 .account-overview {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px 0 14px; overflow:hidden; padding:22px 24px 14px }}
 .account-copy small {{ color:var(--muted); display:block; font-size:18px; font-weight:650; margin-bottom:2px }} .account-copy h2 {{ font-size:44px; letter-spacing:-1.8px; line-height:1; margin:0 }}
 .account-copy p {{ color:var(--muted); margin:9px 0 0 }} .account-copy p.positive b,.account-stats .positive {{ color:var(--green) }} .account-copy p.negative b,.account-stats .negative {{ color:var(--red) }}
-.account-chart-wrap {{ margin:12px 0 10px; min-height:230px }} .account-value-chart {{ display:block; height:auto; width:100% }}
+.account-chart-wrap {{ margin:12px 0 10px; min-height:360px }} .account-value-chart {{ display:block; height:auto; width:100% }}
+.account-kline-card {{ background:transparent; border:0; border-radius:0; margin:0; padding:0 }}
+.account-kline-card .interactive-kline {{ height:360px; margin-top:0 }}
+.account-kline-card .chart-range-tabs {{ border-top:1px solid var(--line); justify-content:flex-start; margin:8px 0 0; padding-top:8px }}
+.account-chart-legend {{ display:none }}
 .account-grid line {{ stroke:#252525; stroke-width:1 }} .account-line {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:3 }}
 .account-area {{ fill:currentColor; opacity:.08 }} .account-value-chart.positive {{ color:var(--green) }} .account-value-chart.negative {{ color:var(--red) }} .account-value-chart text {{ fill:var(--muted); font-size:11px }}
 .account-chart-empty {{ align-items:center; background:#0b0b0b; border-radius:10px; color:var(--muted); display:flex; min-height:230px; justify-content:center }}
@@ -2263,7 +2482,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); border-left:3px solid transparent; color:var(--text); cursor:pointer; display:grid; font:inherit; gap:9px; grid-template-columns:minmax(86px,1fr) 82px 84px 80px 100px 66px 86px 92px; min-height:68px; overflow:hidden; padding:11px 14px 11px 12px; text-align:left; width:100% }}
 .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.12),rgba(0,200,5,.025) 38%,transparent 72%); border-left-color:var(--green) }}
 .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.14),rgba(255,90,95,.03) 38%,transparent 72%); border-left-color:var(--red) }}
-.portfolio-holding-card.signal-wait {{ background:linear-gradient(90deg,rgba(245,182,66,.08),rgba(245,182,66,.018) 34%,transparent 70%); border-left-color:#55481b }}
+.portfolio-holding-card.signal-wait {{ border-left-color:transparent }}
 .portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
 .portfolio-holding-card strong {{ font-size:18px; letter-spacing:-.25px }} .portfolio-holding-card small {{ color:#9aa0a6; display:block; font-size:10px; font-weight:700; letter-spacing:.15px; line-height:1.1; margin-bottom:2px }} .holding-identity small {{ font-size:13px; font-weight:500; letter-spacing:0; margin:2px 0 0 }} .portfolio-holding-card b {{ display:block; font-size:15px; letter-spacing:-.1px; white-space:nowrap }}
 .portfolio-holding-card>span {{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
@@ -2381,25 +2600,28 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .portfolio-holding-card {{ background:#050505; min-height:68px; padding:12px 18px }}
   .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.13),rgba(0,200,5,.03) 40%,#050505 78%) }}
   .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.15),rgba(255,90,95,.035) 40%,#050505 78%) }}
-  .portfolio-holding-card.signal-wait {{ background:linear-gradient(90deg,rgba(245,182,66,.09),rgba(245,182,66,.02) 36%,#050505 76%) }}
-}} @media(max-width:1280px) and (min-width:900px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(82px,1fr) 78px 80px 86px 56px 78px 78px; min-height:68px }}
-  .holding-today-cash {{ display:none }}
+  .portfolio-holding-card.signal-wait {{ background:#050505 }}
+}} @media(max-width:1299px) and (min-width:1100px) {{
+  .portfolio-holding-card {{ grid-template-columns:minmax(82px,1fr) 68px 74px 72px 74px; min-height:68px }}
+  .holding-today-cash,.holding-market-value,.holding-weight {{ display:none }}
+}} @media(max-width:1099px) and (min-width:900px) {{
+  .portfolio-holding-card {{ grid-template-columns:minmax(82px,1fr) 66px 74px 76px; min-height:68px; padding-left:12px; padding-right:12px }}
+  .holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss {{ display:none }}
 }} @media(max-width:1080px) {{
   .portfolio-holding-card {{ min-height:68px }}
 }} @media(max-width:899px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
   .account-stats {{ grid-template-columns:repeat(2,1fr) }} .account-stats div:nth-child(2n) {{ border-right:0 }}
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 88px 86px 92px 58px 78px 90px; min-height:72px; padding:13px 12px }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 90px 88px 86px 92px 58px 78px; min-height:72px; padding:13px 12px }}
   .holding-today-cash {{ display:none }}
   .portfolio-holding-card>span::before {{ display:none }}
   .today-pill {{ justify-self:start; min-width:84px }}
   .holding-row {{ grid-template-columns:80px 1fr; gap:10px }}
   .board-action {{ display:none }} .board-basics {{ grid-column:1 / -1; margin-top:3px }}
 }} @media(max-width:700px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) 90px 86px 58px 88px 92px }}
-  .holding-market-value {{ display:none }}
+  .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) 90px 86px 88px 92px }}
+  .holding-market-value,.holding-weight {{ display:none }}
   .holding-spark .mini-sparkline {{ height:38px; width:92px }}
 }} @media(max-width:620px) {{
   .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) 90px 86px 92px }}
@@ -2409,7 +2631,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
   .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }}
-  .account-overview {{ padding:18px 16px 12px }} .account-copy h2 {{ font-size:36px }} .account-stats {{ grid-template-columns:1fr 1fr }} .board-intro p {{ display:none }}
+  .account-overview {{ padding:18px 16px 12px }} .account-copy h2 {{ font-size:36px }} .account-stats {{ grid-template-columns:1fr 1fr }} .account-kline-card .interactive-kline {{ height:320px }} .board-intro p {{ display:none }}
   .interactive-kline {{ height:380px }}
   .chart-range-tabs {{ gap:9px; justify-content:space-between }} .chart-range-tabs button {{ font-size:12px; padding:6px 7px }}
   .board-basics {{ gap:8px }} .drawer {{ max-width:none; padding:14px; width:100vw }} .position-hero {{ grid-template-columns:1fr 1fr }} .position-main {{ grid-column:1 / -1 }} .professional-plan,.plan-grid {{ grid-template-columns:1fr }} .evidence-hero {{ grid-template-columns:92px 1fr }} .probability-ring {{ height:88px; width:88px }} .probability-ring b {{ font-size:22px }}
@@ -2430,8 +2652,6 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   <button type="button" class="tab-button" data-tab-target="health" role="tab" aria-selected="false">Health &amp; Risk</button>
 </nav>
 <section id="tab-portfolio" class="tab-view active" role="tabpanel">
-<div class="board-intro"><div><h2>Account Overview</h2><p>Robinhood-style account view · holdings below · click any row for details</p></div>
-<p>Rows use subtle signal color; detailed predictions live in Opportunities.</p></div>
 <section class="portfolio-board">{portfolio_account_overview}{portfolio_holdings}</section>
 </section>
 <section id="tab-opportunities" class="tab-view" role="tabpanel" hidden>

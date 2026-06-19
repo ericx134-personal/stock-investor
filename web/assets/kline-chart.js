@@ -157,16 +157,34 @@
     return aggregateBars(daily, payload.ranges[rangeName].aggregation);
   }
 
-  function visibleBarCount(payload, rangeName, renderedBars) {
+  function readableMinimumBars(root, rangeName) {
+    const width = root ? root.clientWidth : 760;
+    const fit = Math.max(36, Math.floor(width / 7));
+    const floors = {
+      "1D": 48,
+      "1W": 64,
+      "1M": 84,
+      "3M": 112,
+      "YTD": 150,
+      "1Y": 170,
+      "5Y": 190,
+      "MAX": 210,
+    };
+    return Math.min(fit, floors[rangeName] || fit);
+  }
+
+  function visibleBarCount(payload, rangeName, renderedBars, root) {
     const range = payload && payload.ranges ? payload.ranges[rangeName] : null;
-    if (!range) return Math.min(renderedBars.length, 126);
-    return Math.max(1, Math.min(Number(range.bar_count || range.raw_bar_count || renderedBars.length), renderedBars.length));
+    if (!range) return Math.min(renderedBars.length, readableMinimumBars(root, rangeName));
+    const requested = Number(range.bar_count || range.raw_bar_count || renderedBars.length);
+    const readable = readableMinimumBars(root, rangeName);
+    return Math.max(1, Math.min(Math.max(requested, readable), renderedBars.length));
   }
 
   function barSpacingFor(root, visibleCount) {
     const width = root ? root.clientWidth : 760;
-    const referenceBars = Math.max(visibleCount, 90);
-    return Math.max(3, Math.min(7, width / referenceBars));
+    const referenceBars = Math.max(visibleCount, 1);
+    return Math.max(2.4, Math.min(5.2, width / referenceBars));
   }
 
   function activeRange(payload) {
@@ -316,7 +334,8 @@
     const range = state.payload.ranges ? state.payload.ranges[rangeName] : null;
     if (!range || !range.available) return;
     const bars = allBarsForRange(state.payload, rangeName);
-    const visibleCount = visibleBarCount(state.payload, rangeName, bars);
+    const root = card.querySelector("[data-chart-root]");
+    const visibleCount = visibleBarCount(state.payload, rangeName, bars, root);
     const candles = bars.map((bar) => ({
       time: bar.time,
       open: Number(bar.open),
@@ -343,13 +362,12 @@
       statusParts.push(`${range.raw_bar_count} daily bars aggregated to ${range.bar_count} ${range.aggregation} candles.`);
     }
     setStatus(card, statusParts.join(" ") || "");
-    const root = card.querySelector("[data-chart-root]");
     state.chart.timeScale().applyOptions({
       barSpacing: barSpacingFor(root, visibleCount),
       rightOffset: 3,
     });
-    const to = bars.length + 2;
-    const from = Math.max(0, bars.length - visibleCount);
+    const to = bars.length + 1;
+    const from = Math.max(0, to - visibleCount);
     state.chart.timeScale().setVisibleLogicalRange({ from, to });
     requestAnimationFrame(() => updateOverlays(state));
   }
@@ -393,9 +411,9 @@
         vertTouchDrag: true,
       },
       handleScale: {
-        axisPressedMouseMove: true,
-        mouseWheel: true,
-        pinch: true,
+        axisPressedMouseMove: false,
+        mouseWheel: false,
+        pinch: false,
       },
     });
     const candles = addSeries(chart, "CandlestickSeries", {

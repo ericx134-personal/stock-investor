@@ -505,6 +505,7 @@ def run_refresh(
             price_health_path=paths["price_health"],
             prices_path=prices_path,
             latest_quotes_path=latest_quotes_path,
+            account_summary_path=account_summary_path,
         ),
         paths["dashboard"],
     )
