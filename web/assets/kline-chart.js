@@ -150,6 +150,25 @@
     return aggregateBars(selected, range.aggregation);
   }
 
+  function allBarsForRange(payload, rangeName) {
+    if (!payload || !payload.ranges || !payload.ranges[rangeName]) return [];
+    const daily = payload.bars_daily || [];
+    if (!daily.length) return [];
+    return aggregateBars(daily, payload.ranges[rangeName].aggregation);
+  }
+
+  function visibleBarCount(payload, rangeName, renderedBars) {
+    const range = payload && payload.ranges ? payload.ranges[rangeName] : null;
+    if (!range) return Math.min(renderedBars.length, 126);
+    return Math.max(1, Math.min(Number(range.bar_count || range.raw_bar_count || renderedBars.length), renderedBars.length));
+  }
+
+  function barSpacingFor(root, visibleCount) {
+    const width = root ? root.clientWidth : 760;
+    const referenceBars = Math.max(visibleCount, 90);
+    return Math.max(3, Math.min(7, width / referenceBars));
+  }
+
   function activeRange(payload) {
     const preferred = payload.default_range || "YTD";
     if (payload.ranges && payload.ranges[preferred] && payload.ranges[preferred].available) return preferred;
@@ -296,7 +315,8 @@
     if (!state) return;
     const range = state.payload.ranges ? state.payload.ranges[rangeName] : null;
     if (!range || !range.available) return;
-    const bars = rangeBars(state.payload, rangeName);
+    const bars = allBarsForRange(state.payload, rangeName);
+    const visibleCount = visibleBarCount(state.payload, rangeName, bars);
     const candles = bars.map((bar) => ({
       time: bar.time,
       open: Number(bar.open),
@@ -323,7 +343,14 @@
       statusParts.push(`${range.raw_bar_count} daily bars aggregated to ${range.bar_count} ${range.aggregation} candles.`);
     }
     setStatus(card, statusParts.join(" ") || "");
-    state.chart.timeScale().fitContent();
+    const root = card.querySelector("[data-chart-root]");
+    state.chart.timeScale().applyOptions({
+      barSpacing: barSpacingFor(root, visibleCount),
+      rightOffset: 3,
+    });
+    const to = bars.length + 2;
+    const from = Math.max(0, bars.length - visibleCount);
+    state.chart.timeScale().setVisibleLogicalRange({ from, to });
     requestAnimationFrame(() => updateOverlays(state));
   }
 
@@ -346,9 +373,11 @@
         scaleMargins: { top: 0.08, bottom: 0.22 },
       },
       timeScale: {
+        barSpacing: 5,
         borderVisible: false,
         fixLeftEdge: true,
         fixRightEdge: true,
+        rightOffset: 3,
       },
       crosshair: {
         mode:
@@ -358,15 +387,15 @@
             : 0,
       },
       handleScroll: {
-        mouseWheel: false,
-        pressedMouseMove: false,
-        horzTouchDrag: false,
-        vertTouchDrag: false,
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
       },
       handleScale: {
-        axisPressedMouseMove: false,
-        mouseWheel: false,
-        pinch: false,
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
       },
     });
     const candles = addSeries(chart, "CandlestickSeries", {
@@ -396,6 +425,9 @@
       priceLines: [],
     };
     chart.subscribeCrosshairMove((param) => renderTooltip(state, param));
+    chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+      requestAnimationFrame(() => updateOverlays(state));
+    });
     stateByCard.set(card, state);
     return state;
   }

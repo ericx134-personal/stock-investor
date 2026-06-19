@@ -1647,6 +1647,7 @@ def build_dashboard(
         portfolio_rows.append(
             f"""
             <button type="button" class="portfolio-holding-card signal-{signal_class}" data-detail-target="{detail_id}" title="{html.escape(more_summary)}"
+              aria-label="{html.escape(str(record.get("symbol", "")))} holding, {signal_label} signal"
               data-sort-symbol="{html.escape(str(record.get("symbol", "")))}"
               data-sort-value="{market_value:.6f}"
               data-sort-gain="{float(display_unrealized_return or 0):.6f}"
@@ -1664,7 +1665,6 @@ def build_dashboard(
               <span class="holding-current {today_return_class}" data-label="Price"><small>Price</small><b>${display_price:,.2f}</b></span>
               <span class="{display_return_class}" data-label="Gain"><small>Total</small><b>{_optional_signed_percent(display_unrealized_return)}</b></span>
               <span data-label="Portfolio"><b>{_percent(record.get("portfolio_weight"))}</b></span>
-              <span class="decision-signal {signal_class}" data-label="Prediction" title="{html.escape(signal_source)}"><small>Prediction</small><strong>{signal_label}</strong><b>{signal_percent}</b></span>
             </button>"""
         )
         board_rows[signal_label].append(
@@ -1754,7 +1754,9 @@ def build_dashboard(
     <section class="portfolio-pulse" aria-label="Compact model and opportunity summary">
       <div><small>Model health</small><b><span class="health-status {model_status.lower()}">{html.escape(model_status)}</span></b><span>{len((model_health or {}).get("failed_gates", []))} failed · {len((model_health or {}).get("pending_gates", []))} pending</span></div>
       <div><small>Latest prices</small><b>{html.escape(latest_price_date)}</b><span>{poor_or_stale} stale or degraded symbols</span></div>
-      <div><small>Opportunities</small><b>{len(sorted_board_rows["BUY"])} buy · {len(sorted_board_rows["SELL"])} sell</b><span>Top: buy {html.escape(top_buy)} · sell {html.escape(top_sell)}</span></div>
+      <button type="button" class="pulse-card opportunities-card" data-open-opportunities>
+        <small>Opportunities</small><b>{len(sorted_board_rows["BUY"])} buy · {len(sorted_board_rows["SELL"])} sell</b><span>Top: buy {html.escape(top_buy)} · sell {html.escape(top_sell)}</span>
+      </button>
     </section>"""
     portfolio_holdings = f"""
     <section class="portfolio-holdings-panel" aria-label="All portfolio holdings">
@@ -1762,7 +1764,8 @@ def build_dashboard(
         <div><small>Your holdings</small><h3>Portfolio</h3></div>
         <label>Sort
           <select id="portfolio-sort" aria-label="Sort portfolio holdings">
-            <option value="today-desc" selected>Today return</option>
+            <option value="today-desc" selected>Today Return %</option>
+            <option value="today-dollars-desc">Today Return $</option>
             <option value="value-desc">Market value</option>
             <option value="gain-desc">Total return %</option>
             <option value="gain-dollars-desc">Total return $</option>
@@ -1779,8 +1782,8 @@ def build_dashboard(
       </div>
     </section>"""
     prioritized_board = f"""
-    <details class="priority-board-panel">
-      <summary><span>Prediction groups</span><small>BUY / SELL / WAIT grouped by confidence</small></summary>
+    <details class="priority-board-panel" id="opportunities-board">
+      <summary><span>Opportunities board</span><small>JIRA-style BUY / SELL / WAIT lanes</small></summary>
     <section class="decision-board" aria-label="Prioritized directional signals">
       <section class="signal-column buy-column">
         <header><div><small>Highest confidence first</small><h3>BUY</h3></div><b>{len(sorted_board_rows["BUY"])}</b></header>
@@ -2124,7 +2127,11 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
 .portfolio-pulse {{ display:grid; gap:10px; grid-template-columns:repeat(3,1fr); margin:14px 0 4px }}
-.portfolio-pulse div {{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 15px }}
+.portfolio-pulse div,.portfolio-pulse button {{ background:var(--panel); border:1px solid var(--line); border-radius:10px; color:var(--text); font:inherit; padding:13px 15px; text-align:left }}
+.portfolio-pulse button {{ cursor:pointer }}
+.portfolio-pulse button:hover,.portfolio-pulse button:focus-visible {{ background:#101010; border-color:#3b3b3b; outline:none }}
+.opportunities-card {{ position:relative }}
+.opportunities-card::after {{ color:var(--green); content:"Open"; font-size:11px; font-weight:850; position:absolute; right:14px; top:13px }}
 .portfolio-pulse small {{ color:var(--muted); display:block; font-size:10px; font-weight:800; letter-spacing:.4px; text-transform:uppercase }}
 .portfolio-pulse b {{ display:block; font-size:18px; margin-top:3px }} .portfolio-pulse span {{ color:var(--muted); display:block; font-size:12px; margin-top:3px }}
 .portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:10px 0 16px; overflow:hidden }}
@@ -2133,7 +2140,10 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ container-type:inline-size; display:grid; grid-template-columns:1fr; position:relative }}
-.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); cursor:pointer; display:grid; font:inherit; gap:12px; grid-template-columns:minmax(92px,1fr) 92px 92px 92px 82px 88px; min-height:66px; overflow:hidden; padding:11px 16px; text-align:left; width:100% }}
+.portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); border-left:3px solid transparent; color:var(--text); cursor:pointer; display:grid; font:inherit; gap:12px; grid-template-columns:minmax(92px,1fr) 92px 92px 92px 82px 88px; min-height:66px; overflow:hidden; padding:11px 16px 11px 13px; text-align:left; width:100% }}
+.portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.12),rgba(0,200,5,.025) 38%,transparent 72%); border-left-color:var(--green) }}
+.portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.14),rgba(255,90,95,.03) 38%,transparent 72%); border-left-color:var(--red) }}
+.portfolio-holding-card.signal-wait {{ background:linear-gradient(90deg,rgba(245,182,66,.08),rgba(245,182,66,.018) 34%,transparent 70%); border-left-color:#55481b }}
 .portfolio-holding-card:last-child {{ border-bottom:0 }} .portfolio-holding-card:hover,.portfolio-holding-card:focus-visible {{ background:#101010; outline:none }}
 .portfolio-holding-card strong {{ font-size:18px; letter-spacing:-.25px }} .portfolio-holding-card small {{ color:#9aa0a6; display:block; font-size:10px; font-weight:700; letter-spacing:.15px; line-height:1.1; margin-bottom:2px }} .holding-identity small {{ font-size:13px; font-weight:500; letter-spacing:0; margin:2px 0 0 }} .portfolio-holding-card b {{ display:block; font-size:15px; letter-spacing:-.1px; white-space:nowrap }}
 .portfolio-holding-card>span {{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
@@ -2148,8 +2158,6 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .today-pill.positive {{ background:var(--green); border-color:var(--green); color:#001f08 }} .today-pill.negative {{ background:#ff5000; border-color:#ff5000; color:#050505 }}
 .today-pill b {{ color:inherit; font-size:16px; font-weight:700; text-align:center }}
 .mini-sparkline {{ display:block; height:28px; width:86px }} .mini-sparkline.positive {{ color:var(--green) }} .mini-sparkline.negative {{ color:#ff5000 }} .mini-sparkline polyline {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2 }} .mini-sparkline-baseline {{ stroke:#666; stroke-dasharray:2 3; stroke-linecap:round; stroke-width:1 }}
-.portfolio-holding-card .decision-signal {{ align-items:center; border-radius:7px; display:grid; grid-template-columns:auto 1fr; min-width:0; padding:5px 7px }} .portfolio-holding-card .decision-signal strong {{ font-size:10px }} .portfolio-holding-card .decision-signal b {{ font-size:13px }}
-.portfolio-holding-card .decision-signal small {{ font-size:8.5px; grid-column:1 / -1; line-height:1.1; margin:0 0 2px }}
 .holding-mini {{ min-width:0 }} .holding-mini b {{ font-size:12px }}
 .pressure-mini b {{ color:var(--red) }}
 .priority-board-panel {{ margin-top:16px }} .priority-board-panel>summary {{ align-items:center; background:#0b0b0b; border:1px solid var(--line); border-radius:10px; cursor:pointer; display:flex; justify-content:space-between; list-style:none; padding:13px 15px }}
@@ -2223,7 +2231,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .kline-chart-card {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:0 0 12px; padding:16px; position:relative }}
 .chart-heading {{ align-items:center; display:flex; justify-content:space-between; margin-bottom:7px }} .chart-heading small {{ color:var(--muted); font-size:10px; text-transform:uppercase }} .chart-heading h3 {{ align-items:baseline; display:flex; flex-wrap:wrap; gap:7px; font-size:17px; margin:1px 0 0 }} .chart-heading h3 b {{ font-size:21px }} .chart-heading h3 em {{ font-style:normal }} .chart-heading h3 em.positive {{ color:var(--green) }} .chart-heading h3 em.negative {{ color:var(--red) }}
 .chart-signal {{ border-radius:999px; font-size:12px; font-weight:750; padding:6px 9px }} .chart-signal.buy {{ background:var(--green-dim); color:var(--green) }} .chart-signal.sell {{ background:#321214; color:var(--red) }} .chart-signal.wait {{ background:#2b240f; color:var(--amber) }}
-.interactive-kline {{ height:520px; margin-top:8px; position:relative; touch-action:pan-y; width:100% }}
+.interactive-kline {{ height:520px; margin-top:8px; position:relative; touch-action:none; width:100% }}
 .chart-overlay {{ inset:0; pointer-events:none; position:absolute; z-index:2 }}
 .kline-zone {{ border:1px solid currentColor; border-radius:3px; left:0; opacity:.36; position:absolute; right:0 }}
 .kline-zone.support {{ background:rgba(0,200,5,.18); color:var(--green) }} .kline-zone.resistance,.kline-zone.sell {{ background:rgba(255,90,95,.20); color:var(--red) }} .kline-zone.buy {{ background:rgba(0,200,5,.22); color:var(--green) }} .kline-zone.breakout {{ background:rgba(0,200,5,.13); border-style:dashed; color:var(--green) }}
@@ -2247,13 +2255,19 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .experiment div {{ background:#111; border-radius:7px; padding:14px }} .experiment b {{ display:block; font-size:24px }}
 .experiment span {{ color:var(--muted); font-size:13px }}
 table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; padding:9px; border-bottom:1px solid var(--line) }} th {{ color:var(--green); font-size:12px; letter-spacing:.25px }}
-.note {{ color:var(--muted); font-size:13px }} @media(min-width:1420px) {{
+.note {{ color:var(--muted); font-size:13px }} @media(min-width:900px) {{
   .portfolio-holdings-list {{ background:transparent; column-gap:22px; grid-template-columns:repeat(2,minmax(0,1fr)); position:relative; row-gap:0 }}
   .portfolio-holdings-list::before {{ background:#3a3a3a; bottom:0; box-shadow:0 0 0 1px rgba(255,255,255,.04); content:""; left:50%; position:absolute; top:0; width:2px; z-index:1 }}
   .portfolio-holding-card {{ background:#050505; min-height:68px; padding:12px 18px }}
+  .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.13),rgba(0,200,5,.03) 40%,#050505 78%) }}
+  .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.15),rgba(255,90,95,.035) 40%,#050505 78%) }}
+  .portfolio-holding-card.signal-wait {{ background:linear-gradient(90deg,rgba(245,182,66,.09),rgba(245,182,66,.02) 36%,#050505 76%) }}
+}} @media(max-width:1280px) and (min-width:900px) {{
+  .portfolio-holding-card {{ grid-template-columns:minmax(82px,1fr) 78px 82px 84px; min-height:68px }}
+  .portfolio-holding-card>span[data-label="Gain"] {{ display:none }}
 }} @media(max-width:1080px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 86px 88px 88px 76px 78px; min-height:68px }}
-}} @media(max-width:920px) {{
+  .portfolio-holding-card {{ min-height:68px }}
+}} @media(max-width:899px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
   .portfolio-pulse {{ grid-template-columns:1fr }}
@@ -2410,6 +2424,7 @@ const sortHoldings = () => {{
   const datasetKey = {{
     value: "sortValue",
     today: "sortToday",
+    "today-dollars": "sortTodayDollars",
     gain: "sortGain",
     "gain-dollars": "sortGainDollars",
     recent: "sortRecent",
@@ -2431,6 +2446,13 @@ const sortHoldings = () => {{
 }};
 portfolioSort?.addEventListener("change", sortHoldings);
 sortHoldings();
+
+const opportunitiesBoard = document.getElementById("opportunities-board");
+document.querySelectorAll("[data-open-opportunities]").forEach((button) => button.addEventListener("click", () => {{
+  if (!opportunitiesBoard) return;
+  opportunitiesBoard.open = true;
+  opportunitiesBoard.scrollIntoView({{ behavior: "smooth", block: "start" }});
+}}));
 
 const drawer = document.getElementById("holding-drawer");
 const backdrop = document.querySelector(".drawer-backdrop");
