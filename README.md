@@ -49,7 +49,7 @@ PYTHONPATH=src python3 -m stock_investor.cli monitor \
   examples/positions.csv examples/prices.csv --history data/alerts.jsonl
 ```
 
-To fetch recent real daily bars without credentials, use the Yahoo Finance chart
+To fetch account-aligned real daily bars without credentials, use the Yahoo Finance chart
 fallback. It is the default provider for the always-on Mac refresh workflow:
 
 ```bash
@@ -376,8 +376,12 @@ scheduled refresh self-syncs application code from that repo before generating
 the dashboard. Re-run the installer only after moving the repo or changing
 LaunchAgent templates, not after ordinary code edits.
 
-The refresh service fetches two years of daily bars through Yahoo Finance chart
-data, merges those bars with the existing price file so unsupported or delisted
+The refresh service fetches account-aligned daily bars through Yahoo Finance chart
+data by default. Set `ACCOUNT_HISTORY_START_DATE=YYYY-MM-DD` in the private
+`data/private/service.env` file to anchor charts at the brokerage account open
+date; `YAHOO_START_DATE` remains as a lower-priority manual override. If neither
+is set, the service falls back to the recent two-year window. The fetched bars
+are merged with the existing price file so unsupported or delisted
 symbols keep their last known history, atomically replaces the price input only
 after a successful fetch, then runs the production-safe evidence refresh. It
 uses bounded Yahoo provider retries and classifies provider failures in the

@@ -52,7 +52,18 @@ class ReadOnlyContractTests(unittest.TestCase):
 
     def test_market_refresh_uses_no_credential_provider_by_default(self):
         script = (ROOT / "scripts" / "run_market_refresh.sh").read_text()
+        cli = (ROOT / "src" / "stock_investor" / "cli.py").read_text()
         self.assertIn("Using Yahoo Finance chart data (no credentials)", script)
+        self.assertIn(
+            'START_DATE="${ACCOUNT_HISTORY_START_DATE:-${YAHOO_START_DATE:-}}"',
+            script,
+        )
+        self.assertIn('START_DATE="$(date -v-730d +%Y-%m-%d)"', script)
+        self.assertIn('DEFAULT_YAHOO_LOOKBACK_DAYS = 730', cli)
+        self.assertIn('os.environ.get("ACCOUNT_HISTORY_START_DATE")', cli)
+        self.assertIn('yahoo_parser.add_argument("--start", default=_default_yahoo_start())', cli)
+        self.assertNotIn("1970-01-01", script)
+        self.assertNotIn("1970-01-01", cli)
         self.assertIn("ENABLE_ALPACA_MARKET_DATA", script)
         self.assertNotIn("Alpaca credentials missing; using Yahoo", script)
         self.assertLess(

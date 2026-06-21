@@ -1,9 +1,10 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 
 from stock_investor.data import Price
+from stock_investor.cli import _clip_price_histories
 from stock_investor.providers.yahoo import (
     fetch_yahoo_daily_bars,
     fetch_yahoo_latest_quotes,
@@ -16,6 +17,20 @@ def ts(day: str) -> int:
 
 
 class YahooProviderTests(unittest.TestCase):
+    def test_clip_price_histories_respects_account_history_start(self):
+        prices = {
+            "HOOD": [
+                Price(date(2024, 6, 1), 20.0),
+                Price(date(2024, 6, 21), 22.0),
+            ],
+            "SPY": [Price(date(2024, 5, 31), 500.0)],
+        }
+
+        clipped = _clip_price_histories(prices, "2024-06-20")
+
+        self.assertEqual(list(clipped), ["HOOD"])
+        self.assertEqual([item.date for item in clipped["HOOD"]], [date(2024, 6, 21)])
+
     def test_fetch_daily_bars_parses_chart_payload(self):
         calls = []
 

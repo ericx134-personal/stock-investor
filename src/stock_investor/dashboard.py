@@ -1329,9 +1329,6 @@ def _chart_range(
     visible_bars = bars
     if selected_aggregation != "none":
         visible_bars = _aggregate_chart_bars(bars, selected_aggregation)
-    elif len(bars) > 600:
-        selected_aggregation = "monthly" if len(bars) > 1260 else "weekly"
-        visible_bars = _aggregate_chart_bars(bars, selected_aggregation)
     return {
         "label": label,
         "available": True,
@@ -2718,7 +2715,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .chart-tooltip {{ background:#050505; border:1px solid #555; border-radius:8px; box-shadow:0 10px 28px rgba(0,0,0,.45); color:var(--text); font-size:11px; left:12px; min-width:210px; padding:8px 10px; pointer-events:none; position:absolute; top:72px; z-index:4 }}
 .chart-tooltip b,.chart-tooltip span {{ display:block }} .chart-tooltip span {{ color:var(--muted); margin-top:2px }}
 .chart-status,.chart-fallback {{ background:#111; border-radius:8px; color:var(--muted); font-size:12px; margin:8px 0; padding:9px 11px }}
-.chart-range-tabs {{ align-items:center; display:flex; gap:22px; justify-content:center; margin:11px 0 8px }} .chart-range-tabs button {{ background:transparent; border:0; border-radius:8px; color:var(--green); cursor:pointer; font:inherit; font-size:13px; font-weight:800; padding:7px 10px }} .chart-range-tabs button.active {{ background:var(--green); color:#001f08 }} .chart-range-tabs button:disabled {{ color:#474747; cursor:not-allowed }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
+.chart-range-tabs {{ align-items:center; display:flex; flex-wrap:nowrap; gap:22px; justify-content:center; margin:11px 0 8px; overflow-x:auto; scrollbar-width:none }} .chart-range-tabs::-webkit-scrollbar {{ display:none }} .chart-range-tabs button {{ background:transparent; border:0; border-radius:8px; color:var(--green); cursor:pointer; flex:0 0 auto; font:inherit; font-size:13px; font-weight:800; padding:7px 10px; white-space:nowrap }} .chart-range-tabs button.active {{ background:var(--green); color:#001f08 }} .chart-range-tabs button:disabled {{ color:#474747; cursor:not-allowed }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
 .chart-legend .support-key::before {{ background:var(--green) }} .chart-legend .resistance-key::before {{ background:var(--red) }} .chart-legend .wave-key::before {{ background:var(--amber) }} .chart-legend .cost-key::before {{ background:#e6e6e6 }}
 .chart-unavailable {{ background:#111; border-radius:7px; color:var(--muted); margin-bottom:12px; padding:18px }}
 .advanced-details {{ border-top:1px solid var(--line); margin-top:12px; padding-top:8px }} .advanced-details summary {{ color:var(--muted); cursor:pointer; font-weight:650; padding:8px 0 }} .advanced-details[open] summary {{ color:var(--text) }}
@@ -2889,8 +2886,8 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <script type="application/json" id="chart-payloads-v1">{chart_payload_json}</script>
 <script src="/assets/lightweight-charts.standalone.production.js?v=20260620"></script>
 <script>if(!window.LightweightCharts)document.write('<script src="/web/assets/lightweight-charts.standalone.production.js?v=20260620"><\\/script>');</script>
-<script src="/assets/kline-chart.js?v=20260620-kline-manual-pan"></script>
-<script>if(!window.StockInvestorKline)document.write('<script src="/web/assets/kline-chart.js?v=20260620-kline-manual-pan"><\\/script>');</script>
+<script src="/assets/kline-chart.js?v=20260620-kline-account-history"></script>
+<script>if(!window.StockInvestorKline)document.write('<script src="/web/assets/kline-chart.js?v=20260620-kline-account-history"><\\/script>');</script>
 <script>
 const tabButtons = [...document.querySelectorAll("[data-tab-target]")];
 const tabViews = [...document.querySelectorAll(".tab-view")];

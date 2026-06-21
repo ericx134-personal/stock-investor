@@ -16,7 +16,7 @@ from .backtest import (
 )
 from .archive import archive_private_artifacts, verify_private_archive
 from .brief import build_brief, write_brief
-from .data import load_positions, load_prices
+from .data import Price, load_positions, load_prices
 from .dashboard import build_dashboard, write_dashboard
 from .diagnostics import (
     assess_refresh_staleness,
@@ -65,6 +65,18 @@ from .robinhood import (
 )
 from .scoring import SignalSnapshot, evaluate
 from .thesis import load_theses
+
+
+DEFAULT_YAHOO_LOOKBACK_DAYS = 730
+
+
+def _default_yahoo_start() -> str:
+    configured_start = os.environ.get("ACCOUNT_HISTORY_START_DATE") or os.environ.get(
+        "YAHOO_START_DATE"
+    )
+    if configured_start:
+        return configured_start
+    return (date.today() - timedelta(days=DEFAULT_YAHOO_LOOKBACK_DAYS)).isoformat()
 
 
 def _print_alert(symbol: str, action: str, score: float, reasons: tuple[str, ...]) -> None:
@@ -258,6 +270,7 @@ def _fetch_yahoo(
         if merge_existing_path and Path(merge_existing_path).exists()
         else updates
     )
+    prices = _clip_price_histories(prices, start)
     write_prices_csv(prices, output_path)
     for failure in failures:
         outcome = "retrying" if failure.will_retry else "final"
@@ -275,6 +288,24 @@ def _fetch_yahoo(
         )
     print(f"Wrote {sum(map(len, prices.values()))} Yahoo daily bars to {output_path}")
     return 0
+
+
+def _clip_price_histories(
+    prices: dict[str, list[Price]],
+    start: str,
+) -> dict[str, list[Price]]:
+    start_date = date.fromisoformat(start)
+    return {
+        symbol: clipped
+        for symbol, history in prices.items()
+        if (
+            clipped := [
+                price
+                for price in history
+                if price.date >= start_date
+            ]
+        )
+    }
 
 
 def _fetch_yahoo_quotes(
@@ -891,9 +922,7 @@ def main() -> int:
     )
     yahoo_parser.add_argument("positions")
     yahoo_parser.add_argument("output")
-    yahoo_parser.add_argument(
-        "--start", default=(date.today() - timedelta(days=730)).isoformat()
-    )
+    yahoo_parser.add_argument("--start", default=_default_yahoo_start())
     yahoo_parser.add_argument(
         "--end", default=(date.today() + timedelta(days=1)).isoformat()
     )

@@ -188,18 +188,14 @@
       "5Y": 260,
       "MAX": 520,
     };
-    return Math.max(1, Math.min(Number(totalBars || 1), fit, caps[rangeName] || fit));
+    return Math.max(1, Math.min(fit, caps[rangeName] || fit));
   }
 
   function visibleBarCount(payload, rangeName, renderedBars, root) {
     const range = payload && payload.ranges ? payload.ranges[rangeName] : null;
     if (!range) return readableVisibleBars(root, rangeName, renderedBars.length);
-    const requested = Number(range.initial_bar_count || range.bar_count || range.raw_bar_count || renderedBars.length);
     const readable = readableVisibleBars(root, rangeName, renderedBars.length);
-    if (rangeName === "1D" && payload.bars_intraday && payload.bars_intraday.length) {
-      return Math.max(1, Math.min(readable, renderedBars.length));
-    }
-    return Math.max(1, Math.min(Math.max(requested, readable), renderedBars.length));
+    return Math.max(1, readable);
   }
 
   function barSpacingFor(root, visibleCount) {
@@ -352,13 +348,13 @@
     tooltip.style.top = `${Math.max(70, param.point.y + 8)}px`;
   }
 
-  function boundedLogicalRange(renderedBarCount, visible) {
+  function boundedLogicalRange(renderedBarCount, visible, visibleCapacity) {
     if (!visible || visible.from === undefined || visible.to === undefined || !renderedBarCount) return null;
     const edgeTolerance = 0.5;
-    const first = 0;
     const last = renderedBarCount - 1;
-    const fullWidth = Math.max(0, last - first);
-    const width = Math.max(0, Math.min(Number(visible.to) - Number(visible.from), fullWidth));
+    const capacity = Math.max(1, Number(visibleCapacity || 0));
+    const width = Math.max(0, Number(visible.to) - Number(visible.from));
+    const first = Math.min(0, last - Math.max(width, capacity - 1));
     let from = Number(visible.from);
     let to = Number(visible.to);
     if (from >= first - edgeTolerance && to <= last + edgeTolerance) return null;
@@ -386,7 +382,7 @@
     const visible = state.chart.timeScale().getVisibleLogicalRange
       ? state.chart.timeScale().getVisibleLogicalRange()
       : null;
-    const bounded = boundedLogicalRange(state.renderedBarCount, visible);
+    const bounded = boundedLogicalRange(state.renderedBarCount, visible, state.visibleBarCapacity);
     state.card.dataset.chartRenderedBars = String(state.renderedBarCount);
     state.card.dataset.chartVisibleBars = String(state.visibleBarCount || "");
     state.card.dataset.chartHasWhitespace = String(Boolean(bounded));
@@ -400,7 +396,7 @@
     if (state.clampingRange || !state.renderedBarCount || state.renderedBarCount < 1) return;
     const timeScale = state.chart.timeScale();
     const visible = timeScale.getVisibleLogicalRange ? timeScale.getVisibleLogicalRange() : null;
-    const bounded = boundedLogicalRange(state.renderedBarCount, visible);
+    const bounded = boundedLogicalRange(state.renderedBarCount, visible, state.visibleBarCapacity);
     if (!bounded) {
       recordChartDebugState(state);
       return;
@@ -448,7 +444,7 @@
       const barDelta = -dx / spacing;
       const target = { from: drag.from + barDelta, to: drag.to + barDelta };
       state.chart.timeScale().setVisibleLogicalRange(
-        boundedLogicalRange(state.renderedBarCount, target) || target
+        boundedLogicalRange(state.renderedBarCount, target, state.visibleBarCapacity) || target
       );
       requestAnimationFrame(() => {
         recordChartDebugState(state);
@@ -467,7 +463,7 @@
     if (!range || !range.available) return;
     const bars = rangeBars(state.payload, rangeName);
     const root = card.querySelector("[data-chart-root]");
-    const visibleCount = visibleBarCount(state.payload, rangeName, bars, root);
+    const visibleCapacity = visibleBarCount(state.payload, rangeName, bars, root);
     const candles = bars.map((bar) => ({
       time: bar.time,
       open: Number(bar.open),
@@ -483,7 +479,8 @@
     const lineData = candles.map((bar) => ({ time: bar.time, value: bar.close }));
     state.candleByTime = new Map(candles.map((bar) => [String(bar.time), bar]));
     state.renderedBarCount = bars.length;
-    state.visibleBarCount = visibleCount;
+    state.visibleBarCapacity = visibleCapacity;
+    state.visibleBarCount = Math.min(bars.length, visibleCapacity);
     state.candles.setData(candles);
     state.line.setData(lineData);
     state.volume.setData(volume);
@@ -500,7 +497,7 @@
       statusParts.push(`${range.raw_bar_count} daily bars aggregated to ${range.bar_count} ${range.aggregation} candles.`);
     }
     setStatus(card, statusParts.join(" ") || "");
-    const spacing = barSpacingFor(root, visibleCount);
+    const spacing = barSpacingFor(root, visibleCapacity);
     state.currentBarSpacing = spacing;
     state.chart.timeScale().applyOptions({
       barSpacing: spacing,
@@ -509,7 +506,7 @@
       rightOffset: 0,
     });
     const to = Math.max(0, bars.length - 1);
-    const from = bars.length <= visibleCount ? 0 : Math.max(0, to - visibleCount + 1);
+    const from = to - visibleCapacity + 1;
     state.chart.timeScale().setVisibleLogicalRange({ from, to });
     clampVisibleLogicalRange(state);
     requestAnimationFrame(() => {
@@ -613,6 +610,7 @@
       priceLines: [],
       candleByTime: new Map(),
       renderedBarCount: 0,
+      visibleBarCapacity: 0,
       clampingRange: false,
       mode: card.dataset.chartMode || "candles",
       currentBarSpacing: 3,
@@ -683,12 +681,13 @@
     const visible = state.chart.timeScale().getVisibleLogicalRange
       ? state.chart.timeScale().getVisibleLogicalRange()
       : null;
-    const bounded = boundedLogicalRange(state.renderedBarCount, visible);
+    const bounded = boundedLogicalRange(state.renderedBarCount, visible, state.visibleBarCapacity);
     return {
       symbol: state.payload.symbol,
       activeRange: card.dataset.activeChartRange,
       renderedBarCount: state.renderedBarCount,
       visibleBarCount: state.visibleBarCount || null,
+      visibleBarCapacity: state.visibleBarCapacity || null,
       visibleLogicalRange: visible,
       hasWhitespace: Boolean(bounded),
       rootWidth: (card.querySelector("[data-chart-root]") || {}).clientWidth || null,

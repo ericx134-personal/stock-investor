@@ -122,8 +122,8 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(ranges["1M"]["raw_bar_count"], 760)
         self.assertGreater(ranges["1M"]["bar_count"], 1)
         self.assertEqual(ranges["YTD"]["start"], "2026-01-01")
-        self.assertEqual(ranges["MAX"]["aggregation"], "weekly")
-        self.assertLess(ranges["MAX"]["bar_count"], ranges["MAX"]["raw_bar_count"])
+        self.assertEqual(ranges["MAX"]["aggregation"], "none")
+        self.assertEqual(ranges["MAX"]["bar_count"], ranges["MAX"]["raw_bar_count"])
 
     def test_kline_runtime_keeps_drag_inside_available_history(self):
         runtime = Path("web/assets/kline-chart.js").read_text()
@@ -142,7 +142,8 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("chartHasWhitespace", runtime)
         self.assertIn("hasWhitespace", runtime)
         self.assertIn("readableVisibleBars", runtime)
-        self.assertIn("range.initial_bar_count", runtime)
+        self.assertIn("visibleBarCapacity", runtime)
+        self.assertNotIn("range.initial_bar_count", runtime)
 
     def test_chart_payload_schema_and_dashboard_sidecar_are_written(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -461,7 +462,9 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("arrangePortfolioRows", page)
         self.assertIn('row.style.gridColumn = "1"', page)
         self.assertIn("window.StockInvestorKline?.initVisibleCharts();", page)
-        self.assertIn("kline-chart.js?v=20260620-kline-manual-pan", page)
+        self.assertIn("kline-chart.js?v=20260620-kline-account-history", page)
+        self.assertIn("white-space:nowrap", page)
+        self.assertIn("overflow-x:auto", page)
         self.assertIn('class="account-overview"', page)
         self.assertIn("Account value", page)
         self.assertIn("Margin used", page)

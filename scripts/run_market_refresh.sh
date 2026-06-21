@@ -59,7 +59,10 @@ if [[ "${ENABLE_ALPACA_MARKET_DATA:-0}" == "1" && -n "${APCA_API_KEY_ID:-}" && -
   PRICE_ADJUSTMENT="all"
 else
   echo "Using Yahoo Finance chart data (no credentials)" >&2
-  START_DATE="$(date -v-730d +%Y-%m-%d)"
+  START_DATE="${ACCOUNT_HISTORY_START_DATE:-${YAHOO_START_DATE:-}}"
+  if [[ -z "$START_DATE" ]]; then
+    START_DATE="$(date -v-730d +%Y-%m-%d)"
+  fi
   END_DATE="$(date -v+1d +%Y-%m-%d)"
   PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli fetch-yahoo \
     portfolio/positions.csv "$TEMP_PRICES" \
