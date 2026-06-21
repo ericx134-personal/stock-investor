@@ -128,10 +128,20 @@ class DashboardTests(unittest.TestCase):
     def test_kline_runtime_keeps_drag_inside_available_history(self):
         runtime = Path("web/assets/kline-chart.js").read_text()
 
-        self.assertIn("fixLeftEdge: true", runtime)
-        self.assertIn("fixRightEdge: true", runtime)
+        self.assertIn("fixLeftEdge: false", runtime)
+        self.assertIn("fixRightEdge: false", runtime)
+        self.assertIn("rightBarStaysOnScroll: false", runtime)
+        self.assertIn("pressedMouseMove: false", runtime)
+        self.assertIn("function installManualPan", runtime)
         self.assertIn("rightOffset: 0", runtime)
         self.assertIn("function clampVisibleLogicalRange", runtime)
+        self.assertIn("function boundedLogicalRange", runtime)
+        self.assertIn("edgeTolerance", runtime)
+        self.assertIn("function inspectCard", runtime)
+        self.assertIn("recordChartDebugState", runtime)
+        self.assertIn("chartHasWhitespace", runtime)
+        self.assertIn("hasWhitespace", runtime)
+        self.assertIn("readableVisibleBars", runtime)
         self.assertIn("range.initial_bar_count", runtime)
 
     def test_chart_payload_schema_and_dashboard_sidecar_are_written(self):
@@ -451,6 +461,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("arrangePortfolioRows", page)
         self.assertIn('row.style.gridColumn = "1"', page)
         self.assertIn("window.StockInvestorKline?.initVisibleCharts();", page)
+        self.assertIn("kline-chart.js?v=20260620-kline-manual-pan", page)
         self.assertIn('class="account-overview"', page)
         self.assertIn("Account value", page)
         self.assertIn("Margin used", page)

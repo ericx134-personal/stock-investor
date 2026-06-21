@@ -2887,10 +2887,10 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   {''.join(detail_panels)}
 </aside>
 <script type="application/json" id="chart-payloads-v1">{chart_payload_json}</script>
-<script src="/assets/lightweight-charts.standalone.production.js"></script>
-<script>if(!window.LightweightCharts)document.write('<script src="/web/assets/lightweight-charts.standalone.production.js"><\\/script>');</script>
-<script src="/assets/kline-chart.js"></script>
-<script>if(!window.StockInvestorKline)document.write('<script src="/web/assets/kline-chart.js"><\\/script>');</script>
+<script src="/assets/lightweight-charts.standalone.production.js?v=20260620"></script>
+<script>if(!window.LightweightCharts)document.write('<script src="/web/assets/lightweight-charts.standalone.production.js?v=20260620"><\\/script>');</script>
+<script src="/assets/kline-chart.js?v=20260620-kline-manual-pan"></script>
+<script>if(!window.StockInvestorKline)document.write('<script src="/web/assets/kline-chart.js?v=20260620-kline-manual-pan"><\\/script>');</script>
 <script>
 const tabButtons = [...document.querySelectorAll("[data-tab-target]")];
 const tabViews = [...document.querySelectorAll(".tab-view")];

@@ -175,27 +175,27 @@
     return rangeBars(payload, rangeName);
   }
 
-  function readableMinimumBars(root, rangeName) {
+  function readableVisibleBars(root, rangeName, totalBars) {
     const width = root ? root.clientWidth : 760;
-    const fit = Math.max(54, Math.floor(width / 4));
-    const floors = {
-      "1D": 120,
-      "1W": 84,
-      "1M": 112,
-      "3M": 140,
-      "YTD": 180,
-      "1Y": 210,
-      "5Y": 230,
-      "MAX": 260,
+    const fit = Math.max(54, Math.floor(width / 2.35));
+    const caps = {
+      "1D": 520,
+      "1W": 320,
+      "1M": 260,
+      "3M": 220,
+      "YTD": 360,
+      "1Y": 180,
+      "5Y": 260,
+      "MAX": 520,
     };
-    return Math.min(fit, floors[rangeName] || fit);
+    return Math.max(1, Math.min(Number(totalBars || 1), fit, caps[rangeName] || fit));
   }
 
   function visibleBarCount(payload, rangeName, renderedBars, root) {
     const range = payload && payload.ranges ? payload.ranges[rangeName] : null;
-    if (!range) return Math.min(renderedBars.length, readableMinimumBars(root, rangeName));
+    if (!range) return readableVisibleBars(root, rangeName, renderedBars.length);
     const requested = Number(range.initial_bar_count || range.bar_count || range.raw_bar_count || renderedBars.length);
-    const readable = readableMinimumBars(root, rangeName);
+    const readable = readableVisibleBars(root, rangeName, renderedBars.length);
     if (rangeName === "1D" && payload.bars_intraday && payload.bars_intraday.length) {
       return Math.max(1, Math.min(readable, renderedBars.length));
     }
@@ -205,7 +205,7 @@
   function barSpacingFor(root, visibleCount) {
     const width = root ? root.clientWidth : 760;
     const referenceBars = Math.max(visibleCount, 1);
-    return Math.max(1.35, Math.min(4.2, width / referenceBars));
+    return Math.max(1.25, Math.min(3.4, width / referenceBars));
   }
 
   function activeRange(payload) {
@@ -352,18 +352,17 @@
     tooltip.style.top = `${Math.max(70, param.point.y + 8)}px`;
   }
 
-  function clampVisibleLogicalRange(state) {
-    if (state.clampingRange || !state.renderedBarCount || state.renderedBarCount < 1) return;
-    const timeScale = state.chart.timeScale();
-    const visible = timeScale.getVisibleLogicalRange ? timeScale.getVisibleLogicalRange() : null;
-    if (!visible || visible.from === undefined || visible.to === undefined) return;
+  function boundedLogicalRange(renderedBarCount, visible) {
+    if (!visible || visible.from === undefined || visible.to === undefined || !renderedBarCount) return null;
+    const edgeTolerance = 0.5;
     const first = 0;
-    const last = state.renderedBarCount - 1;
-    const width = Math.max(0, Math.min(visible.to - visible.from, last - first));
+    const last = renderedBarCount - 1;
+    const fullWidth = Math.max(0, last - first);
+    const width = Math.max(0, Math.min(Number(visible.to) - Number(visible.from), fullWidth));
     let from = Number(visible.from);
     let to = Number(visible.to);
-    if (from >= first && to <= last) return;
-    if (width <= 0 || state.renderedBarCount <= 1) {
+    if (from >= first - edgeTolerance && to <= last + edgeTolerance) return null;
+    if (width <= 0 || renderedBarCount <= 1) {
       from = first;
       to = last;
     } else if (from < first) {
@@ -375,12 +374,90 @@
     }
     from = Math.max(first, from);
     to = Math.min(last, to);
+    if (to - from < width && last > first) {
+      if (from === first) to = Math.min(last, from + width);
+      if (to === last) from = Math.max(first, to - width);
+    }
+    return { from, to };
+  }
+
+  function recordChartDebugState(state) {
+    if (!state || !state.card || !state.chart || !state.renderedBarCount) return;
+    const visible = state.chart.timeScale().getVisibleLogicalRange
+      ? state.chart.timeScale().getVisibleLogicalRange()
+      : null;
+    const bounded = boundedLogicalRange(state.renderedBarCount, visible);
+    state.card.dataset.chartRenderedBars = String(state.renderedBarCount);
+    state.card.dataset.chartVisibleBars = String(state.visibleBarCount || "");
+    state.card.dataset.chartHasWhitespace = String(Boolean(bounded));
+    if (visible && visible.from !== undefined && visible.to !== undefined) {
+      state.card.dataset.chartVisibleFrom = String(Number(visible.from).toFixed(3));
+      state.card.dataset.chartVisibleTo = String(Number(visible.to).toFixed(3));
+    }
+  }
+
+  function clampVisibleLogicalRange(state) {
+    if (state.clampingRange || !state.renderedBarCount || state.renderedBarCount < 1) return;
+    const timeScale = state.chart.timeScale();
+    const visible = timeScale.getVisibleLogicalRange ? timeScale.getVisibleLogicalRange() : null;
+    const bounded = boundedLogicalRange(state.renderedBarCount, visible);
+    if (!bounded) {
+      recordChartDebugState(state);
+      return;
+    }
     state.clampingRange = true;
-    timeScale.setVisibleLogicalRange({ from, to });
+    timeScale.setVisibleLogicalRange(bounded);
     requestAnimationFrame(() => {
       state.clampingRange = false;
+      recordChartDebugState(state);
       updateOverlays(state);
     });
+  }
+
+  function installManualPan(state, root) {
+    let drag = null;
+    const endDrag = (event) => {
+      if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+      try {
+        if (root.releasePointerCapture) root.releasePointerCapture(drag.pointerId);
+      } catch (_error) {
+        // Pointer capture may already be released by the browser.
+      }
+      drag = null;
+    };
+    root.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || !state.renderedBarCount) return;
+      const visible = state.chart.timeScale().getVisibleLogicalRange
+        ? state.chart.timeScale().getVisibleLogicalRange()
+        : null;
+      if (!visible || visible.from === undefined || visible.to === undefined) return;
+      drag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        from: Number(visible.from),
+        to: Number(visible.to),
+      };
+      if (root.setPointerCapture) root.setPointerCapture(event.pointerId);
+    });
+    root.addEventListener("pointermove", (event) => {
+      if (!drag || event.pointerId !== drag.pointerId || !state.renderedBarCount) return;
+      const dx = event.clientX - drag.startX;
+      if (Math.abs(dx) < 3) return;
+      event.preventDefault();
+      const spacing = Math.max(1.2, Number(state.currentBarSpacing || 3));
+      const barDelta = -dx / spacing;
+      const target = { from: drag.from + barDelta, to: drag.to + barDelta };
+      state.chart.timeScale().setVisibleLogicalRange(
+        boundedLogicalRange(state.renderedBarCount, target) || target
+      );
+      requestAnimationFrame(() => {
+        recordChartDebugState(state);
+        updateOverlays(state);
+      });
+    });
+    root.addEventListener("pointerup", endDrag);
+    root.addEventListener("pointercancel", endDrag);
+    root.addEventListener("pointerleave", endDrag);
   }
 
   function renderRange(card, rangeName) {
@@ -406,6 +483,7 @@
     const lineData = candles.map((bar) => ({ time: bar.time, value: bar.close }));
     state.candleByTime = new Map(candles.map((bar) => [String(bar.time), bar]));
     state.renderedBarCount = bars.length;
+    state.visibleBarCount = visibleCount;
     state.candles.setData(candles);
     state.line.setData(lineData);
     state.volume.setData(volume);
@@ -422,15 +500,22 @@
       statusParts.push(`${range.raw_bar_count} daily bars aggregated to ${range.bar_count} ${range.aggregation} candles.`);
     }
     setStatus(card, statusParts.join(" ") || "");
+    const spacing = barSpacingFor(root, visibleCount);
+    state.currentBarSpacing = spacing;
     state.chart.timeScale().applyOptions({
-      barSpacing: barSpacingFor(root, visibleCount),
+      barSpacing: spacing,
+      fixLeftEdge: false,
+      fixRightEdge: false,
       rightOffset: 0,
     });
     const to = Math.max(0, bars.length - 1);
     const from = bars.length <= visibleCount ? 0 : Math.max(0, to - visibleCount + 1);
     state.chart.timeScale().setVisibleLogicalRange({ from, to });
     clampVisibleLogicalRange(state);
-    requestAnimationFrame(() => updateOverlays(state));
+    requestAnimationFrame(() => {
+      recordChartDebugState(state);
+      updateOverlays(state);
+    });
   }
 
   function applyChartMode(state, mode) {
@@ -466,9 +551,9 @@
       timeScale: {
         barSpacing: 5,
         borderVisible: false,
-        fixLeftEdge: true,
-        fixRightEdge: true,
-        rightBarStaysOnScroll: true,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+        rightBarStaysOnScroll: false,
         rightOffset: 0,
       },
       crosshair: {
@@ -480,7 +565,7 @@
       },
       handleScroll: {
         mouseWheel: true,
-        pressedMouseMove: true,
+        pressedMouseMove: false,
         horzTouchDrag: true,
         vertTouchDrag: true,
       },
@@ -530,7 +615,9 @@
       renderedBarCount: 0,
       clampingRange: false,
       mode: card.dataset.chartMode || "candles",
+      currentBarSpacing: 3,
     };
+    installManualPan(state, root);
     chart.subscribeCrosshairMove((param) => renderTooltip(state, param));
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       clampVisibleLogicalRange(state);
@@ -589,6 +676,26 @@
     });
   }
 
+  function inspectCard(cardOrSelector) {
+    const card = typeof cardOrSelector === "string" ? document.querySelector(cardOrSelector) : cardOrSelector;
+    const state = card ? stateByCard.get(card) : null;
+    if (!state) return null;
+    const visible = state.chart.timeScale().getVisibleLogicalRange
+      ? state.chart.timeScale().getVisibleLogicalRange()
+      : null;
+    const bounded = boundedLogicalRange(state.renderedBarCount, visible);
+    return {
+      symbol: state.payload.symbol,
+      activeRange: card.dataset.activeChartRange,
+      renderedBarCount: state.renderedBarCount,
+      visibleBarCount: state.visibleBarCount || null,
+      visibleLogicalRange: visible,
+      hasWhitespace: Boolean(bounded),
+      rootWidth: (card.querySelector("[data-chart-root]") || {}).clientWidth || null,
+      mode: state.mode,
+    };
+  }
+
   window.addEventListener("resize", () => {
     document.querySelectorAll(".kline-chart-card").forEach((card) => {
       const state = stateByCard.get(card);
@@ -600,5 +707,6 @@
   window.StockInvestorKline = {
     initVisibleCharts,
     renderRange,
+    inspectCard,
   };
 })();
