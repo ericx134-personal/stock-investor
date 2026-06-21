@@ -1627,6 +1627,7 @@ def build_dashboard(
     direction_classification_metrics_path: str | Path | None = None,
     direction_error_cohorts_path: str | Path | None = None,
     first_observed_forecasts_path: str | Path | None = None,
+    forecast_action_segments_path: str | Path | None = None,
     multiple_testing_ledger_path: str | Path | None = None,
     false_discovery_warnings_path: str | Path | None = None,
     model_health_path: str | Path | None = None,
@@ -1757,6 +1758,12 @@ def build_dashboard(
         if first_observed_forecasts_path
         and Path(first_observed_forecasts_path).exists()
         else {"holdings": []}
+    )
+    forecast_action_segments = (
+        json.loads(Path(forecast_action_segments_path).read_text())
+        if forecast_action_segments_path
+        and Path(forecast_action_segments_path).exists()
+        else {"scorecard": []}
     )
     multiple_testing_ledger = (
         json.loads(Path(multiple_testing_ledger_path).read_text())
@@ -2556,6 +2563,31 @@ def build_dashboard(
             ),
         )
     ) or '<tr><td colspan="9">No first-observed forecast tracking artifact is available yet.</td></tr>'
+    segment_rank = {
+        "ACTED_ON_PROXY": 0,
+        "WATCHED_PROXY": 1,
+        "IGNORED_OR_EXITED_PROXY": 2,
+    }
+    forecast_action_segment_rows = "".join(
+        f"<tr><td><b>{html.escape(row.get('segment_label') or row.get('segment') or '')}</b></td>"
+        f"<td>{html.escape(row.get('direction') or '')}</td>"
+        f"<td>{html.escape(row.get('horizon') or '')}</td>"
+        f"<td>{int(row.get('forecast_episodes') or 0)}</td>"
+        f"<td>{int(row.get('matured_observations') or 0)}</td>"
+        f"<td>{int(row.get('pending') or 0)}</td>"
+        f"<td>{_optional_percent(row.get('directional_success_rate'))}</td>"
+        f"<td>{_optional_percent(row.get('mean_directional_return'))}</td>"
+        f"<td>{_optional_percent(row.get('mean_excess_return'))}</td>"
+        f"<td>{html.escape(', '.join((row.get('symbols') or [])[:8]))}</td></tr>"
+        for row in sorted(
+            forecast_action_segments.get("scorecard", []),
+            key=lambda item: (
+                segment_rank.get(item.get("segment"), 9),
+                item.get("direction", ""),
+                item.get("horizon", ""),
+            ),
+        )
+    ) or '<tr><td colspan="10">No forecast action-segment comparison is available yet.</td></tr>'
     multiple_testing_rows = "".join(
         f"<tr><td>{html.escape(row['family'])}</td>"
         f"<td>{html.escape(row['id'])}</td>"
@@ -2840,6 +2872,15 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <table><thead><tr><th>Symbol</th><th>First date</th><th>Version</th><th>First direction</th><th>Displayed</th><th>Entry</th><th>Current</th><th>Changed</th><th>Outcome</th></tr></thead>
 <tbody>{first_observed_rows}</tbody></table>
 <p class="note">This is the M078 accountability view: each current holding is anchored to the first persisted direction forecast available in the immutable ledger. It is observational and does not rewrite old forecasts when the current model changes.</p></section>
+<section class="panel"><h2>Forecast Action Segment Comparison</h2>
+<div class="experiment">
+  <div><b>{int((forecast_action_segments.get("episode_segment_counts") or {}).get("ACTED_ON_PROXY", 0))}</b><span>Acted-on proxy episodes</span></div>
+  <div><b>{int((forecast_action_segments.get("episode_segment_counts") or {}).get("WATCHED_PROXY", 0))}</b><span>Watched proxy episodes</span></div>
+  <div><b>{int((forecast_action_segments.get("episode_segment_counts") or {}).get("IGNORED_OR_EXITED_PROXY", 0))}</b><span>Ignored/exited proxy episodes</span></div>
+</div>
+<table><thead><tr><th>Segment</th><th>Direction</th><th>Horizon</th><th>Episodes</th><th>Matured</th><th>Pending</th><th>Directional success</th><th>Avg directional</th><th>Avg excess</th><th>Symbols</th></tr></thead>
+<tbody>{forecast_action_segment_rows}</tbody></table>
+<p class="note">This is the M079 observational comparison. Segments are current-state proxies: currently held, zero-share watchlist, or no longer listed. They do not prove that a forecast caused a trade, watchlist decision, or ignored opportunity.</p></section>
 <section class="panel"><h2>BUY/SELL Calibration Curves</h2>
 <table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Bucket</th><th>Displayed</th><th>Actual success</th><th>Matured</th><th>Symbols</th><th>Status</th></tr></thead>
 <tbody>{calibration_curve_rows}</tbody></table>

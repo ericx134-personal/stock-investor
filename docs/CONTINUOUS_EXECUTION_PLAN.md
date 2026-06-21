@@ -61,7 +61,7 @@ Near-term product goals:
 
 Current execution queue:
 
-- P1: M079 compare acted-on, watched, and ignored forecasts without causal claims.
+- P1: M080 publish a monthly portfolio-learning review.
 - P2: M061-M063 market-regime conditioning only after stability gates pass.
 - P2: M058 target-zone touch-rate replay and post-touch outcomes.
 
@@ -170,7 +170,7 @@ Current execution queue:
 - [ ] M076 Simulate risk-aware sizing suggestions as read-only research.
 - [ ] M077 Compare current, equal-weight, and volatility-weight outcomes.
 - [x] M078 Add first-observed-forecast tracking for every holding.
-- [ ] M079 Compare acted-on, watched, and ignored forecasts without causal claims.
+- [x] M079 Compare acted-on, watched, and ignored forecasts without causal claims.
 - [ ] M080 Publish a monthly portfolio-learning review.
 
 ## Phase 9: Dashboard And User Comprehension

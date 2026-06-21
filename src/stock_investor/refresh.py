@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .dashboard import build_dashboard, write_dashboard
-from .data import load_positions, load_prices
+from .data import Position, load_positions, load_prices
 from .diagnostics import (
     analyze_alert_burden,
     analyze_fundamental_coverage,
@@ -172,6 +172,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "direction_classification_metrics": output_dir / "direction-classification-metrics.json",
         "direction_error_cohorts": output_dir / "direction-error-cohorts.json",
         "first_observed_forecasts": output_dir / "first-observed-forecasts.json",
+        "forecast_action_segments": output_dir / "forecast-action-segments.json",
         "multiple_testing_ledger": output_dir / "multiple-testing-ledger.json",
         "false_discovery_warnings": output_dir / "false-discovery-warnings.json",
         "comparison": output_dir / f"model-v1-{slug.removeprefix('model-')}-comparison.json",
@@ -319,6 +320,137 @@ def build_first_observed_forecast_tracking(
             )
         ),
         "holdings": holdings,
+    }
+
+
+FORECAST_ACTION_SEGMENTS = {
+    "ACTED_ON_PROXY": {
+        "label": "Acted-on proxy",
+        "basis": "Symbol is currently held with shares greater than zero.",
+    },
+    "WATCHED_PROXY": {
+        "label": "Watched proxy",
+        "basis": "Symbol is currently listed with zero shares.",
+    },
+    "IGNORED_OR_EXITED_PROXY": {
+        "label": "Ignored/exited proxy",
+        "basis": "Symbol appears in the forecast ledger but not in current positions.",
+    },
+}
+
+
+def _mean(values: list[float]) -> float | None:
+    return sum(values) / len(values) if values else None
+
+
+def _forecast_action_segment(symbol: str, positions_by_symbol: dict[str, Position]) -> str:
+    position = positions_by_symbol.get(symbol)
+    if position and position.shares > 0:
+        return "ACTED_ON_PROXY"
+    if position:
+        return "WATCHED_PROXY"
+    return "IGNORED_OR_EXITED_PROXY"
+
+
+def build_forecast_action_segments(
+    positions: list[Position],
+    direction_forecast_outcomes: list[dict],
+) -> dict:
+    """Compare forecast outcomes by current portfolio/watchlist proxy segment."""
+    positions_by_symbol = {position.symbol: position for position in positions}
+    score_groups: dict[tuple[str, str, str, str], list[dict]] = {}
+    episode_rows = []
+    for outcome in direction_forecast_outcomes:
+        symbol = str(outcome.get("symbol") or "")
+        segment = _forecast_action_segment(symbol, positions_by_symbol)
+        detail = FORECAST_ACTION_SEGMENTS[segment]
+        episode_rows.append(
+            {
+                "forecast_id": outcome.get("forecast_id"),
+                "forecast_version": outcome.get("forecast_version"),
+                "symbol": symbol,
+                "segment": segment,
+                "segment_label": detail["label"],
+                "segment_basis": detail["basis"],
+                "direction": outcome.get("direction"),
+                "probability": outcome.get("probability"),
+                "signal_date": outcome.get("signal_date"),
+                "status": outcome.get("status"),
+                "latest_evaluated_date": outcome.get("latest_evaluated_date"),
+            }
+        )
+        for horizon in (outcome.get("returns") or {}):
+            score_groups.setdefault(
+                (
+                    segment,
+                    str(outcome.get("forecast_version") or ""),
+                    str(outcome.get("direction") or ""),
+                    horizon,
+                ),
+                [],
+            ).append(outcome)
+    scorecard = []
+    for (segment, version, direction, horizon), group in sorted(score_groups.items()):
+        matured = [
+            item
+            for item in group
+            if (item.get("returns") or {}).get(horizon) is not None
+        ]
+        returns = [float((item.get("returns") or {})[horizon]) for item in matured]
+        excess = [
+            float((item.get("excess_returns") or {})[horizon])
+            for item in matured
+            if (item.get("excess_returns") or {}).get(horizon) is not None
+        ]
+        directional = [
+            float((item.get("directional_returns") or {})[horizon])
+            for item in matured
+            if (item.get("directional_returns") or {}).get(horizon) is not None
+        ]
+        scorecard.append(
+            {
+                "segment": segment,
+                "segment_label": FORECAST_ACTION_SEGMENTS[segment]["label"],
+                "segment_basis": FORECAST_ACTION_SEGMENTS[segment]["basis"],
+                "forecast_version": version,
+                "direction": direction,
+                "horizon": horizon,
+                "forecast_episodes": len(group),
+                "matured_observations": len(matured),
+                "pending": len(group) - len(matured),
+                "directional_observations": len(directional),
+                "mean_return": _mean(returns),
+                "mean_excess_return": _mean(excess),
+                "mean_directional_return": _mean(directional),
+                "directional_success_rate": (
+                    sum(value > 0 for value in directional) / len(directional)
+                    if directional
+                    else None
+                ),
+                "symbols": sorted({str(item.get("symbol") or "") for item in group}),
+            }
+        )
+    return {
+        "schema_version": "forecast-action-segments-v1",
+        "methodology_note": (
+            "Segments are current-state observational proxies only. They do not "
+            "prove that a forecast caused a trade, watchlist decision, or ignored "
+            "opportunity."
+        ),
+        "segment_definitions": FORECAST_ACTION_SEGMENTS,
+        "current_position_segment_counts": dict(
+            sorted(
+                Counter(
+                    _forecast_action_segment(position.symbol, positions_by_symbol)
+                    for position in positions
+                ).items()
+            )
+        ),
+        "episode_segment_counts": dict(
+            sorted(Counter(row["segment"] for row in episode_rows).items())
+        ),
+        "scorecard": scorecard,
+        "episodes": episode_rows,
     }
 
 
@@ -529,6 +661,10 @@ def run_refresh(
         direction_forecasts,
         direction_forecast_outcomes,
     )
+    forecast_action_segments = build_forecast_action_segments(
+        positions,
+        direction_forecast_outcomes,
+    )
     _write_json(
         direction_forecast_outcomes, paths["direction_forecast_outcomes"]
     )
@@ -546,6 +682,7 @@ def run_refresh(
     )
     _write_json(direction_error_cohorts, paths["direction_error_cohorts"])
     _write_json(first_observed_forecasts, paths["first_observed_forecasts"])
+    _write_json(forecast_action_segments, paths["forecast_action_segments"])
 
     alert_records = load_alert_records(paths["alerts"])
     outcomes = evaluate_alerts(
@@ -577,6 +714,7 @@ def run_refresh(
             "forecast_calibration_scorecard": len(forecast_calibration_scorecard),
             "direction_classification_metrics": len(direction_classification_metrics),
             "direction_error_cohorts": len(direction_error_cohorts),
+            "forecast_action_segments": len(forecast_action_segments["scorecard"]),
             "price_zone_replay_scorecard": len(price_zone_replay_scorecard),
             "direction_rate_comparison": len(direction_rate_comparison),
             "wave_time_decay_scorecard": len(wave_time_decay_scorecard),
@@ -665,6 +803,7 @@ def run_refresh(
             direction_classification_metrics_path=paths["direction_classification_metrics"],
             direction_error_cohorts_path=paths["direction_error_cohorts"],
             first_observed_forecasts_path=paths["first_observed_forecasts"],
+            forecast_action_segments_path=paths["forecast_action_segments"],
             multiple_testing_ledger_path=paths["multiple_testing_ledger"],
             false_discovery_warnings_path=paths["false_discovery_warnings"],
             model_health_path=paths["model_health"],
@@ -807,6 +946,12 @@ def run_refresh(
         ],
         "first_observed_forecast_changed_count": first_observed_forecasts[
             "changed_since_first_count"
+        ],
+        "forecast_action_segment_scorecard_rows": len(
+            forecast_action_segments["scorecard"]
+        ),
+        "forecast_action_segment_episode_counts": forecast_action_segments[
+            "episode_segment_counts"
         ],
         "multiple_testing_total_hypotheses": multiple_testing_ledger[
             "total_hypothesis_count"

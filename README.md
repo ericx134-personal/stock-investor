@@ -237,6 +237,10 @@ Current holdings are also joined back to the first direction forecast ever
 persisted for that symbol in `first-observed-forecasts.json`. The dashboard's
 Research tab shows the first forecast, current forecast, whether the model has
 changed its view, and the first forecast outcome when it has matured.
+`forecast-action-segments.json` adds an observational proxy comparison between
+currently held, zero-share watchlist, and no-longer-listed forecast episodes.
+It is explicitly not causal evidence that a forecast caused a trade or watchlist
+decision.
 The board also shows close, gain/loss, and weight.
 Robust BUY and SELL directions also show a structural review price range:
 BUY uses the confirmed support zone and SELL uses the confirmed resistance

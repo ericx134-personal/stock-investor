@@ -5,7 +5,13 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
-from stock_investor.refresh import refresh_lock, run_refresh, validate_production_refresh
+from stock_investor.data import Position
+from stock_investor.refresh import (
+    build_forecast_action_segments,
+    refresh_lock,
+    run_refresh,
+    validate_production_refresh,
+)
 
 
 def write_positions(path: Path, *, revisions: str = "") -> None:
@@ -28,6 +34,74 @@ def write_price_history(path: Path, *, days: int = 300) -> None:
 
 
 class RefreshTests(unittest.TestCase):
+    def test_forecast_action_segments_are_observational_proxies(self):
+        positions = [
+            Position("ABC", 10, 5, 0.2, None, None, None),
+            Position("WATCH", 0, 0, 0.2, None, None, None),
+        ]
+        outcomes = [
+            {
+                "forecast_id": "acted",
+                "forecast_version": "wave-direction-v1",
+                "symbol": "ABC",
+                "direction": "BUY",
+                "probability": 0.7,
+                "signal_date": "2026-01-01",
+                "status": "MATURED",
+                "returns": {"21d": 0.1},
+                "excess_returns": {"21d": 0.04},
+                "directional_returns": {"21d": 0.1},
+            },
+            {
+                "forecast_id": "watched",
+                "forecast_version": "wave-direction-v1",
+                "symbol": "WATCH",
+                "direction": "SELL",
+                "probability": 0.65,
+                "signal_date": "2026-01-01",
+                "status": "MATURED",
+                "returns": {"21d": -0.08},
+                "excess_returns": {"21d": -0.12},
+                "directional_returns": {"21d": 0.08},
+            },
+            {
+                "forecast_id": "ignored",
+                "forecast_version": "wave-direction-v1",
+                "symbol": "OLD",
+                "direction": "WAIT",
+                "probability": None,
+                "signal_date": "2026-01-01",
+                "status": "PENDING",
+                "returns": {"21d": None},
+                "excess_returns": {"21d": None},
+                "directional_returns": {"21d": None},
+            },
+        ]
+
+        payload = build_forecast_action_segments(positions, outcomes)
+
+        self.assertEqual(payload["schema_version"], "forecast-action-segments-v1")
+        self.assertIn("observational proxies", payload["methodology_note"])
+        self.assertEqual(
+            payload["episode_segment_counts"],
+            {
+                "ACTED_ON_PROXY": 1,
+                "IGNORED_OR_EXITED_PROXY": 1,
+                "WATCHED_PROXY": 1,
+            },
+        )
+        acted_row = next(
+            row
+            for row in payload["scorecard"]
+            if row["segment"] == "ACTED_ON_PROXY"
+        )
+        self.assertEqual(acted_row["matured_observations"], 1)
+        self.assertEqual(acted_row["directional_success_rate"], 1.0)
+        ignored_episode = next(
+            row for row in payload["episodes"] if row["symbol"] == "OLD"
+        )
+        self.assertEqual(ignored_episode["segment"], "IGNORED_OR_EXITED_PROXY")
+
     def test_refresh_lock_rejects_overlap_and_cleans_up(self):
         with tempfile.TemporaryDirectory() as directory:
             with refresh_lock(directory):
@@ -94,6 +168,9 @@ class RefreshTests(unittest.TestCase):
             first_observed = json.loads(
                 (output / "first-observed-forecasts.json").read_text()
             )
+            forecast_action_segments = json.loads(
+                (output / "forecast-action-segments.json").read_text()
+            )
 
         self.assertTrue(first["read_only"])
         self.assertEqual(manifest["action_counts"], second["action_counts"])
@@ -121,6 +198,7 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("direction_classification_metrics", manifest["artifacts"])
         self.assertIn("direction_error_cohorts", manifest["artifacts"])
         self.assertIn("first_observed_forecasts", manifest["artifacts"])
+        self.assertIn("forecast_action_segments", manifest["artifacts"])
         self.assertIn("multiple_testing_ledger", manifest["artifacts"])
         self.assertIn("false_discovery_warnings", manifest["artifacts"])
         self.assertIn("model_health", manifest["artifacts"])
@@ -160,6 +238,11 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(manifest["first_observed_forecast_tracked_count"], 1)
         self.assertEqual(manifest["first_observed_forecast_missing_count"], 0)
         self.assertIn("first_observed_forecast_changed_count", manifest)
+        self.assertIn("forecast_action_segment_scorecard_rows", manifest)
+        self.assertEqual(
+            manifest["forecast_action_segment_episode_counts"],
+            {"ACTED_ON_PROXY": 1},
+        )
         self.assertEqual(manifest["direction_forecast_records"], 1)
         self.assertEqual(manifest["direction_forecast_episode_count"], 1)
         self.assertEqual(sum(manifest["current_direction_forecast_counts"].values()), 1)
@@ -179,6 +262,14 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(
             first_observed["holdings"][0]["first_forecast"]["direction"],
             "WAIT",
+        )
+        self.assertEqual(
+            forecast_action_segments["schema_version"],
+            "forecast-action-segments-v1",
+        )
+        self.assertEqual(
+            forecast_action_segments["episode_segment_counts"],
+            {"ACTED_ON_PROXY": 1},
         )
 
     def test_refresh_writes_model_comparison_when_baseline_exists(self):

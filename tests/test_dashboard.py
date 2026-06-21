@@ -421,6 +421,34 @@ class DashboardTests(unittest.TestCase):
                     }
                 )
             )
+            forecast_action_segments = Path(directory) / "forecast-action-segments.json"
+            forecast_action_segments.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "forecast-action-segments-v1",
+                        "methodology_note": "Segments are current-state observational proxies only.",
+                        "episode_segment_counts": {
+                            "ACTED_ON_PROXY": 2,
+                            "WATCHED_PROXY": 1,
+                        },
+                        "scorecard": [
+                            {
+                                "segment": "ACTED_ON_PROXY",
+                                "segment_label": "Acted-on proxy",
+                                "direction": "SELL",
+                                "horizon": "21d",
+                                "forecast_episodes": 2,
+                                "matured_observations": 1,
+                                "pending": 1,
+                                "directional_success_rate": 1.0,
+                                "mean_directional_return": 0.12,
+                                "mean_excess_return": 0.05,
+                                "symbols": ["ABC"],
+                            }
+                        ],
+                    }
+                )
+            )
             model_health = Path(directory) / "model-health.json"
             model_health.write_text(
                 json.dumps(
@@ -465,6 +493,7 @@ class DashboardTests(unittest.TestCase):
                 decision_scorecard_path=decision_scorecard,
                 direction_forecast_scorecard_path=direction_scorecard,
                 first_observed_forecasts_path=first_observed,
+                forecast_action_segments_path=forecast_action_segments,
                 model_health_path=model_health,
                 price_health_path=price_health,
             )
@@ -489,6 +518,9 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("First Observed Forecast Tracking", page)
         self.assertIn("wave-direction-v1", page)
         self.assertIn("M078 accountability", page)
+        self.assertIn("Forecast Action Segment Comparison", page)
+        self.assertIn("Acted-on proxy", page)
+        self.assertIn("M079 observational comparison", page)
         self.assertIn("sortHoldings", page)
         self.assertIn("arrangePortfolioRows", page)
         self.assertIn('row.style.gridColumn = "1"', page)
