@@ -488,10 +488,18 @@ def _portfolio_account_overview(
     gain_dollars = totals.get("gain_dollars", 0.0)
     cost_basis = totals.get("cost_basis", 0.0)
     net_basis = cost_basis + cash_balance
-    basis_for_return = net_basis if net_basis > 0 else cost_basis
     prior_value = account_value - today_dollars
     today_pct = today_dollars / prior_value if prior_value > 0 else None
-    gain_pct = gain_dollars / basis_for_return if basis_for_return > 0 else None
+    gain_pct = gain_dollars / cost_basis if cost_basis > 0 else None
+    net_capital_pct = gain_dollars / net_basis if margin_used > 0 and net_basis > 0 else None
+    gain_return_parts = []
+    if gain_pct is not None:
+        gain_return_parts.append(f"{_optional_signed_percent(gain_pct)} on cost")
+    if net_capital_pct is not None:
+        gain_return_parts.append(
+            f"{_optional_signed_percent(net_capital_pct)} net capital"
+        )
+    gain_return_text = " · ".join(gain_return_parts) or "Return unavailable"
     today_class = "positive" if today_dollars >= 0 else "negative"
     gain_class = "positive" if gain_dollars >= 0 else "negative"
     margin_class = "negative" if margin_used > 0 else "positive"
@@ -509,7 +517,7 @@ def _portfolio_account_overview(
       <div class="account-stats" aria-label="Account summary">
         <div><small>Account value</small><b>{_optional_money(account_value)}</b><span>Holdings minus margin used</span></div>
         <div><small>Margin used</small><b class="{margin_class}">{_optional_money(margin_used)}</b><span>From Robinhood summary</span></div>
-        <div><small>Gain/Loss</small><b class="{gain_class}">{_signed_money(gain_dollars)}</b><span>{_optional_signed_percent(gain_pct)} margin-aware</span></div>
+        <div><small>Gain/Loss</small><b class="{gain_class}">{_signed_money(gain_dollars)}</b><span>{html.escape(gain_return_text)}</span></div>
         <div><small>Buying power</small><b>{_optional_money(buying_power)}</b><span>Read-only account data</span></div>
       </div>
       <p class="account-note">Account candles are approximate: current share counts × OHLC, margin-adjusted.</p>
