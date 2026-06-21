@@ -1628,6 +1628,7 @@ def build_dashboard(
     direction_error_cohorts_path: str | Path | None = None,
     first_observed_forecasts_path: str | Path | None = None,
     forecast_action_segments_path: str | Path | None = None,
+    portfolio_learning_review_path: str | Path | None = None,
     multiple_testing_ledger_path: str | Path | None = None,
     false_discovery_warnings_path: str | Path | None = None,
     model_health_path: str | Path | None = None,
@@ -1764,6 +1765,12 @@ def build_dashboard(
         if forecast_action_segments_path
         and Path(forecast_action_segments_path).exists()
         else {"scorecard": []}
+    )
+    portfolio_learning_review_link = (
+        '<p><a href="portfolio-learning-review.md">Open monthly portfolio-learning review</a></p>'
+        if portfolio_learning_review_path
+        and Path(portfolio_learning_review_path).exists()
+        else ""
     )
     multiple_testing_ledger = (
         json.loads(Path(multiple_testing_ledger_path).read_text())
@@ -2859,6 +2866,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 {prioritized_board}
 </section>
 <section id="tab-research" class="tab-view" role="tabpanel" hidden>
+{portfolio_learning_review_link}
 <section class="panel"><h2>Displayed Direction Forecast Validation</h2>
 <table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Episodes</th><th>Matured</th><th>Pending</th><th>Displayed rate</th><th>Directional success</th><th>Brier score</th></tr></thead>
 <tbody>{direction_validation_rows}</tbody></table>

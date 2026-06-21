@@ -241,6 +241,9 @@ changed its view, and the first forecast outcome when it has matured.
 currently held, zero-share watchlist, and no-longer-listed forecast episodes.
 It is explicitly not causal evidence that a forecast caused a trade or watchlist
 decision.
+Each complete refresh also publishes a private `portfolio-learning-review.md`
+that summarizes model health, first-forecast accountability, proxy segment
+comparisons, calibration status, and next learning priorities.
 The board also shows close, gain/loss, and weight.
 Robust BUY and SELL directions also show a structural review price range:
 BUY uses the confirmed support zone and SELL uses the confirmed resistance

@@ -4,7 +4,11 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from stock_investor.brief import build_brief, write_brief
+from stock_investor.brief import (
+    build_brief,
+    build_portfolio_learning_review,
+    write_brief,
+)
 
 
 def write_jsonl(path, records):
@@ -106,6 +110,46 @@ class BriefTests(unittest.TestCase):
     def test_brief_rejects_invalid_period(self):
         with self.assertRaisesRegex(ValueError, "at least 1"):
             build_brief(0)
+
+    def test_portfolio_learning_review_summarizes_accountability(self):
+        now = datetime(2026, 6, 30, tzinfo=timezone.utc)
+
+        result = build_portfolio_learning_review(
+            model_health={"overall_status": "DEGRADED"},
+            price_health={"symbols": [{"latest_date": "2026-06-30"}]},
+            first_observed_forecasts={
+                "tracked_count": 3,
+                "changed_since_first_count": 2,
+                "first_direction_counts": {"BUY": 1, "WAIT": 2},
+            },
+            forecast_action_segments={
+                "episode_segment_counts": {"ACTED_ON_PROXY": 4},
+                "segment_definitions": {
+                    "ACTED_ON_PROXY": {"label": "Acted-on proxy"}
+                },
+            },
+            direction_forecast_scorecard=[
+                {"forecast_episodes": 4, "observations": 1, "pending": 3}
+            ],
+            forecast_calibration_curves=[{"status": "PENDING"}],
+            direction_error_cohorts=[
+                {
+                    "direction": "SELL",
+                    "horizon": "21d",
+                    "false_signal_rate": 0.5,
+                    "false_signal_count": 2,
+                }
+            ],
+            now=now,
+        )
+
+        self.assertIn("Monthly Portfolio Learning Review", result)
+        self.assertIn("Model health: DEGRADED", result)
+        self.assertIn("Latest price date: 2026-06-30", result)
+        self.assertIn("3 tracked, 2 changed", result)
+        self.assertIn("Acted-on proxy: 4 forecast episodes", result)
+        self.assertIn("do not read them as causal trade evidence", result)
+        self.assertIn("SELL 21d: 50.0% false-signal rate", result)
 
 
 if __name__ == "__main__":

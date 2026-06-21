@@ -171,6 +171,7 @@ class RefreshTests(unittest.TestCase):
             forecast_action_segments = json.loads(
                 (output / "forecast-action-segments.json").read_text()
             )
+            learning_review = (output / "portfolio-learning-review.md").read_text()
 
         self.assertTrue(first["read_only"])
         self.assertEqual(manifest["action_counts"], second["action_counts"])
@@ -199,6 +200,7 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("direction_error_cohorts", manifest["artifacts"])
         self.assertIn("first_observed_forecasts", manifest["artifacts"])
         self.assertIn("forecast_action_segments", manifest["artifacts"])
+        self.assertIn("portfolio_learning_review", manifest["artifacts"])
         self.assertIn("multiple_testing_ledger", manifest["artifacts"])
         self.assertIn("false_discovery_warnings", manifest["artifacts"])
         self.assertIn("model_health", manifest["artifacts"])
@@ -271,6 +273,9 @@ class RefreshTests(unittest.TestCase):
             forecast_action_segments["episode_segment_counts"],
             {"ACTED_ON_PROXY": 1},
         )
+        self.assertIn("Monthly Portfolio Learning Review", learning_review)
+        self.assertIn("First Forecast Accountability", learning_review)
+        self.assertIn("current-state proxies only", learning_review)
 
     def test_refresh_writes_model_comparison_when_baseline_exists(self):
         with tempfile.TemporaryDirectory() as directory:

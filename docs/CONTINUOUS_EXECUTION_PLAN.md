@@ -61,7 +61,7 @@ Near-term product goals:
 
 Current execution queue:
 
-- P1: M080 publish a monthly portfolio-learning review.
+- P1: M082 add BUY/SELL/WAIT, sector, weight, and confidence filters.
 - P2: M061-M063 market-regime conditioning only after stability gates pass.
 - P2: M058 target-zone touch-rate replay and post-touch outcomes.
 
@@ -171,7 +171,7 @@ Current execution queue:
 - [ ] M077 Compare current, equal-weight, and volatility-weight outcomes.
 - [x] M078 Add first-observed-forecast tracking for every holding.
 - [x] M079 Compare acted-on, watched, and ignored forecasts without causal claims.
-- [ ] M080 Publish a monthly portfolio-learning review.
+- [x] M080 Publish a monthly portfolio-learning review.
 
 ## Phase 9: Dashboard And User Comprehension
 

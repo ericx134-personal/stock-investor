@@ -9,6 +9,7 @@ from dataclasses import asdict
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from .brief import build_portfolio_learning_review, write_brief
 from .dashboard import build_dashboard, write_dashboard
 from .data import Position, load_positions, load_prices
 from .diagnostics import (
@@ -173,6 +174,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "direction_error_cohorts": output_dir / "direction-error-cohorts.json",
         "first_observed_forecasts": output_dir / "first-observed-forecasts.json",
         "forecast_action_segments": output_dir / "forecast-action-segments.json",
+        "portfolio_learning_review": output_dir / "portfolio-learning-review.md",
         "multiple_testing_ledger": output_dir / "multiple-testing-ledger.json",
         "false_discovery_warnings": output_dir / "false-discovery-warnings.json",
         "comparison": output_dir / f"model-v1-{slug.removeprefix('model-')}-comparison.json",
@@ -774,6 +776,19 @@ def run_refresh(
         direction_forecast_scorecard=direction_forecast_scorecard,
     )
     _write_json(model_health, paths["model_health"])
+    write_brief(
+        build_portfolio_learning_review(
+            model_health=model_health,
+            price_health=price_health,
+            first_observed_forecasts=first_observed_forecasts,
+            forecast_action_segments=forecast_action_segments,
+            direction_forecast_scorecard=direction_forecast_scorecard,
+            forecast_calibration_curves=forecast_calibration_curves,
+            direction_error_cohorts=direction_error_cohorts,
+            now=datetime.now(timezone.utc),
+        ),
+        paths["portfolio_learning_review"],
+    )
 
     comparison_path = None
     if baseline_snapshot_path and Path(baseline_snapshot_path).exists():
@@ -804,6 +819,7 @@ def run_refresh(
             direction_error_cohorts_path=paths["direction_error_cohorts"],
             first_observed_forecasts_path=paths["first_observed_forecasts"],
             forecast_action_segments_path=paths["forecast_action_segments"],
+            portfolio_learning_review_path=paths["portfolio_learning_review"],
             multiple_testing_ledger_path=paths["multiple_testing_ledger"],
             false_discovery_warnings_path=paths["false_discovery_warnings"],
             model_health_path=paths["model_health"],

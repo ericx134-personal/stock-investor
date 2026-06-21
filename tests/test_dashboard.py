@@ -449,6 +449,8 @@ class DashboardTests(unittest.TestCase):
                     }
                 )
             )
+            learning_review = Path(directory) / "portfolio-learning-review.md"
+            learning_review.write_text("# Monthly Portfolio Learning Review\n")
             model_health = Path(directory) / "model-health.json"
             model_health.write_text(
                 json.dumps(
@@ -494,6 +496,7 @@ class DashboardTests(unittest.TestCase):
                 direction_forecast_scorecard_path=direction_scorecard,
                 first_observed_forecasts_path=first_observed,
                 forecast_action_segments_path=forecast_action_segments,
+                portfolio_learning_review_path=learning_review,
                 model_health_path=model_health,
                 price_health_path=price_health,
             )
@@ -521,6 +524,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Forecast Action Segment Comparison", page)
         self.assertIn("Acted-on proxy", page)
         self.assertIn("M079 observational comparison", page)
+        self.assertIn("Open monthly portfolio-learning review", page)
         self.assertIn("sortHoldings", page)
         self.assertIn("arrangePortfolioRows", page)
         self.assertIn('row.style.gridColumn = "1"', page)
