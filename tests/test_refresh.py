@@ -91,6 +91,9 @@ class RefreshTests(unittest.TestCase):
             refresh_history_lines = (
                 output / "refresh-history.jsonl"
             ).read_text().splitlines()
+            first_observed = json.loads(
+                (output / "first-observed-forecasts.json").read_text()
+            )
 
         self.assertTrue(first["read_only"])
         self.assertEqual(manifest["action_counts"], second["action_counts"])
@@ -117,6 +120,7 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("forecast_calibration_curves", manifest["artifacts"])
         self.assertIn("direction_classification_metrics", manifest["artifacts"])
         self.assertIn("direction_error_cohorts", manifest["artifacts"])
+        self.assertIn("first_observed_forecasts", manifest["artifacts"])
         self.assertIn("multiple_testing_ledger", manifest["artifacts"])
         self.assertIn("false_discovery_warnings", manifest["artifacts"])
         self.assertIn("model_health", manifest["artifacts"])
@@ -153,6 +157,9 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("direction_rate_comparison_rows", manifest)
         self.assertGreater(manifest["multiple_testing_total_hypotheses"], 0)
         self.assertIn("false_discovery_warning_count", manifest)
+        self.assertEqual(manifest["first_observed_forecast_tracked_count"], 1)
+        self.assertEqual(manifest["first_observed_forecast_missing_count"], 0)
+        self.assertIn("first_observed_forecast_changed_count", manifest)
         self.assertEqual(manifest["direction_forecast_records"], 1)
         self.assertEqual(manifest["direction_forecast_episode_count"], 1)
         self.assertEqual(sum(manifest["current_direction_forecast_counts"].values()), 1)
@@ -163,6 +170,16 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("historical_directional_leave_one_out_downgrades", manifest)
         self.assertIn("conditional_directional_leave_one_out_downgrades", manifest)
         self.assertIn("No SEC fundamental snapshots", " ".join(manifest["warnings"]))
+        self.assertEqual(
+            first_observed["schema_version"], "first-observed-forecasts-v1"
+        )
+        self.assertEqual(first_observed["tracked_count"], 1)
+        self.assertEqual(first_observed["holdings"][0]["symbol"], "ABC")
+        self.assertEqual(first_observed["holdings"][0]["status"], "TRACKED")
+        self.assertEqual(
+            first_observed["holdings"][0]["first_forecast"]["direction"],
+            "WAIT",
+        )
 
     def test_refresh_writes_model_comparison_when_baseline_exists(self):
         with tempfile.TemporaryDirectory() as directory:

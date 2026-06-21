@@ -394,6 +394,33 @@ class DashboardTests(unittest.TestCase):
                 '"observations":1,"pending":2,"mean_probability":0.8,'
                 '"directional_success_rate":1.0,"brier_score":0.04}]'
             )
+            first_observed = Path(directory) / "first-observed-forecasts.json"
+            first_observed.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "first-observed-forecasts-v1",
+                        "tracked_count": 1,
+                        "missing_count": 0,
+                        "changed_since_first_count": 1,
+                        "holdings": [
+                            {
+                                "symbol": "ABC",
+                                "status": "TRACKED",
+                                "changed_since_first": True,
+                                "first_forecast": {
+                                    "forecast_version": "wave-direction-v1",
+                                    "direction": "SELL",
+                                    "probability": 0.64,
+                                    "signal_date": "2026-01-01",
+                                    "entry_close": 10,
+                                },
+                                "current_forecast": {"direction": "WAIT"},
+                                "first_outcome": {"status": "PENDING"},
+                            }
+                        ],
+                    }
+                )
+            )
             model_health = Path(directory) / "model-health.json"
             model_health.write_text(
                 json.dumps(
@@ -437,6 +464,7 @@ class DashboardTests(unittest.TestCase):
                 scorecard_path=scorecard,
                 decision_scorecard_path=decision_scorecard,
                 direction_forecast_scorecard_path=direction_scorecard,
+                first_observed_forecasts_path=first_observed,
                 model_health_path=model_health,
                 price_health_path=price_health,
             )
@@ -458,6 +486,9 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Pressure", page)
         self.assertIn("Today Return %", page)
         self.assertIn("Today Return $", page)
+        self.assertIn("First Observed Forecast Tracking", page)
+        self.assertIn("wave-direction-v1", page)
+        self.assertIn("M078 accountability", page)
         self.assertIn("sortHoldings", page)
         self.assertIn("arrangePortfolioRows", page)
         self.assertIn('row.style.gridColumn = "1"', page)

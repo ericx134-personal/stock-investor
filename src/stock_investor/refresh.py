@@ -171,11 +171,154 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "forecast_calibration_curves": output_dir / "forecast-calibration-curves.json",
         "direction_classification_metrics": output_dir / "direction-classification-metrics.json",
         "direction_error_cohorts": output_dir / "direction-error-cohorts.json",
+        "first_observed_forecasts": output_dir / "first-observed-forecasts.json",
         "multiple_testing_ledger": output_dir / "multiple-testing-ledger.json",
         "false_discovery_warnings": output_dir / "false-discovery-warnings.json",
         "comparison": output_dir / f"model-v1-{slug.removeprefix('model-')}-comparison.json",
         "dashboard": output_dir / f"dashboard-{slug.removeprefix('model-')}.html",
         "manifest": output_dir / "refresh-manifest.json",
+    }
+
+
+def _forecast_key(record: dict) -> tuple:
+    return (
+        record.get("forecast_id"),
+        record.get("forecast_version"),
+        record.get("symbol"),
+        record.get("signal_date"),
+        record.get("horizon"),
+        record.get("direction"),
+    )
+
+
+def _forecast_summary(record: dict | None) -> dict | None:
+    if not record:
+        return None
+    return {
+        key: record.get(key)
+        for key in (
+            "forecast_id",
+            "forecast_version",
+            "direction",
+            "probability",
+            "signal_date",
+            "observed_at",
+            "entry_close",
+            "horizon",
+            "regime",
+            "evidence_source",
+            "observations",
+            "directional_symbols",
+            "wave_age_bucket",
+            "wave_magnitude_bucket",
+        )
+        if key in record
+    }
+
+
+def _forecast_outcome_summary(record: dict | None) -> dict | None:
+    if not record:
+        return None
+    return {
+        key: record.get(key)
+        for key in (
+            "status",
+            "latest_evaluated_date",
+            "returns",
+            "benchmark_returns",
+            "excess_returns",
+            "directional_returns",
+            "max_adverse_excursion",
+            "max_favorable_excursion",
+        )
+        if key in record
+    }
+
+
+def build_first_observed_forecast_tracking(
+    held_symbols: set[str],
+    direction_forecast_records: list[dict],
+    current_direction_forecasts: list[dict],
+    direction_forecast_outcomes: list[dict],
+) -> dict:
+    """Track every current holding against its earliest persisted direction forecast."""
+    first_by_symbol: dict[str, dict] = {}
+    for record in sorted(
+        direction_forecast_records,
+        key=lambda item: (
+            item.get("signal_date", ""),
+            item.get("observed_at", ""),
+            item.get("forecast_version", ""),
+            item.get("forecast_id", ""),
+        ),
+    ):
+        symbol = record.get("symbol")
+        if symbol in held_symbols and symbol not in first_by_symbol:
+            first_by_symbol[symbol] = record
+    latest_by_symbol = {
+        record.get("symbol"): record
+        for record in sorted(
+            current_direction_forecasts,
+            key=lambda item: (
+                item.get("signal_date", ""),
+                item.get("observed_at", ""),
+                item.get("forecast_version", ""),
+                item.get("forecast_id", ""),
+            ),
+        )
+        if record.get("symbol") in held_symbols
+    }
+    outcome_by_key = {_forecast_key(record): record for record in direction_forecast_outcomes}
+    holdings = []
+    for symbol in sorted(held_symbols):
+        first = first_by_symbol.get(symbol)
+        current = latest_by_symbol.get(symbol)
+        changed = (
+            bool(first and current)
+            and (
+                first.get("direction") != current.get("direction")
+                or first.get("horizon") != current.get("horizon")
+                or first.get("forecast_version") != current.get("forecast_version")
+            )
+        )
+        holdings.append(
+            {
+                "symbol": symbol,
+                "status": "TRACKED" if first else "MISSING",
+                "first_forecast": _forecast_summary(first),
+                "current_forecast": _forecast_summary(current),
+                "changed_since_first": changed,
+                "first_outcome": _forecast_outcome_summary(
+                    outcome_by_key.get(_forecast_key(first)) if first else None
+                ),
+            }
+        )
+    tracked = [row for row in holdings if row["status"] == "TRACKED"]
+    return {
+        "schema_version": "first-observed-forecasts-v1",
+        "held_symbol_count": len(held_symbols),
+        "tracked_count": len(tracked),
+        "missing_count": len(held_symbols) - len(tracked),
+        "changed_since_first_count": sum(
+            1 for row in tracked if row["changed_since_first"]
+        ),
+        "first_direction_counts": dict(
+            sorted(
+                Counter(
+                    (row["first_forecast"] or {}).get("direction", "UNKNOWN")
+                    for row in tracked
+                ).items()
+            )
+        ),
+        "first_outcome_status_counts": dict(
+            sorted(
+                Counter(
+                    (row["first_outcome"] or {}).get("status", "PENDING")
+                    for row in tracked
+                ).items()
+            )
+        ),
+        "holdings": holdings,
     }
 
 
@@ -380,6 +523,12 @@ def run_refresh(
     direction_error_cohorts = build_directional_error_cohorts(
         direction_forecast_outcomes
     )
+    first_observed_forecasts = build_first_observed_forecast_tracking(
+        held_symbols,
+        direction_forecast_records,
+        direction_forecasts,
+        direction_forecast_outcomes,
+    )
     _write_json(
         direction_forecast_outcomes, paths["direction_forecast_outcomes"]
     )
@@ -396,6 +545,7 @@ def run_refresh(
         direction_classification_metrics, paths["direction_classification_metrics"]
     )
     _write_json(direction_error_cohorts, paths["direction_error_cohorts"])
+    _write_json(first_observed_forecasts, paths["first_observed_forecasts"])
 
     alert_records = load_alert_records(paths["alerts"])
     outcomes = evaluate_alerts(
@@ -514,6 +664,7 @@ def run_refresh(
             forecast_calibration_curves_path=paths["forecast_calibration_curves"],
             direction_classification_metrics_path=paths["direction_classification_metrics"],
             direction_error_cohorts_path=paths["direction_error_cohorts"],
+            first_observed_forecasts_path=paths["first_observed_forecasts"],
             multiple_testing_ledger_path=paths["multiple_testing_ledger"],
             false_discovery_warnings_path=paths["false_discovery_warnings"],
             model_health_path=paths["model_health"],
@@ -648,6 +799,15 @@ def run_refresh(
             sorted(Counter(row["status"] for row in direction_classification_metrics).items())
         ),
         "direction_error_cohort_count": len(direction_error_cohorts),
+        "first_observed_forecast_tracked_count": first_observed_forecasts[
+            "tracked_count"
+        ],
+        "first_observed_forecast_missing_count": first_observed_forecasts[
+            "missing_count"
+        ],
+        "first_observed_forecast_changed_count": first_observed_forecasts[
+            "changed_since_first_count"
+        ],
         "multiple_testing_total_hypotheses": multiple_testing_ledger[
             "total_hypothesis_count"
         ],

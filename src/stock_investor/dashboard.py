@@ -1626,6 +1626,7 @@ def build_dashboard(
     forecast_calibration_curves_path: str | Path | None = None,
     direction_classification_metrics_path: str | Path | None = None,
     direction_error_cohorts_path: str | Path | None = None,
+    first_observed_forecasts_path: str | Path | None = None,
     multiple_testing_ledger_path: str | Path | None = None,
     false_discovery_warnings_path: str | Path | None = None,
     model_health_path: str | Path | None = None,
@@ -1750,6 +1751,12 @@ def build_dashboard(
         if direction_error_cohorts_path
         and Path(direction_error_cohorts_path).exists()
         else []
+    )
+    first_observed_forecasts = (
+        json.loads(Path(first_observed_forecasts_path).read_text())
+        if first_observed_forecasts_path
+        and Path(first_observed_forecasts_path).exists()
+        else {"holdings": []}
     )
     multiple_testing_ledger = (
         json.loads(Path(multiple_testing_ledger_path).read_text())
@@ -2530,6 +2537,25 @@ def build_dashboard(
         f"<td>{html.escape(str(row.get('evidence_source') or ''))}</td></tr>"
         for row in direction_error_cohorts
     ) or '<tr><td colspan="10">No matured false BUY or SELL episodes yet.</td></tr>'
+    first_observed_rows = "".join(
+        f"<tr><td><b>{html.escape(row.get('symbol', ''))}</b></td>"
+        f"<td>{html.escape((row.get('first_forecast') or {}).get('signal_date') or 'missing')}</td>"
+        f"<td>{html.escape((row.get('first_forecast') or {}).get('forecast_version') or 'missing')}</td>"
+        f"<td>{html.escape((row.get('first_forecast') or {}).get('direction') or 'missing')}</td>"
+        f"<td>{_optional_percent((row.get('first_forecast') or {}).get('probability'))}</td>"
+        f"<td>{_optional_money((row.get('first_forecast') or {}).get('entry_close'))}</td>"
+        f"<td>{html.escape((row.get('current_forecast') or {}).get('direction') or 'missing')}</td>"
+        f"<td>{'Yes' if row.get('changed_since_first') else 'No'}</td>"
+        f"<td>{html.escape((row.get('first_outcome') or {}).get('status') or 'PENDING')}</td></tr>"
+        for row in sorted(
+            first_observed_forecasts.get("holdings", []),
+            key=lambda item: (
+                item.get("status") != "TRACKED",
+                (item.get("first_forecast") or {}).get("signal_date", "9999-99-99"),
+                item.get("symbol", ""),
+            ),
+        )
+    ) or '<tr><td colspan="9">No first-observed forecast tracking artifact is available yet.</td></tr>'
     multiple_testing_rows = "".join(
         f"<tr><td>{html.escape(row['family'])}</td>"
         f"<td>{html.escape(row['id'])}</td>"
@@ -2805,6 +2831,15 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Episodes</th><th>Matured</th><th>Pending</th><th>Displayed rate</th><th>Directional success</th><th>Brier score</th></tr></thead>
 <tbody>{direction_validation_rows}</tbody></table>
 <p class="note">Every displayed BUY, SELL, and WAIT is retained in an immutable ledger. Daily repeats are de-duplicated into episodes. WAIT is audited for coverage but has no invented directional success or Brier score.</p></section>
+<section class="panel"><h2>First Observed Forecast Tracking</h2>
+<div class="experiment">
+  <div><b>{int(first_observed_forecasts.get("tracked_count", 0))}</b><span>Tracked holdings</span></div>
+  <div><b>{int(first_observed_forecasts.get("changed_since_first_count", 0))}</b><span>Changed since first seen</span></div>
+  <div><b>{int(first_observed_forecasts.get("missing_count", 0))}</b><span>Missing first forecast</span></div>
+</div>
+<table><thead><tr><th>Symbol</th><th>First date</th><th>Version</th><th>First direction</th><th>Displayed</th><th>Entry</th><th>Current</th><th>Changed</th><th>Outcome</th></tr></thead>
+<tbody>{first_observed_rows}</tbody></table>
+<p class="note">This is the M078 accountability view: each current holding is anchored to the first persisted direction forecast available in the immutable ledger. It is observational and does not rewrite old forecasts when the current model changes.</p></section>
 <section class="panel"><h2>BUY/SELL Calibration Curves</h2>
 <table><thead><tr><th>Version</th><th>Direction</th><th>Horizon</th><th>Bucket</th><th>Displayed</th><th>Actual success</th><th>Matured</th><th>Symbols</th><th>Status</th></tr></thead>
 <tbody>{calibration_curve_rows}</tbody></table>

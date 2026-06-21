@@ -233,6 +233,10 @@ evaluates de-duplicated episodes after 21, 63, and 126 sessions and reports
 matured versus pending observations, directional success, excursions, and
 Brier score. WAIT is retained for coverage auditing without inventing a
 directional win rate.
+Current holdings are also joined back to the first direction forecast ever
+persisted for that symbol in `first-observed-forecasts.json`. The dashboard's
+Research tab shows the first forecast, current forecast, whether the model has
+changed its view, and the first forecast outcome when it has matured.
 The board also shows close, gain/loss, and weight.
 Robust BUY and SELL directions also show a structural review price range:
 BUY uses the confirmed support zone and SELL uses the confirmed resistance
