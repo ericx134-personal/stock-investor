@@ -284,8 +284,17 @@ def _fetch_yahoo_quotes(
 ) -> int:
     symbols = [position.symbol for position in load_positions(positions_path)]
     symbols.extend(symbol.upper() for symbol in extra_symbols if symbol)
-    quotes = fetch_yahoo_latest_quotes(symbols)
+    failures = []
+    quotes = fetch_yahoo_latest_quotes(symbols, on_failure=failures.append)
     atomic_write_text(json.dumps(quotes, indent=2, sort_keys=True) + "\n", output_path)
+    for failure in failures:
+        outcome = "retrying" if failure.will_retry else "final"
+        print(
+            f"Yahoo quote {outcome} failure for {failure.symbol}: "
+            f"{failure.failure_class}; attempt {failure.attempt}/{failure.max_attempts}; "
+            f"retryable={str(failure.retryable).lower()}; {failure.message}",
+            flush=True,
+        )
     missing = sorted(set(symbols) - set(quotes))
     if missing:
         print("Yahoo missing latest quotes for: " + ", ".join(missing), flush=True)

@@ -88,6 +88,41 @@ class YahooProviderTests(unittest.TestCase):
         )
         self.assertEqual(quotes["HOOD"]["source"], "Yahoo Finance chart quote")
 
+    def test_fetch_latest_quotes_skips_unavailable_symbol_without_aborting(self):
+        calls = []
+        failures = []
+
+        def transport(url):
+            calls.append(url)
+            if "BBBY+" in url:
+                raise HTTPError(url, 404, "Not Found", {}, None)
+            return {
+                "chart": {
+                    "result": [
+                        {
+                            "meta": {
+                                "regularMarketPrice": 101.5,
+                                "chartPreviousClose": 100.0,
+                            },
+                            "timestamp": [1780000000],
+                            "indicators": {"quote": [{"close": [101.5]}]},
+                        }
+                    ]
+                }
+            }
+
+        quotes = fetch_yahoo_latest_quotes(
+            ["BBBY+", "HOOD"], transport=transport, on_failure=failures.append
+        )
+
+        self.assertIn("BBBY+", calls[0])
+        self.assertIn("HOOD", calls[1])
+        self.assertNotIn("BBBY+", quotes)
+        self.assertEqual(quotes["HOOD"]["price"], 101.5)
+        self.assertEqual(failures[0].symbol, "BBBY+")
+        self.assertEqual(failures[0].failure_class, "client_error")
+        self.assertFalse(failures[0].will_retry)
+
     def test_fetch_daily_bars_normalizes_implausible_yahoo_envelopes(self):
         prices = fetch_yahoo_daily_bars(
             ["PLTR"],

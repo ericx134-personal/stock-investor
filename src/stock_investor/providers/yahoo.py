@@ -107,59 +107,93 @@ def fetch_yahoo_latest_quotes(
     symbols: list[str],
     *,
     transport: Transport = _request_json,
+    retry_delays: tuple[float, ...] = (1.0, 3.0, 8.0),
+    sleep: Sleep = time.sleep,
+    on_failure: FailureSink | None = None,
 ) -> dict[str, dict]:
     """Fetch no-credential latest quote metadata from Yahoo's chart endpoint."""
     quotes: dict[str, dict] = {}
+    max_attempts = len(retry_delays) + 1
     for symbol in sorted(set(item.strip().upper() for item in symbols if item.strip())):
-        payload = transport(
-            f"{BASE_URL}/{symbol}?range=1d&interval=1m&includePrePost=true"
-        )
-        chart = payload.get("chart", {})
-        error = chart.get("error")
-        if error:
-            raise YahooChartError(
-                str(error.get("code") or "chart_error"),
-                str(error.get("description") or ""),
-            )
-        result = (chart.get("result") or [None])[0]
-        if not result:
-            continue
-        meta = result.get("meta", {})
-        price = meta.get("regularMarketPrice")
-        previous_close = meta.get("chartPreviousClose", meta.get("previousClose"))
-        if price is None:
-            closes = (
-                (result.get("indicators", {}).get("quote") or [{}])[0].get("close")
-                or []
-            )
-            price = next((value for value in reversed(closes) if value is not None), None)
-        quote = (result.get("indicators", {}).get("quote") or [{}])[0]
-        closes = quote.get("close") or []
-        timestamps = result.get("timestamp") or []
-        intraday_path = [
-            {"time": int(timestamp), "price": float(close)}
-            for timestamp, close in zip(timestamps, closes)
-            if close is not None and float(close) > 0
-        ][-120:]
-        if price is None or float(price) <= 0:
-            continue
-        today_return = (
-            float(price) / float(previous_close) - 1
-            if previous_close is not None and float(previous_close) > 0
-            else None
-        )
-        quotes[symbol] = {
-            "symbol": symbol,
-            "price": float(price),
-            "previous_close": float(previous_close) if previous_close is not None else None,
-            "today_return": today_return,
-            "intraday_path": intraday_path,
-            "regular_market_time": meta.get("regularMarketTime"),
-            "exchange_timezone": meta.get("exchangeTimezoneName"),
-            "source": "Yahoo Finance chart quote",
-            "source_confidence": "DECLARED",
-        }
+        for attempt in range(1, max_attempts + 1):
+            try:
+                quote = _fetch_symbol_latest_quote(symbol, transport)
+                if quote:
+                    quotes[symbol] = quote
+                break
+            except Exception as error:
+                failure_class, retryable = _classify_failure(error)
+                will_retry = retryable and attempt < max_attempts
+                failure = YahooProviderFailure(
+                    symbol=symbol,
+                    failure_class=failure_class,
+                    message=str(error),
+                    retryable=retryable,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    will_retry=will_retry,
+                )
+                if on_failure:
+                    on_failure(failure)
+                if will_retry:
+                    sleep(float(retry_delays[attempt - 1]))
+                    continue
+                break
     return quotes
+
+
+def _fetch_symbol_latest_quote(
+    symbol: str,
+    transport: Transport,
+) -> dict | None:
+    payload = transport(
+        f"{BASE_URL}/{symbol}?range=1d&interval=1m&includePrePost=true"
+    )
+    chart = payload.get("chart", {})
+    error = chart.get("error")
+    if error:
+        raise YahooChartError(
+            str(error.get("code") or "chart_error"),
+            str(error.get("description") or ""),
+        )
+    result = (chart.get("result") or [None])[0]
+    if not result:
+        return None
+    meta = result.get("meta", {})
+    price = meta.get("regularMarketPrice")
+    previous_close = meta.get("chartPreviousClose", meta.get("previousClose"))
+    if price is None:
+        closes = (
+            (result.get("indicators", {}).get("quote") or [{}])[0].get("close")
+            or []
+        )
+        price = next((value for value in reversed(closes) if value is not None), None)
+    quote = (result.get("indicators", {}).get("quote") or [{}])[0]
+    closes = quote.get("close") or []
+    timestamps = result.get("timestamp") or []
+    intraday_path = [
+        {"time": int(timestamp), "price": float(close)}
+        for timestamp, close in zip(timestamps, closes)
+        if close is not None and float(close) > 0
+    ][-120:]
+    if price is None or float(price) <= 0:
+        return None
+    today_return = (
+        float(price) / float(previous_close) - 1
+        if previous_close is not None and float(previous_close) > 0
+        else None
+    )
+    return {
+        "symbol": symbol,
+        "price": float(price),
+        "previous_close": float(previous_close) if previous_close is not None else None,
+        "today_return": today_return,
+        "intraday_path": intraday_path,
+        "regular_market_time": meta.get("regularMarketTime"),
+        "exchange_timezone": meta.get("exchangeTimezoneName"),
+        "source": "Yahoo Finance chart quote",
+        "source_confidence": "DECLARED",
+    }
 
 
 def _fetch_symbol_history(
