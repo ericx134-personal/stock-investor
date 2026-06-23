@@ -137,6 +137,7 @@ an ignored private artifact:
 
 ```bash
 python3 -m pip install -e ".[moomoo]"
+# Start Moomoo OpenD, log in, and confirm it is listening on 127.0.0.1:11111.
 PYTHONPATH=src python3 -m stock_investor.cli import-moomoo-watchlist \
   data/private/brokers/moomoo-watchlists.json
 ```
@@ -144,7 +145,9 @@ PYTHONPATH=src python3 -m stock_investor.cli import-moomoo-watchlist \
 Pass `--group "Group Name"` one or more times to import only selected groups.
 The importer uses quote/watchlist APIs only and writes normalized JSON with
 group names, original Moomoo codes, display symbols, markets, and names. It
-does not trade, change Moomoo state, or store brokerage credentials.
+does not trade, change Moomoo state, or store brokerage credentials. The
+Python SDK is only a client; it cannot read personal watchlists until local
+OpenD is running and logged in to the user's Moomoo account.
 
 `fetch-sec` uses the SEC's official ticker-to-CIK mapping and Company Facts API
 to calculate annual quality and valuation scores. The SEC requires an

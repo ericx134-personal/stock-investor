@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import socket
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,9 +34,12 @@ def fetch_moomoo_watchlists(
     port: int = DEFAULT_PORT,
     group_names: tuple[str, ...] = (),
     sdk: Any | None = None,
+    check_connection: bool = True,
 ) -> dict:
     """Read Moomoo/OpenD watchlists through the quote API only."""
     sdk = sdk or _load_sdk()
+    if check_connection:
+        _ensure_opend_available(host, port)
     quote_context = sdk.OpenQuoteContext(host=host, port=port)
     try:
         groups = tuple(group_names) or _discover_groups(quote_context, sdk)
@@ -69,6 +73,19 @@ def _load_sdk() -> Any:
         raise MoomooProviderError(
             "The optional moomoo-api package is not installed. Install it and "
             "run local OpenD before using import-moomoo-watchlist."
+        ) from error
+
+
+def _ensure_opend_available(host: str, port: int) -> None:
+    try:
+        with socket.create_connection((host, port), timeout=1.5):
+            return
+    except OSError as error:
+        raise MoomooProviderError(
+            "Moomoo OpenD is not reachable at "
+            f"{host}:{port}. Start and log in to local OpenD, then retry. "
+            "The moomoo-api Python package alone is not enough because "
+            "watchlists live behind the user's Moomoo/OpenD session."
         ) from error
 
 

@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from stock_investor.providers.moomoo import (
     MoomooProviderError,
@@ -71,7 +72,7 @@ class MoomooProviderTests(unittest.TestCase):
         context = FakeContext()
         sdk = FakeSdk(context)
 
-        payload = fetch_moomoo_watchlists(sdk=sdk)
+        payload = fetch_moomoo_watchlists(sdk=sdk, check_connection=False)
 
         self.assertTrue(context.closed)
         self.assertEqual(context.group_calls, 1)
@@ -87,7 +88,11 @@ class MoomooProviderTests(unittest.TestCase):
         context = FakeContext()
         sdk = FakeSdk(context)
 
-        payload = fetch_moomoo_watchlists(group_names=("Robinhood",), sdk=sdk)
+        payload = fetch_moomoo_watchlists(
+            group_names=("Robinhood",),
+            sdk=sdk,
+            check_connection=False,
+        )
 
         self.assertEqual(context.group_calls, 0)
         self.assertEqual(context.security_calls, ["Robinhood"])
@@ -102,7 +107,25 @@ class MoomooProviderTests(unittest.TestCase):
             fetch_moomoo_watchlists(
                 group_names=("Robinhood",),
                 sdk=FakeSdk(BadContext()),
+                check_connection=False,
             )
+
+    def test_closed_opend_port_fails_before_context_creation(self):
+        class ExplodingSdk:
+            RET_OK = 0
+
+            def OpenQuoteContext(self, host, port):
+                raise AssertionError("OpenQuoteContext should not be created")
+
+        with patch(
+            "stock_investor.providers.moomoo.socket.create_connection",
+            side_effect=OSError("connection refused"),
+        ):
+            with self.assertRaisesRegex(MoomooProviderError, "OpenD is not reachable"):
+                fetch_moomoo_watchlists(
+                    group_names=("Robinhood",),
+                    sdk=ExplodingSdk(),
+                )
 
     def test_write_payload(self):
         payload = {"schema_version": 1, "items": [{"symbol": "HOOD"}]}

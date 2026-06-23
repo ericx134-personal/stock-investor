@@ -46,8 +46,11 @@ Useful quote APIs:
 Implemented first step:
 
 - `import-moomoo-watchlist` reads Moomoo/OpenD watchlist groups and writes
-  normalized private JSON. Real OpenD verification still requires the user's
-  local Moomoo session.
+  normalized private JSON.
+- Local SDK installation is not enough. Personal watchlists require Moomoo
+  OpenD running on `127.0.0.1:11111` and logged in to the user's Moomoo
+  account. If OpenD is not reachable, the importer now fails fast instead of
+  waiting on SDK reconnect attempts.
 
 Next implementation:
 
