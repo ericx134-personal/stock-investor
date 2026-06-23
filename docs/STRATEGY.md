@@ -491,8 +491,8 @@ Recommended sequence:
 1. Read all linked Robinhood account positions and balances through the
    official Trading MCP, then convert a sanitized snapshot into monitor inputs.
 2. Use no-credential Yahoo Finance chart data for unattended daily prices by
-   default. Use Robinhood historical exports or Alpaca only as explicit
-   opt-in sources when there is a clear reason.
+   default. Use Robinhood historical exports only as explicit opt-in source
+   material when there is a clear reason.
 3. Add SEC EDGAR APIs for filings and standardized company facts.
 4. Keep all real snapshots, price files, dashboards, and ledgers under ignored
    private paths.

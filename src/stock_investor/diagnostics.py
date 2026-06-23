@@ -46,13 +46,6 @@ def infer_price_source(
             "adjustment_type": adjustment,
             "adjustment_confidence": "DECLARED" if adjustment_type else "UNKNOWN",
         }
-    if "alpaca" in name:
-        return {
-            "name": "Alpaca Market Data export",
-            "confidence": "INFERRED",
-            "adjustment_type": adjustment,
-            "adjustment_confidence": "DECLARED" if adjustment_type else "UNKNOWN",
-        }
     return {
         "name": "CSV import",
         "confidence": "UNKNOWN",

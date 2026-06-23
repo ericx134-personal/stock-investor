@@ -7,7 +7,8 @@ For teammates joining the project, start with
 [Collaborating Safely](docs/COLLABORATING.md), and the
 [Continuous Execution Plan](docs/CONTINUOUS_EXECUTION_PLAN.md) and
 [Long-Horizon Roadmap](docs/LONG_HORIZON_ROADMAP.md). To connect real portfolio
-data safely, follow the [Robinhood MCP Setup](docs/ROBINHOOD_MCP_SETUP.md).
+data safely, follow the [Robinhood MCP Setup](docs/ROBINHOOD_MCP_SETUP.md) and
+the [Broker Input Contract](docs/BROKER_INPUT_CONTRACT.md).
 
 The system is designed to answer a narrower and more useful question than
 "what will the market do next?":
@@ -79,10 +80,6 @@ PYTHONPATH=src python3 -m stock_investor.cli daily \
   --brief-output data/daily-brief.md
 ```
 
-Alpaca support remains in the codebase only as an explicit opt-in provider for
-users who already have a valid reason and their own read-only market-data
-credentials. It is not required for normal operation.
-
 ## Robinhood Read-Only Import
 
 Robinhood's official Trading MCP can read positions, balances, and transactions
@@ -116,7 +113,7 @@ Use either `--account-summary` or `--cash`, never both. Store all real snapshots
 positions, and summaries under the ignored `portfolio/` directory.
 
 Robinhood MCP daily historical responses can also feed the monitor without
-Alpaca credentials. Export the read-only `get_equity_historicals` response with
+market-data credentials. Export the read-only `get_equity_historicals` response with
 `interval=day`, `bounds=regular`, and split adjustment, then convert it:
 
 ```bash
@@ -408,15 +405,6 @@ isolated temporary directory, rejects unsafe paths, links, credentials, and
 logs, parses every JSON/JSONL artifact, and confirms that all
 manifest-declared artifacts are present.
 
-Alpaca remains available only as an explicit opt-in override for users who
-want that provider:
-
-```bash
-ENABLE_ALPACA_MARKET_DATA=1
-APCA_API_KEY_ID="..."
-APCA_API_SECRET_KEY="..."
-ALPACA_FEED="iex"
-```
 Service logs are under `data/private/logs/`. macOS cannot serve or refresh
 while the machine is shut down or asleep.
 
@@ -597,9 +585,8 @@ The monitor evaluates candidates in the context of the whole portfolio:
 Portfolio-level breaches are printed and can be persisted with
 `--risk-history`. Copy and edit [examples/risk-policy.json](examples/risk-policy.json)
 to set limits appropriate for the account. The daily workflow automatically
-fetches factor proxy prices configured in that policy; both `fetch-yahoo` and
-the optional `fetch-alpaca` provider accept repeatable `--extra-symbol`
-arguments for manual workflows.
+fetches factor proxy prices configured in that policy; `fetch-yahoo` accepts
+repeatable `--extra-symbol` arguments for manual workflows.
 
 The example policy uses `SPY` as a transparent broad-US-market proxy and alerts
 when absolute portfolio beta exceeds `1.25`. Beta is estimated from aligned

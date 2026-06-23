@@ -16,7 +16,7 @@ from .backtest import (
 )
 from .archive import archive_private_artifacts, verify_private_archive
 from .brief import build_brief, write_brief
-from .data import Price, load_positions, load_prices
+from .data import Price, load_positions, load_prices, write_prices_csv
 from .dashboard import build_dashboard, write_dashboard
 from .diagnostics import (
     assess_refresh_staleness,
@@ -46,7 +46,6 @@ from .filings import append_filing_alerts, extract_recent_filings, update_filing
 from .io import atomic_write_text
 from .model import MODEL_POLICIES, MODEL_VERSION
 from .monitor import run_monitor, write_alert_history, write_monitor_snapshot
-from .providers.alpaca import fetch_daily_bars, write_prices_csv
 from .providers.robinhood import extract_historicals_from_session, load_historical_response
 from .providers.sec import fetch_company_facts, fetch_submissions, fetch_ticker_ciks
 from .providers.yahoo import (
@@ -223,28 +222,6 @@ def _monitor(
     return 0
 
 
-def _fetch_alpaca(
-    positions_path: str,
-    output_path: str,
-    start: str,
-    end: str,
-    feed: str,
-    extra_symbols: tuple[str, ...] = (),
-) -> int:
-    key_id = os.environ.get("APCA_API_KEY_ID")
-    secret_key = os.environ.get("APCA_API_SECRET_KEY")
-    if not key_id or not secret_key:
-        raise SystemExit(
-            "APCA_API_KEY_ID and APCA_API_SECRET_KEY environment variables are required"
-        )
-    symbols = [position.symbol for position in load_positions(positions_path)]
-    symbols.extend(symbol.upper() for symbol in extra_symbols if symbol)
-    prices = fetch_daily_bars(symbols, start, end, key_id, secret_key, feed)
-    write_prices_csv(prices, output_path)
-    print(f"Wrote {sum(map(len, prices.values()))} adjusted daily bars to {output_path}")
-    return 0
-
-
 def _fetch_yahoo(
     positions_path: str,
     output_path: str,
@@ -339,7 +316,6 @@ def _daily(
     history_path: str,
     start: str,
     end: str,
-    feed: str,
     cash_balance: float,
     fundamentals_path: str | None,
     refresh_sec: bool,
@@ -361,13 +337,13 @@ def _daily(
     extra_symbols = [benchmark_symbol] if benchmark_symbol else []
     if risk_policy_path:
         extra_symbols.extend(load_risk_policy(risk_policy_path).factor_proxies.values())
-    _fetch_alpaca(
+    _fetch_yahoo(
         positions_path,
         prices_path,
         start,
         end,
-        feed,
         tuple(extra_symbols),
+        prices_path,
     )
     if refresh_sec:
         if not fundamentals_path:
@@ -905,18 +881,6 @@ def main() -> int:
     )
     monitor_parser.add_argument("--snapshot", help="write full current monitor state")
 
-    fetch_parser = subparsers.add_parser(
-        "fetch-alpaca", help="fetch adjusted daily prices from Alpaca"
-    )
-    fetch_parser.add_argument("positions")
-    fetch_parser.add_argument("output")
-    fetch_parser.add_argument(
-        "--start", default=(date.today() - timedelta(days=730)).isoformat()
-    )
-    fetch_parser.add_argument("--end", default=date.today().isoformat())
-    fetch_parser.add_argument("--feed", choices=("iex", "sip"), default="iex")
-    fetch_parser.add_argument("--extra-symbol", action="append", default=[])
-
     yahoo_parser = subparsers.add_parser(
         "fetch-yahoo", help="fetch daily prices from Yahoo Finance chart data"
     )
@@ -946,7 +910,6 @@ def main() -> int:
         "--start", default=(date.today() - timedelta(days=730)).isoformat()
     )
     daily_parser.add_argument("--end", default=date.today().isoformat())
-    daily_parser.add_argument("--feed", choices=("iex", "sip"), default="iex")
     daily_parser.add_argument("--cash", type=float, default=0.0)
     daily_parser.add_argument("--account-summary")
     daily_parser.add_argument("--fundamentals")
@@ -1187,15 +1150,6 @@ def main() -> int:
             args.model_version,
             args.snapshot,
         )
-    if args.command == "fetch-alpaca":
-        return _fetch_alpaca(
-            args.positions,
-            args.output,
-            args.start,
-            args.end,
-            args.feed,
-            tuple(args.extra_symbol),
-        )
     if args.command == "fetch-yahoo":
         return _fetch_yahoo(
             args.positions,
@@ -1218,7 +1172,6 @@ def main() -> int:
             args.history,
             args.start,
             args.end,
-            args.feed,
             _cash_balance(args.cash, args.account_summary),
             args.fundamentals,
             args.refresh_sec,

@@ -64,12 +64,13 @@ class ReadOnlyContractTests(unittest.TestCase):
         self.assertIn('yahoo_parser.add_argument("--start", default=_default_yahoo_start())', cli)
         self.assertNotIn("1970-01-01", script)
         self.assertNotIn("1970-01-01", cli)
-        self.assertIn("ENABLE_ALPACA_MARKET_DATA", script)
-        self.assertNotIn("Alpaca credentials missing; using Yahoo", script)
-        self.assertLess(
-            script.index("ENABLE_ALPACA_MARKET_DATA"),
-            script.index("fetch-alpaca"),
-        )
+        self.assertNotIn("ENABLE_ALPACA_MARKET_DATA", script)
+        self.assertNotIn("APCA_API_KEY_ID", script)
+        self.assertNotIn("APCA_API_SECRET_KEY", script)
+        self.assertNotIn("APCA_API_KEY_ID", cli)
+        self.assertNotIn("APCA_API_SECRET_KEY", cli)
+        self.assertNotIn("fetch-alpaca", script)
+        self.assertNotIn("fetch-alpaca", cli)
 
 
 if __name__ == "__main__":

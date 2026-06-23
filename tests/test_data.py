@@ -1,8 +1,9 @@
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
-from stock_investor.data import load_positions, load_prices
+from stock_investor.data import Price, load_positions, load_prices, write_prices_csv
 
 
 class DataTests(unittest.TestCase):
@@ -87,3 +88,28 @@ class DataTests(unittest.TestCase):
             history = load_prices(path, strict_ohlcv=False)["ABC"]
             self.assertEqual(history[0].high, 12)
             self.assertEqual(history[0].low, 9)
+
+    def test_write_prices_csv_round_trip_shape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "prices.csv"
+            write_prices_csv(
+                {
+                    "ABC": [
+                        Price(
+                            date=date(2026, 1, 2),
+                            close=10.5,
+                            open=10.0,
+                            high=11.0,
+                            low=9.5,
+                            volume=100,
+                        )
+                    ]
+                },
+                path,
+            )
+            content = path.read_text()
+        self.assertEqual(
+            content,
+            "date,symbol,close,open,high,low,volume\n"
+            "2026-01-02,ABC,10.5,10.0,11.0,9.5,100\n",
+        )

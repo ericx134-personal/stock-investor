@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from .io import atomic_text_writer
+
 
 @dataclass(frozen=True)
 class Position:
@@ -150,6 +152,26 @@ def load_prices(
         if len({item.date for item in history}) != len(history):
             raise ValueError(f"{symbol} has duplicate price dates")
     return prices
+
+
+def write_prices_csv(prices: dict[str, list[Price]], path: str | Path) -> None:
+    output = Path(path)
+    with atomic_text_writer(output, newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(("date", "symbol", "close", "open", "high", "low", "volume"))
+        for symbol in sorted(prices):
+            for price in sorted(prices[symbol], key=lambda item: item.date):
+                writer.writerow(
+                    (
+                        price.date.isoformat(),
+                        symbol,
+                        price.close,
+                        "" if price.open is None else price.open,
+                        "" if price.high is None else price.high,
+                        "" if price.low is None else price.low,
+                        "" if price.volume is None else price.volume,
+                    )
+                )
 
 
 def _normalize_ohlcv(

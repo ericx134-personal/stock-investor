@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from stock_investor.providers.alpaca import write_prices_csv
+from stock_investor.data import write_prices_csv
 from stock_investor.providers.robinhood import (
     extract_historicals_from_session,
     parse_historical_response,
