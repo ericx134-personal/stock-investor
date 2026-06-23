@@ -129,6 +129,23 @@ Because Robinhood notes that the newest historical bar may not be the official
 settled close, live monitoring should refresh after settlement or reconcile the
 latest date with the official quote close.
 
+## Moomoo Watchlist Import
+
+Moomoo is supported as a read-only watchlist source through local OpenD. Keep
+the Moomoo/OpenD login state outside this repo, then import the watchlists into
+an ignored private artifact:
+
+```bash
+python3 -m pip install -e ".[moomoo]"
+PYTHONPATH=src python3 -m stock_investor.cli import-moomoo-watchlist \
+  data/private/brokers/moomoo-watchlists.json
+```
+
+Pass `--group "Group Name"` one or more times to import only selected groups.
+The importer uses quote/watchlist APIs only and writes normalized JSON with
+group names, original Moomoo codes, display symbols, markets, and names. It
+does not trade, change Moomoo state, or store brokerage credentials.
+
 `fetch-sec` uses the SEC's official ticker-to-CIK mapping and Company Facts API
 to calculate annual quality and valuation scores. The SEC requires an
 identifying user agent, and the client paces requests below its published

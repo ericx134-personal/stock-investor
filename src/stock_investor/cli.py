@@ -46,6 +46,13 @@ from .filings import append_filing_alerts, extract_recent_filings, update_filing
 from .io import atomic_write_text
 from .model import MODEL_POLICIES, MODEL_VERSION
 from .monitor import run_monitor, write_alert_history, write_monitor_snapshot
+from .providers.moomoo import (
+    DEFAULT_HOST as MOOMOO_DEFAULT_HOST,
+    DEFAULT_PORT as MOOMOO_DEFAULT_PORT,
+    MoomooProviderError,
+    fetch_moomoo_watchlists,
+    write_moomoo_watchlists,
+)
 from .providers.robinhood import extract_historicals_from_session, load_historical_response
 from .providers.sec import fetch_company_facts, fetch_submissions, fetch_ticker_ciks
 from .providers.yahoo import (
@@ -687,6 +694,28 @@ def _extract_robinhood_prices(session_path: str, output_path: str) -> int:
     return 0
 
 
+def _import_moomoo_watchlist(
+    output_path: str,
+    host: str,
+    port: int,
+    group_names: tuple[str, ...],
+) -> int:
+    try:
+        payload = fetch_moomoo_watchlists(
+            host=host,
+            port=port,
+            group_names=group_names,
+        )
+    except MoomooProviderError as error:
+        raise SystemExit(str(error)) from error
+    write_moomoo_watchlists(payload, output_path)
+    print(
+        f"Imported {payload['symbol_count']} unique Moomoo symbols across "
+        f"{payload['group_count']} groups to {output_path}"
+    )
+    return 0
+
+
 def _diagnose_alerts(alerts_path: str, output_path: str | None) -> int:
     report = diagnose_alert_file(alerts_path)
     content = json.dumps(report, indent=2, sort_keys=True) + "\n"
@@ -1035,6 +1064,15 @@ def main() -> int:
     extract_robinhood_prices_parser.add_argument("session")
     extract_robinhood_prices_parser.add_argument("output")
 
+    moomoo_watchlist_parser = subparsers.add_parser(
+        "import-moomoo-watchlist",
+        help="read Moomoo/OpenD watchlists into a private normalized JSON file",
+    )
+    moomoo_watchlist_parser.add_argument("output")
+    moomoo_watchlist_parser.add_argument("--host", default=MOOMOO_DEFAULT_HOST)
+    moomoo_watchlist_parser.add_argument("--port", type=int, default=MOOMOO_DEFAULT_PORT)
+    moomoo_watchlist_parser.add_argument("--group", action="append", default=[])
+
     diagnose_alerts_parser = subparsers.add_parser(
         "diagnose-alerts",
         help="measure selectivity and alert-fatigue risk from latest symbol alerts",
@@ -1250,6 +1288,13 @@ def main() -> int:
         return _import_robinhood_prices(args.input, args.output)
     if args.command == "extract-robinhood-prices":
         return _extract_robinhood_prices(args.session, args.output)
+    if args.command == "import-moomoo-watchlist":
+        return _import_moomoo_watchlist(
+            args.output,
+            args.host,
+            args.port,
+            tuple(args.group),
+        )
     if args.command == "diagnose-alerts":
         return _diagnose_alerts(args.alerts, args.output)
     if args.command == "compare-models":

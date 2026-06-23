@@ -43,15 +43,20 @@ Useful quote APIs:
   start, end, K-line type, adjustment type, and pagination parameters.
 - `get_market_snapshot`: get current quote-style snapshots.
 
-Best first implementation:
+Implemented first step:
 
-1. Add a read-only `import-moomoo-watchlist` command.
-2. Connect to local OpenD at `127.0.0.1:11111`.
-3. Read all or selected watchlist groups.
-4. Normalize symbols into `data/private/brokers/moomoo-watchlists.json`.
-5. Merge watchlist symbols into dashboard research candidates without changing
+- `import-moomoo-watchlist` reads Moomoo/OpenD watchlist groups and writes
+  normalized private JSON. Real OpenD verification still requires the user's
+  local Moomoo session.
+
+Next implementation:
+
+1. Verify the importer against the user's local OpenD session.
+2. Merge watchlist symbols into dashboard research candidates without changing
    real portfolio shares.
-6. Optionally fetch Moomoo historical K-lines for symbols where Yahoo data is
+3. Add per-source attribution so Moomoo watchlist symbols remain distinct from
+   Robinhood/Fidelity held positions.
+4. Optionally fetch Moomoo historical K-lines for symbols where Yahoo data is
    missing, stale, or visually poor.
 
 What not to assume yet:
