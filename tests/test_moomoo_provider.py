@@ -127,6 +127,31 @@ class MoomooProviderTests(unittest.TestCase):
                     sdk=ExplodingSdk(),
                 )
 
+    def test_high_frequency_response_retries_once(self):
+        class RateLimitedContext(FakeContext):
+            def __init__(self):
+                super().__init__()
+                self.attempts = 0
+
+            def get_user_security(self, group_name):
+                self.attempts += 1
+                if self.attempts == 1:
+                    return -1, "Get Watchlist Groups request failed due to high frequency."
+                return super().get_user_security(group_name)
+
+        context = RateLimitedContext()
+        with patch("stock_investor.providers.moomoo.time.sleep") as sleep:
+            payload = fetch_moomoo_watchlists(
+                group_names=("Robinhood",),
+                sdk=FakeSdk(context),
+                check_connection=False,
+                high_frequency_retry_seconds=31,
+            )
+
+        sleep.assert_called_once_with(31)
+        self.assertEqual(context.attempts, 2)
+        self.assertEqual(payload["unique_symbols"], ["AFRM", "HOOD"])
+
     def test_write_payload(self):
         payload = {"schema_version": 1, "items": [{"symbol": "HOOD"}]}
         with tempfile.TemporaryDirectory() as directory:
