@@ -1,8 +1,11 @@
 # Broker Input Contract
 
-This project should stay broker-neutral. Robinhood, future Moomoo watchlists,
-and future Fidelity accounts should normalize into the same small set of
+This project should stay broker-neutral. Robinhood, Moomoo watchlists, and
+future Fidelity accounts should normalize into the same small set of
 private local files before the model or dashboard reads them.
+
+See `MOOMOO_FIDELITY_INTEGRATION_RESEARCH.md` for the current source-specific
+integration decision.
 
 ## Goals
 
@@ -60,11 +63,13 @@ export.
 
 ## Future Broker Notes
 
-- Moomoo: start with exported watchlists and user-drawn levels if official or
-  user-controlled export paths exist. Treat imported drawing levels as optional
-  support/resistance annotations, not ground truth.
-- Fidelity: start with portfolio CSV or official export/API surfaces. Normalize
-  cost basis, margin, cash, and buying power into the account summary.
+- Moomoo: start with OpenD/API watchlist import and optional K-line fallback.
+  Do not assume user-drawn chart levels are exportable until an official or
+  user-controlled format is confirmed.
+- Fidelity: start with portfolio CSV or official authorized data-sharing
+  surfaces. Normalize cost basis, cash, and account value where available.
+  Treat 401k funds that lack ticker-compatible daily prices separately from
+  ordinary equities.
 - Multiple brokers: merge rows by symbol using summed shares and weighted
   average cost. Preserve per-broker debug snapshots privately for audit.
 

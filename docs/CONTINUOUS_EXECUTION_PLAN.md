@@ -61,6 +61,8 @@ Near-term product goals:
 
 Current execution queue:
 
+- P1: Add broker-neutral import plumbing for Moomoo watchlists and Fidelity CSV
+  holdings using `BROKER_INPUT_CONTRACT.md`.
 - P1: M082 add BUY/SELL/WAIT, sector, weight, and confidence filters.
 - P2: M061-M063 market-regime conditioning only after stability gates pass.
 - P2: M058 target-zone touch-rate replay and post-touch outcomes.
@@ -203,6 +205,15 @@ Current execution queue:
 - [ ] M098 Automatically flag degradation without auto-promoting a challenger.
 - [ ] M099 Complete a disaster-recovery and reproducibility audit.
 - [ ] M100 Demonstrate sustained calibrated improvement on matured sealed outcomes.
+
+## Phase 11: Broker And Watchlist Inputs
+
+- [ ] M101 Add a read-only Moomoo watchlist importer.
+- [ ] M102 Add a combined holdings merger with per-source attribution.
+- [ ] M103 Add a Fidelity CSV importer for 401k/exported holdings.
+- [ ] M104 Add Moomoo K-line fallback data only after M101 is stable.
+- [ ] M105 Evaluate Moomoo annotation import only if an official export format
+  is confirmed.
 
 ## Long-Term Completion Gate
 

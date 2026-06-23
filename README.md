@@ -8,7 +8,9 @@ For teammates joining the project, start with
 [Continuous Execution Plan](docs/CONTINUOUS_EXECUTION_PLAN.md) and
 [Long-Horizon Roadmap](docs/LONG_HORIZON_ROADMAP.md). To connect real portfolio
 data safely, follow the [Robinhood MCP Setup](docs/ROBINHOOD_MCP_SETUP.md) and
-the [Broker Input Contract](docs/BROKER_INPUT_CONTRACT.md).
+the [Broker Input Contract](docs/BROKER_INPUT_CONTRACT.md). For future moomoo
+watchlist and Fidelity 401k import direction, see
+[Moomoo and Fidelity Integration Research](docs/MOOMOO_FIDELITY_INTEGRATION_RESEARCH.md).
 
 The system is designed to answer a narrower and more useful question than
 "what will the market do next?":
