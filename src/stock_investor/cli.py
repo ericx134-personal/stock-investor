@@ -82,6 +82,7 @@ from .thesis import load_theses
 
 
 DEFAULT_YAHOO_LOOKBACK_DAYS = 730
+DEFAULT_SNAPTRADE_ACCOUNTS_PATH = Path("data/private/brokers/snaptrade-accounts.json")
 
 
 def _default_yahoo_start() -> str:
@@ -91,6 +92,12 @@ def _default_yahoo_start() -> str:
     if configured_start:
         return configured_start
     return (date.today() - timedelta(days=DEFAULT_YAHOO_LOOKBACK_DAYS)).isoformat()
+
+
+def _default_snaptrade_accounts_path(path: str | None) -> str | None:
+    if path:
+        return path
+    return str(DEFAULT_SNAPTRADE_ACCOUNTS_PATH) if DEFAULT_SNAPTRADE_ACCOUNTS_PATH.exists() else None
 
 
 def _print_alert(symbol: str, action: str, score: float, reasons: tuple[str, ...]) -> None:
@@ -879,6 +886,7 @@ def _dashboard(
     prices_path: str | None,
     latest_quotes_path: str | None,
     account_summary_path: str | None,
+    snaptrade_accounts_path: str | None,
 ) -> int:
     write_dashboard(
         build_dashboard(
@@ -904,6 +912,9 @@ def _dashboard(
             prices_path=prices_path,
             latest_quotes_path=latest_quotes_path,
             account_summary_path=account_summary_path,
+            snaptrade_accounts_path=_default_snaptrade_accounts_path(
+                snaptrade_accounts_path
+            ),
         ),
         output_path,
     )
@@ -928,6 +939,7 @@ def _refresh(
     price_source: str | None,
     latest_quotes_path: str | None,
     price_adjustment: str | None,
+    snaptrade_accounts_path: str | None,
     production_safe: bool,
 ) -> int:
     if cash_balance and account_summary_path:
@@ -958,6 +970,9 @@ def _refresh(
             price_source=price_source,
             latest_quotes_path=latest_quotes_path,
             price_adjustment=price_adjustment,
+            snaptrade_accounts_path=_default_snaptrade_accounts_path(
+                snaptrade_accounts_path
+            ),
         )
     print(
         f"Refresh {manifest['status']}: {manifest['position_count']} positions; "
@@ -1269,6 +1284,7 @@ def main() -> int:
     dashboard_parser.add_argument("--prices")
     dashboard_parser.add_argument("--latest-quotes")
     dashboard_parser.add_argument("--account-summary")
+    dashboard_parser.add_argument("--snaptrade-accounts")
 
     refresh_parser = subparsers.add_parser(
         "refresh",
@@ -1297,6 +1313,7 @@ def main() -> int:
         "--price-adjustment",
         choices=("unknown", "none", "split", "all"),
     )
+    refresh_parser.add_argument("--snaptrade-accounts")
     refresh_parser.add_argument("--production-safe", action="store_true")
 
     args = parser.parse_args()
@@ -1473,6 +1490,7 @@ def main() -> int:
             args.prices,
             args.latest_quotes,
             args.account_summary,
+            args.snaptrade_accounts,
         )
     if args.command == "refresh":
         return _refresh(
@@ -1492,6 +1510,7 @@ def main() -> int:
             args.price_source,
             args.latest_quotes,
             args.price_adjustment,
+            args.snaptrade_accounts,
             args.production_safe,
         )
     return 2

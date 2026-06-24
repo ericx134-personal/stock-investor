@@ -10,24 +10,9 @@ DOMAIN="gui/$(id -u)"
 mkdir -p "$AGENT_DIR" "$RUNTIME_ROOT/data/private/logs"
 
 # LaunchAgents cannot reliably read ~/Documents under macOS privacy controls.
-# Keep a private operational runtime in Application Support, but record the
-# repo source so scheduled refreshes can self-sync before generating HTML.
-printf "%s\n" "$PROJECT_ROOT" > "$RUNTIME_ROOT/.source-root"
-
-sync_runtime() {
-  rsync -a --delete "$PROJECT_ROOT/src/" "$RUNTIME_ROOT/src/"
-  rsync -a --delete "$PROJECT_ROOT/scripts/" "$RUNTIME_ROOT/scripts/"
-  rsync -a --delete "$PROJECT_ROOT/models/" "$RUNTIME_ROOT/models/"
-  rsync -a "$PROJECT_ROOT/web/" "$RUNTIME_ROOT/"
-  cp "$PROJECT_ROOT/pyproject.toml" "$RUNTIME_ROOT/pyproject.toml"
-  mkdir -p "$RUNTIME_ROOT/portfolio"
-  rsync -a --delete "$PROJECT_ROOT/portfolio/" "$RUNTIME_ROOT/portfolio/"
-}
-
-sync_runtime
-if [[ ! -f "$RUNTIME_ROOT/data/private/refresh-manifest.json" ]]; then
-  rsync -a --exclude logs/ "$PROJECT_ROOT/data/private/" "$RUNTIME_ROOT/data/private/"
-fi
+# Keep a private operational runtime in Application Support, with the repo
+# recorded as source of truth for code and generated dashboard mirrors.
+"$PROJECT_ROOT/scripts/sync_runtime.sh" --private-data-if-empty
 
 install_agent() {
   local name="$1"

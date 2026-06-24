@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -142,6 +143,169 @@ def _load_account_summary(path: str | Path | None) -> dict:
         "imported_at": str(payload.get("imported_at") or ""),
         "requires_auth": bool(payload.get("requires_auth") or False),
     }
+
+
+def _load_snaptrade_accounts(path: str | Path | None) -> dict:
+    if not path or not Path(path).exists():
+        return {}
+    payload = json.loads(Path(path).read_text())
+    return payload if isinstance(payload, dict) else {}
+
+
+def _money_amount(value: object) -> float | None:
+    if isinstance(value, dict):
+        return _safe_float(value.get("amount"))
+    return _safe_float(value)
+
+
+def _snaptrade_account_total(account_snapshot: dict) -> float:
+    account = account_snapshot.get("account") or {}
+    balance = account.get("balance") or {}
+    total = _money_amount((balance.get("total") if isinstance(balance, dict) else None))
+    if total is not None:
+        return total
+    positions_total = sum(
+        _snaptrade_position_value(position)
+        for position in account_snapshot.get("positions", [])
+        if isinstance(position, dict)
+    )
+    cash_total = sum(
+        _safe_float(balance.get("cash")) or 0.0
+        for balance in account_snapshot.get("balances", [])
+        if isinstance(balance, dict)
+    )
+    return positions_total + cash_total
+
+
+def _snaptrade_position_value(position: dict) -> float:
+    market_value = _safe_float(position.get("market_value"))
+    if market_value is not None:
+        return market_value
+    units = _safe_float(position.get("units")) or 0.0
+    price = _safe_float(position.get("price")) or 0.0
+    return units * price
+
+
+def _snaptrade_cash(account_snapshot: dict) -> float:
+    return sum(
+        _safe_float(balance.get("cash")) or 0.0
+        for balance in account_snapshot.get("balances", [])
+        if isinstance(balance, dict)
+    )
+
+
+def _snaptrade_buying_power(account_snapshot: dict) -> float:
+    return sum(
+        _safe_float(balance.get("buying_power")) or 0.0
+        for balance in account_snapshot.get("balances", [])
+        if isinstance(balance, dict)
+    )
+
+
+def _snaptrade_last_sync(account_snapshot: dict) -> str:
+    sync = (account_snapshot.get("account") or {}).get("sync_status") or {}
+    holdings = sync.get("holdings") if isinstance(sync, dict) else {}
+    value = holdings.get("last_successful_sync") if isinstance(holdings, dict) else None
+    return str(value or "pending")
+
+
+def _fidelity_position_rows(accounts: list[dict]) -> str:
+    rows = []
+    for account_snapshot in accounts:
+        account = account_snapshot.get("account") or {}
+        account_name = str(account.get("name") or "Fidelity account")
+        for position in account_snapshot.get("positions", []):
+            if not isinstance(position, dict):
+                continue
+            symbol = str(position.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            description = str(position.get("description") or "")
+            units = _safe_float(position.get("units")) or 0.0
+            price = _safe_float(position.get("price"))
+            market_value = _snaptrade_position_value(position)
+            average_cost = _safe_float(position.get("average_purchase_price"))
+            rows.append(
+                (
+                    -market_value,
+                    symbol,
+                    f"""<tr>
+                      <td><b>{html.escape(symbol)}</b><span>{html.escape(description[:72])}</span></td>
+                      <td>{html.escape(account_name)}</td>
+                      <td>{_optional_number(units)}</td>
+                      <td>{_optional_money(price)}</td>
+                      <td>{_optional_money(market_value)}</td>
+                      <td>{_optional_money(average_cost)}</td>
+                    </tr>""",
+                )
+            )
+    return "".join(row for _, _, row in sorted(rows)) or (
+        '<tr><td colspan="6">No Fidelity positions are available yet.</td></tr>'
+    )
+
+
+def _fidelity_account_card(account_snapshot: dict) -> str:
+    account = account_snapshot.get("account") or {}
+    account_name = str(account.get("name") or "Fidelity account")
+    account_number = str(account.get("number") or "masked")
+    total = _snaptrade_account_total(account_snapshot)
+    cash = _snaptrade_cash(account_snapshot)
+    buying_power = _snaptrade_buying_power(account_snapshot)
+    positions = len(account_snapshot.get("positions", []) or [])
+    sync_status = "synced" if "pending" not in _snaptrade_last_sync(account_snapshot) else "pending"
+    return f"""
+      <article class="fidelity-account-card">
+        <div class="fidelity-card-title">
+          <span class="fidelity-icon-mini">F</span>
+          <div><b>{html.escape(account_name)}</b><small>{html.escape(account_number)}</small></div>
+        </div>
+        <div class="fidelity-card-grid">
+          <span><small>Value</small><b>{_optional_money(total)}</b></span>
+          <span><small>Cash</small><b>{_optional_money(cash)}</b></span>
+          <span><small>Buying power</small><b>{_optional_money(buying_power)}</b></span>
+          <span><small>Positions</small><b>{positions}</b></span>
+        </div>
+        <small class="fidelity-sync {html.escape(sync_status)}">Holdings sync: {html.escape(_snaptrade_last_sync(account_snapshot))}</small>
+      </article>"""
+
+
+def _fidelity_tab(snapshot: dict) -> str:
+    accounts = [row for row in snapshot.get("accounts", []) if isinstance(row, dict)]
+    if not accounts:
+        return """
+        <section class="fidelity-board empty-state">
+          Fidelity data is not connected yet. Use the SnapTrade read-only import, then refresh this dashboard.
+        </section>"""
+    total_value = sum(_snaptrade_account_total(account) for account in accounts)
+    total_cash = sum(_snaptrade_cash(account) for account in accounts)
+    total_buying_power = sum(_snaptrade_buying_power(account) for account in accounts)
+    position_count = int(snapshot.get("position_count") or sum(len(account.get("positions", []) or []) for account in accounts))
+    unique_symbols = snapshot.get("unique_symbols") or []
+    captured_at = str(snapshot.get("captured_at") or "unknown")
+    return f"""
+    <section class="fidelity-board" aria-label="Fidelity accounts">
+      <section class="fidelity-hero">
+        <div class="fidelity-brand">
+          <span class="fidelity-icon">F</span>
+          <div><small>Fidelity via SnapTrade · read only</small><h2>{_optional_money(total_value)}</h2><p>{len(accounts)} accounts · {position_count} positions · {len(unique_symbols)} symbols</p></div>
+        </div>
+        <div class="fidelity-totals">
+          <span><small>Cash</small><b>{_optional_money(total_cash)}</b></span>
+          <span><small>Buying power</small><b>{_optional_money(total_buying_power)}</b></span>
+          <span><small>Last import</small><b>{html.escape(captured_at[:10])}</b></span>
+        </div>
+      </section>
+      <section class="fidelity-accounts-grid">
+        {"".join(_fidelity_account_card(account) for account in accounts)}
+      </section>
+      <section class="fidelity-positions-panel">
+        <div class="fidelity-section-heading"><small>Imported holdings</small><h3>Fidelity positions</h3></div>
+        <div class="fidelity-table-wrap">
+          <table class="fidelity-positions-table"><thead><tr><th>Symbol</th><th>Account</th><th>Shares</th><th>Price</th><th>Value</th><th>Avg cost</th></tr></thead><tbody>{_fidelity_position_rows(accounts)}</tbody></table>
+        </div>
+        <p class="note">401k funds, cash sweeps, and non-stock instruments are displayed here but are not promoted into stock prediction signals until the broker-neutral merger can classify them safely.</p>
+      </section>
+    </section>"""
 
 
 def _parse_utc_datetime(value: str | None) -> datetime | None:
@@ -1636,6 +1800,7 @@ def build_dashboard(
     prices_path: str | Path | None = None,
     latest_quotes_path: str | Path | None = None,
     account_summary_path: str | Path | None = None,
+    snaptrade_accounts_path: str | Path | None = None,
 ) -> str:
     records = _latest_by_symbol(_load_jsonl(alerts_path))
     diagnostic = analyze_alert_burden(records)
@@ -1693,6 +1858,7 @@ def build_dashboard(
     )
     account_summary = _load_account_summary(account_summary_path)
     account_connection = _account_connection_state(account_summary_path, account_summary)
+    snaptrade_accounts = _load_snaptrade_accounts(snaptrade_accounts_path)
     wave_scorecard = (
         json.loads(Path(wave_scorecard_path).read_text())
         if wave_scorecard_path and Path(wave_scorecard_path).exists()
@@ -2267,6 +2433,17 @@ def build_dashboard(
         {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
       </div>
     </section>"""
+    fidelity_view = _fidelity_tab(snaptrade_accounts) if snaptrade_accounts else ""
+    fidelity_tab_button = (
+        '<button type="button" class="tab-button" data-tab-target="fidelity" role="tab" aria-selected="false"><span class="fidelity-tab-mark">F</span> Fidelity</button>'
+        if fidelity_view
+        else ""
+    )
+    fidelity_tab_panel = (
+        f'<section id="tab-fidelity" class="tab-view" role="tabpanel" hidden>{fidelity_view}</section>'
+        if fidelity_view
+        else ""
+    )
     prioritized_board = f"""
     <section class="priority-board-panel" id="opportunities-board">
       <div class="priority-board-heading"><div><small>JIRA-style BUY / SELL / WAIT lanes</small><h2>Opportunities</h2></div><p>{len(sorted_board_rows["BUY"])} buy · {len(sorted_board_rows["SELL"])} sell · top buy {html.escape(top_buy)} · top sell {html.escape(top_sell)}</p></div>
@@ -2650,8 +2827,10 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .stat,.panel,.holding-row {{ background:var(--panel); border:1px solid var(--line); border-radius:10px }}
 .stat {{ padding:18px }} .stat b {{ display:block; font-size:28px }} .stat span {{ color:var(--muted) }}
 .warning {{ color:var(--amber) }} .panel {{ padding:20px; margin:18px 0 }} h2 {{ margin:0 0 12px; font-size:19px }}
-.tabs {{ border-bottom:1px solid var(--line); display:flex; gap:24px; margin:22px 0 22px }} .tab-button {{ background:transparent; border:0; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; font:inherit; font-weight:650; margin-bottom:-1px; padding:10px 1px }}
+.tabs {{ border-bottom:1px solid var(--line); display:flex; gap:24px; margin:22px 0 22px }} .tab-button {{ align-items:center; background:transparent; border:0; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; display:inline-flex; font:inherit; font-weight:650; gap:7px; margin-bottom:-1px; padding:10px 1px }}
 .tab-button:hover {{ color:var(--text) }} .tab-button.active {{ border-bottom-color:var(--green); color:var(--green) }} .tab-view {{ display:none }} .tab-view.active {{ display:block }}
+.fidelity-tab-mark,.fidelity-icon-mini,.fidelity-icon {{ align-items:center; background:#00a83b; border-radius:50%; color:#001b0a; display:inline-flex; font-weight:900; justify-content:center }}
+.fidelity-tab-mark {{ font-size:10px; height:17px; width:17px }}
 .portfolio-board {{ margin:12px 0 24px }}
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
@@ -2675,6 +2854,21 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .account-stats {{ border-top:1px solid var(--line); display:grid; gap:0; grid-template-columns:repeat(4,1fr); margin-top:8px }}
 .account-stats div {{ border-right:1px solid var(--line); padding:14px 16px }} .account-stats div:first-child {{ padding-left:0 }} .account-stats div:last-child {{ border-right:0 }}
 .account-stats small {{ color:var(--muted); display:block; font-size:11px; font-weight:700 }} .account-stats b {{ display:block; font-size:18px; margin-top:3px }} .account-stats span {{ color:var(--muted); display:block; font-size:12px; margin-top:2px }} .account-note {{ color:var(--muted); font-size:12px; margin:2px 0 0 }}
+.fidelity-board {{ display:grid; gap:14px; margin:12px 0 24px }}
+.fidelity-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:18px; grid-template-columns:minmax(280px,1.5fr) minmax(300px,1fr); padding:20px 22px }}
+.fidelity-brand {{ align-items:center; display:flex; gap:15px }} .fidelity-icon {{ font-size:30px; height:58px; width:58px }}
+.fidelity-brand small,.fidelity-section-heading small {{ color:#00a83b; display:block; font-size:10px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }}
+.fidelity-brand h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:2px 0 0 }} .fidelity-brand p {{ color:var(--muted); margin:8px 0 0 }}
+.fidelity-totals {{ display:grid; gap:8px; grid-template-columns:repeat(3,1fr) }} .fidelity-totals span,.fidelity-card-grid span {{ background:#101010; border:1px solid var(--line); border-radius:10px; padding:12px }}
+.fidelity-totals small,.fidelity-card-grid small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.3px; text-transform:uppercase }} .fidelity-totals b,.fidelity-card-grid b {{ display:block; font-size:18px; margin-top:4px }}
+.fidelity-accounts-grid {{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) }}
+.fidelity-account-card {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:12px; padding:15px }}
+.fidelity-card-title {{ align-items:center; display:flex; gap:10px }} .fidelity-icon-mini {{ height:28px; width:28px }} .fidelity-card-title b {{ display:block; font-size:17px }} .fidelity-card-title small,.fidelity-sync {{ color:var(--muted); display:block; font-size:12px }}
+.fidelity-card-grid {{ display:grid; gap:8px; grid-template-columns:repeat(2,1fr) }} .fidelity-sync.synced {{ color:var(--green) }}
+.fidelity-positions-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; overflow:hidden }}
+.fidelity-section-heading {{ padding:16px 18px 8px }} .fidelity-section-heading h3 {{ font-size:22px; margin:1px 0 0 }}
+.fidelity-table-wrap {{ overflow:auto }} .fidelity-positions-table td:first-child span {{ color:var(--muted); display:block; font-size:12px; margin-top:2px; max-width:360px }}
+.fidelity-positions-table th {{ color:#00a83b }} .fidelity-positions-panel .note {{ padding:0 18px 16px }}
 .portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:10px 0 16px; overflow:hidden }}
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
@@ -2854,7 +3048,8 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <h1>{html.escape(title)}</h1>
 <p class="sub">Read-only decision support · {html.escape(model_label)} · generated {html.escape(generated)}</p>
 <nav class="tabs" role="tablist" aria-label="Dashboard sections">
-  <button type="button" class="tab-button active" data-tab-target="portfolio" role="tab" aria-selected="true">Portfolio</button>
+  <button type="button" class="tab-button active" data-tab-target="portfolio" role="tab" aria-selected="true">Robinhood</button>
+  {fidelity_tab_button}
   <button type="button" class="tab-button" data-tab-target="opportunities" role="tab" aria-selected="false">Opportunities</button>
   <button type="button" class="tab-button" data-tab-target="research" role="tab" aria-selected="false">Research</button>
   <button type="button" class="tab-button" data-tab-target="health" role="tab" aria-selected="false">Health &amp; Risk</button>
@@ -2862,6 +3057,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <section id="tab-portfolio" class="tab-view active" role="tabpanel">
 <section class="portfolio-board">{portfolio_account_overview}{portfolio_holdings}</section>
 </section>
+{fidelity_tab_panel}
 <section id="tab-opportunities" class="tab-view" role="tabpanel" hidden>
 {prioritized_board}
 </section>
@@ -3121,9 +3317,47 @@ def _slim_chart_payload_script(content: str) -> str:
 def write_dashboard(content: str, path: str | Path) -> None:
     output_path = Path(path)
     payload = _extract_chart_payload(content)
-    atomic_write_text(_slim_chart_payload_script(content) if payload is not None else content, output_path)
+    dashboard_content = (
+        _slim_chart_payload_script(content) if payload is not None else content
+    )
+    atomic_write_text(dashboard_content, output_path)
+    sidecar_content = None
     if payload is not None:
-        atomic_write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n",
-            output_path.with_name("chart-payloads-v1.json"),
+        sidecar_content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+        atomic_write_text(sidecar_content, output_path.with_name("chart-payloads-v1.json"))
+    _mirror_dashboard_to_runtime(output_path, dashboard_content, sidecar_content)
+
+
+def _path_relative_to(path: Path, root: Path) -> Path | None:
+    try:
+        return path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return None
+
+
+def _mirror_dashboard_to_runtime(
+    output_path: Path,
+    dashboard_content: str,
+    sidecar_content: str | None,
+) -> None:
+    if os.environ.get("STOCK_INVESTOR_DISABLE_RUNTIME_MIRROR"):
+        return
+    runtime_root = Path(
+        os.environ.get(
+            "STOCK_INVESTOR_RUNTIME_ROOT",
+            str(Path.home() / "Library" / "Application Support" / "stock-investor"),
         )
+    )
+    source_root_file = runtime_root / ".source-root"
+    if not source_root_file.exists():
+        return
+    source_root = Path(source_root_file.read_text().strip())
+    relative = _path_relative_to(output_path, source_root)
+    if relative is None:
+        return
+    mirror_path = runtime_root / relative
+    if mirror_path.resolve() == output_path.resolve():
+        return
+    atomic_write_text(dashboard_content, mirror_path)
+    if sidecar_content is not None:
+        atomic_write_text(sidecar_content, mirror_path.with_name("chart-payloads-v1.json"))

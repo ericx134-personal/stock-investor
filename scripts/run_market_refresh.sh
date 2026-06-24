@@ -4,23 +4,10 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SOURCE_ROOT_FILE="$PROJECT_ROOT/.source-root"
 
-sync_from_source_root() {
-  local source_root="$1"
-  [[ -d "$source_root/src" && -d "$source_root/scripts" ]] || return 0
-  [[ "$source_root" != "$PROJECT_ROOT" ]] || return 0
-  echo "Syncing runtime code from $source_root" >&2
-  rsync -a --delete "$source_root/src/" "$PROJECT_ROOT/src/"
-  rsync -a --delete "$source_root/scripts/" "$PROJECT_ROOT/scripts/"
-  rsync -a --delete "$source_root/models/" "$PROJECT_ROOT/models/"
-  rsync -a "$source_root/web/" "$PROJECT_ROOT/"
-  cp "$source_root/pyproject.toml" "$PROJECT_ROOT/pyproject.toml"
-  mkdir -p "$PROJECT_ROOT/portfolio"
-  rsync -a --delete "$source_root/portfolio/" "$PROJECT_ROOT/portfolio/"
-}
-
 if [[ "${1:-}" != "--synced" && -f "$SOURCE_ROOT_FILE" ]]; then
-  SOURCE_ROOT="$(cat "$SOURCE_ROOT_FILE")"
-  sync_from_source_root "$SOURCE_ROOT"
+  if ! "$PROJECT_ROOT/scripts/sync_runtime.sh"; then
+    echo "warning: runtime sync failed; refreshing with existing runtime copy" >&2
+  fi
   exec "$PROJECT_ROOT/scripts/run_market_refresh.sh" --synced
 fi
 

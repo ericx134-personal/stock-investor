@@ -21,6 +21,19 @@ It combines independent signals, portfolio risk, and explicit rules to produce
 review alerts. It does not promise perfect entry or exit prices, and it does
 not place trades automatically.
 
+## Development Commands
+
+Use the tiered Makefile targets instead of running the full suite by habit:
+
+```bash
+make test       # L1 fast regression, default
+make test-l2    # broader core regression
+make test-l3    # full audit + public safety
+make sync-runtime  # publish local private dashboard/code to the Mac service copy
+```
+
+See [Testing Strategy](docs/TESTING.md) for when to use each level.
+
 ## Principles
 
 - Protect against avoidable portfolio risk before seeking extra return.
@@ -174,7 +187,12 @@ PYTHONPATH=src python3 -m stock_investor.cli import-snaptrade-accounts \
 
 The SnapTrade importer reads accounts, balances, and positions only. It writes
 masked account numbers and normalized positions under ignored private paths.
-Trading endpoints are not used.
+Trading endpoints are not used. When
+`data/private/brokers/snaptrade-accounts.json` exists, the local dashboard
+automatically adds a separate Fidelity tab with account totals, account cards,
+cash/buying power, sync status, and imported positions. Those positions are
+shown for account visibility first; 401k funds, cash sweeps, and non-stock
+instruments are not forced into stock prediction signals.
 
 `fetch-sec` uses the SEC's official ticker-to-CIK mapping and Company Facts API
 to calculate annual quality and valuation scores. The SEC requires an
@@ -262,7 +280,8 @@ PYTHONPATH=src python3 -m stock_investor.cli dashboard \
   --wave-conditional-scorecard data/private/wave-conditional-scorecard.json \
   --direction-forecasts data/private/wave-direction-forecasts.jsonl \
   --direction-forecast-outcomes data/private/wave-direction-forecast-outcomes.json \
-  --prices data/private/robinhood-prices.csv
+  --prices data/private/robinhood-prices.csv \
+  --snaptrade-accounts data/private/brokers/snaptrade-accounts.json
 ```
 
 The dashboard opens as a compact all-holdings portfolio board led by a large
@@ -429,9 +448,14 @@ macOS privacy controls prevent background LaunchAgents from reliably reading
 `Documents`, so the installer keeps private runtime data under
 `~/Library/Application Support/stock-investor`. The repo remains the source of
 truth for code: the installer records the repo path in `.source-root`, and the
-scheduled refresh self-syncs application code from that repo before generating
-the dashboard. Re-run the installer only after moving the repo or changing
-LaunchAgent templates, not after ordinary code edits.
+web/refresh services self-sync application code from that repo before serving
+or generating the dashboard. `write_dashboard` also mirrors generated dashboard
+HTML and `chart-payloads-v1.json` into the installed runtime when `.source-root`
+points back to this repo, so the stable bookmark does not keep showing an old
+workspace copy. Use `make sync-runtime` only when you intentionally want to
+copy current private artifacts into the service runtime. Re-run the installer
+only after moving the repo or changing LaunchAgent templates, not after
+ordinary code edits.
 
 The refresh service fetches account-aligned daily bars through Yahoo Finance chart
 data by default. Set `ACCOUNT_HISTORY_START_DATE=YYYY-MM-DD` in the private
@@ -538,7 +562,7 @@ results defeats the purpose.
 Run tests:
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
+make test-l3
 ```
 
 See [docs/STRATEGY.md](docs/STRATEGY.md) for the research-backed strategy and

@@ -22,10 +22,12 @@ resolved locally.
    `docs/LONG_HORIZON_ROADMAP.md` for detailed backlog context.
 2. Write down the hypothesis and validation rule before inspecting outcomes.
 3. Implement the smallest complete change with focused tests.
-4. Run the full suite:
+4. Run the cheapest test level that matches the change:
 
    ```bash
-   PYTHONPATH=src python3 -m unittest discover -s tests
+   make test      # L1 default
+   make test-l2   # when touching model/evaluation/risk/dashboard internals
+   make test-l3   # full audit before release/public sharing
    ```
 
 5. Run the public-safety gate before pushing:

@@ -3,6 +3,7 @@ import unittest
 import json
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from stock_investor.dashboard import (
     _chart_ranges,
@@ -188,6 +189,31 @@ class DashboardTests(unittest.TestCase):
         self.assertIsNone(sidecar["symbols"]["ABC"]["ranges"]["1D"]["fallback_reason"])
         self.assertIn('data-src="chart-payloads-v1.json"', dashboard_html)
         self.assertNotIn("bars_daily", dashboard_html)
+
+    def test_dashboard_write_mirrors_installed_runtime_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            runtime = root / "runtime"
+            output = source / "data" / "private" / "dashboard-v3.html"
+            runtime.mkdir()
+            (runtime / ".source-root").write_text(str(source))
+            html = (
+                '<html><script type="application/json" id="chart-payloads-v1">'
+                '{"version":1,"source":"dashboard-v3","symbols":{}}</script></html>'
+            )
+            with patch.dict(
+                "os.environ",
+                {"STOCK_INVESTOR_RUNTIME_ROOT": str(runtime)},
+                clear=False,
+            ):
+                write_dashboard(html, output)
+
+            mirrored = runtime / "data" / "private" / "dashboard-v3.html"
+            mirrored_payload = runtime / "data" / "private" / "chart-payloads-v1.json"
+            self.assertTrue(mirrored.exists())
+            self.assertTrue(mirrored_payload.exists())
+            self.assertIn('data-src="chart-payloads-v1.json"', mirrored.read_text())
 
     def test_direction_forecast_outcomes_become_kline_markers(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -704,6 +730,99 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('data-chart-mode="candles"', page)
         self.assertIn('data-chart-mode="line"', page)
         self.assertIn('data-chart-range="1W"', page)
+
+    def test_dashboard_adds_fidelity_tab_from_snaptrade_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            alerts = root / "alerts.jsonl"
+            alerts.write_text(
+                json.dumps(
+                    {
+                        "symbol": "ABC",
+                        "shares": 10,
+                        "average_cost": 90,
+                        "cost_basis": 900,
+                        "market_value": 1000,
+                        "portfolio_weight": 1.0,
+                        "latest_close": 100,
+                        "unrealized_return": 0.111111,
+                        "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                        "technicals": {},
+                    }
+                )
+                + "\n"
+            )
+            snaptrade = root / "snaptrade-accounts.json"
+            snaptrade.write_text(
+                json.dumps(
+                    {
+                        "captured_at": "2026-06-24T00:25:08+00:00",
+                        "position_count": 2,
+                        "unique_symbols": ["FDIC91315", "TCEHY"],
+                        "accounts": [
+                            {
+                                "account": {
+                                    "name": "BrokerageLink",
+                                    "number": "***4500",
+                                    "institution_name": "Fidelity",
+                                    "balance": {
+                                        "total": {"amount": 1550.0, "currency": "USD"}
+                                    },
+                                    "sync_status": {
+                                        "holdings": {
+                                            "last_successful_sync": "2026-06-24T00:11:13+00:00"
+                                        }
+                                    },
+                                },
+                                "balances": [{"cash": 50.0, "buying_power": 75.0}],
+                                "positions": [
+                                    {
+                                        "symbol": "TCEHY",
+                                        "description": "Tencent Holdings Ltd UNS ADR",
+                                        "units": 30,
+                                        "price": 50.0,
+                                        "average_purchase_price": 45.0,
+                                    }
+                                ],
+                            },
+                            {
+                                "account": {
+                                    "name": "Health Savings Account",
+                                    "number": "***0135",
+                                    "institution_name": "Fidelity",
+                                    "balance": {
+                                        "total": {"amount": 1200.0, "currency": "USD"}
+                                    },
+                                },
+                                "balances": [{"cash": 1200.0, "buying_power": 1200.0}],
+                                "positions": [
+                                    {
+                                        "symbol": "FDIC91315",
+                                        "description": "FDIC insured deposit",
+                                        "units": 1200,
+                                        "price": 1.0,
+                                    }
+                                ],
+                            },
+                        ],
+                    }
+                )
+            )
+
+            page = build_dashboard(alerts, snaptrade_accounts_path=snaptrade)
+
+        self.assertIn('data-tab-target="portfolio"', page)
+        self.assertIn(">Robinhood</button>", page)
+        self.assertIn('data-tab-target="fidelity"', page)
+        self.assertIn('id="tab-fidelity"', page)
+        self.assertIn("Fidelity via SnapTrade", page)
+        self.assertIn("$2,750.00", page)
+        self.assertIn("2 accounts · 2 positions · 2 symbols", page)
+        self.assertIn("BrokerageLink", page)
+        self.assertIn("Health Savings Account", page)
+        self.assertIn("TCEHY", page)
+        self.assertIn("FDIC91315", page)
+        self.assertIn("401k funds, cash sweeps, and non-stock instruments", page)
 
     def test_dashboard_warns_but_keeps_stale_robinhood_account_view_visible(self):
         with tempfile.TemporaryDirectory() as directory:

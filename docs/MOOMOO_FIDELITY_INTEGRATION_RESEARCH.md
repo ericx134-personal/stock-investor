@@ -88,16 +88,19 @@ Official references:
 - https://www.fidelity.com/security/third-party-app-protection
 - https://nb.fidelity.com/public/nb/default/resourceslibrary_redesign/articles/datasecurity
 
-Implemented SnapTrade first step:
+Implemented SnapTrade/Fidelity state:
 
-- `snaptrade-register-user` registers the chosen SnapTrade user ID
-  (`ericx134`) under the user's SnapTrade API key and returns a generated
-  `userSecret`.
+- Personal SnapTrade keys represent the user's own SnapTrade user, so
+  `snaptrade-register-user` is not needed for the current setup and exits with
+  a clear message when SnapTrade reports a Personal key.
 - `snaptrade-login-url` generates a read-only Connection Portal URL with
   `connectionType=read`; Fidelity username, password, and MFA stay inside the
   Fidelity/SnapTrade authorization flow.
 - `import-snaptrade-accounts` reads SnapTrade accounts, balances, and positions
   into ignored private JSON with masked account numbers.
+- The private dashboard can now render a separate Fidelity tab from
+  `data/private/brokers/snaptrade-accounts.json`, showing account totals,
+  cash/buying power, per-account sync status, and imported positions.
 - No SnapTrade trading endpoints are implemented.
 
 CSV fallback only:
@@ -130,7 +133,10 @@ What not to do:
 
 Near-term dashboard behavior:
 
-- Holdings tab: real combined positions from Robinhood plus future Fidelity.
+- Robinhood tab: current stock-decision surface and prediction details.
+- Fidelity tab: imported Fidelity/SnapTrade accounts and positions for
+  visibility only; 401k funds, cash sweeps, and non-stock instruments are not
+  forced into stock prediction signals.
 - Watchlist tab: Moomoo watchlist names, symbols, and research status.
 - Opportunities tab: only active BUY/SELL/WAIT review candidates from the model.
 - Data health tab: per-source freshness, missing symbols, and import warnings.
@@ -150,9 +156,8 @@ contract, many thin read-only importers.
 
 ## Recommended Next Milestones
 
-1. Moomoo watchlist importer, read-only, no trading context.
-2. Combined holdings merger with per-broker source attribution.
-3. Fidelity CSV importer for 401k/exported holdings.
-4. Moomoo K-line fallback provider only after the watchlist importer is stable.
-5. Optional Moomoo annotation import only if an official/user export format is
+1. Combined holdings merger with per-broker source attribution.
+2. Fidelity CSV importer only as a fallback if SnapTrade coverage fails.
+3. Moomoo K-line fallback provider only after the watchlist importer is stable.
+4. Optional Moomoo annotation import only if an official/user export format is
    confirmed.

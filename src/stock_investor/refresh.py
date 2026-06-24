@@ -474,11 +474,15 @@ def run_refresh(
     price_source: str | None = None,
     latest_quotes_path: str | Path | None = None,
     price_adjustment: str | None = None,
+    snaptrade_accounts_path: str | Path | None = None,
 ) -> dict:
     """Refresh all read-only decision-support artifacts, writing the manifest last."""
     started_at = datetime.now(timezone.utc)
     output_dir = Path(output_dir)
     paths = _artifact_paths(output_dir, model_version)
+    if snaptrade_accounts_path is None:
+        default_snaptrade = output_dir / "brokers" / "snaptrade-accounts.json"
+        snaptrade_accounts_path = default_snaptrade if default_snaptrade.exists() else None
     positions = load_positions(positions_path)
     held_symbols = {position.symbol for position in positions if position.shares > 0}
     prices = load_prices(prices_path)
@@ -827,6 +831,7 @@ def run_refresh(
             prices_path=prices_path,
             latest_quotes_path=latest_quotes_path,
             account_summary_path=account_summary_path,
+            snaptrade_accounts_path=snaptrade_accounts_path,
         ),
         paths["dashboard"],
     )

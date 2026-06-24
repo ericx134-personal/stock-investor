@@ -640,15 +640,15 @@ These refusals are part of the research output, not limitations to hide.
 
 ## Reproducible Public Workflow
 
-Generate synthetic daily prices, run the complete refresh, and execute all
-tests:
+Generate synthetic daily prices, run the complete refresh, and execute the
+appropriate tiered tests:
 
 ```bash
 python3 examples/generate_demo_prices.py
 PYTHONPATH=src python3 -m stock_investor.cli refresh \
   examples/positions.csv examples/prices.csv data/demo \
   --model-version decision-support-v3 --benchmark SPY
-PYTHONPATH=src python3 -m unittest discover -s tests
+make test-l2
 ```
 
 Generated `data/` and all real `portfolio/` artifacts are ignored. Teammates

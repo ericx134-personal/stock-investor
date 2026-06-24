@@ -215,8 +215,10 @@ Current execution queue:
   aggregation cannot cover the needed account.
 - [x] M103A Add a SnapTrade/Fidelity read-only authorization and account
   import scaffold.
-- [ ] M103B Complete SnapTrade/Fidelity live authorization with `ericx134` and
+- [x] M103B Complete SnapTrade/Fidelity live authorization with `ericx134` and
   import real accounts.
+- [x] M103C Add a Fidelity dashboard tab from the ignored SnapTrade account
+  snapshot without mixing 401k/cash instruments into stock predictions.
 - [ ] M104 Add Moomoo K-line fallback data only after M101 is stable.
 - [ ] M105 Evaluate Moomoo annotation import only if an official export format
   is confirmed.
