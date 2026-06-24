@@ -37,7 +37,7 @@ echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] starting scheduled market refresh"
 echo "Using Yahoo Finance chart data (no credentials)" >&2
 START_DATE="${ACCOUNT_HISTORY_START_DATE:-${YAHOO_START_DATE:-}}"
 if [[ -z "$START_DATE" ]]; then
-  START_DATE="$(date -v-730d +%Y-%m-%d)"
+  START_DATE="2017-01-01"
 fi
 END_DATE="$(date -v+1d +%Y-%m-%d)"
 PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli fetch-yahoo \

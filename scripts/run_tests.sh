@@ -20,6 +20,7 @@ L1_TESTS=(
   tests.test_data
   tests.test_yahoo
   tests.test_refresh
+  tests.test_web_server
   tests.test_dashboard.DashboardTests.test_dashboard_write_mirrors_installed_runtime_copy
   tests.test_dashboard.DashboardTests.test_dashboard_adds_fidelity_tab_from_snaptrade_snapshot
   tests.test_dashboard.DashboardTests.test_dashboard_uses_latest_quote_overlay_for_front_page_price

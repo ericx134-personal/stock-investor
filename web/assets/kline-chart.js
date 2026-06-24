@@ -156,9 +156,6 @@
     if (!payload || !payload.ranges || !payload.ranges[rangeName]) return [];
     const range = payload.ranges[rangeName];
     if (range.bars) return range.bars;
-    if (rangeName === "1D" && payload.bars_intraday && payload.bars_intraday.length) {
-      return payload.bars_intraday;
-    }
     const daily = payload.bars_daily || [];
     if (!daily.length) return [];
     let selected = daily;
@@ -201,7 +198,7 @@
   function barSpacingFor(root, visibleCount) {
     const width = root ? root.clientWidth : 760;
     const referenceBars = Math.max(visibleCount, 1);
-    return Math.max(1.25, Math.min(3.4, width / referenceBars));
+    return Math.max(1.25, Math.min(8, width / referenceBars));
   }
 
   function activeRange(payload) {
@@ -354,27 +351,35 @@
     const last = renderedBarCount - 1;
     const capacity = Math.max(1, Number(visibleCapacity || 0));
     const width = Math.max(0, Number(visible.to) - Number(visible.from));
-    const first = Math.min(0, last - Math.max(width, capacity - 1));
+    const first = 0;
+    const maxTo = Math.max(last, capacity - 1, width);
     let from = Number(visible.from);
     let to = Number(visible.to);
-    if (from >= first - edgeTolerance && to <= last + edgeTolerance) return null;
+    if (from >= first - edgeTolerance && to <= maxTo + edgeTolerance) return null;
     if (width <= 0 || renderedBarCount <= 1) {
       from = first;
-      to = last;
+      to = Math.max(last, capacity - 1);
     } else if (from < first) {
       from = first;
       to = first + width;
-    } else if (to > last) {
-      to = last;
-      from = last - width;
+    } else if (to > maxTo) {
+      to = maxTo;
+      from = maxTo - width;
     }
     from = Math.max(first, from);
-    to = Math.min(last, to);
+    to = Math.min(maxTo, to);
     if (to - from < width && last > first) {
-      if (from === first) to = Math.min(last, from + width);
-      if (to === last) from = Math.max(first, to - width);
+      if (from === first) to = Math.min(maxTo, from + width);
+      if (to === maxTo) from = Math.max(first, to - width);
     }
     return { from, to };
+  }
+
+  function initialLogicalRange(renderedBarCount, visibleCapacity) {
+    const last = Math.max(0, renderedBarCount - 1);
+    const capacity = Math.max(1, Number(visibleCapacity || 1));
+    if (renderedBarCount <= capacity) return { from: 0, to: capacity - 1 };
+    return { from: Math.max(0, last - capacity + 1), to: last };
   }
 
   function recordChartDebugState(state) {
@@ -456,6 +461,34 @@
     root.addEventListener("pointerleave", endDrag);
   }
 
+  function installVerticalZoom(state, root) {
+    root.addEventListener("wheel", (event) => {
+      if (!state.renderedBarCount) return;
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      const timeScale = state.chart.timeScale();
+      const visible = timeScale.getVisibleLogicalRange ? timeScale.getVisibleLogicalRange() : null;
+      if (!visible || visible.from === undefined || visible.to === undefined) return;
+      const width = Math.max(8, Number(visible.to) - Number(visible.from));
+      const zoomIn = event.deltaY < 0;
+      const nextWidth = Math.max(
+        12,
+        Math.min(Math.max(state.renderedBarCount - 1, state.visibleBarCapacity - 1), width * (zoomIn ? 0.82 : 1.22))
+      );
+      const center = (Number(visible.from) + Number(visible.to)) / 2;
+      const target = { from: center - nextWidth / 2, to: center + nextWidth / 2 };
+      const bounded = boundedLogicalRange(state.renderedBarCount, target, state.visibleBarCapacity) || target;
+      timeScale.setVisibleLogicalRange(bounded);
+      const rootWidth = root ? root.clientWidth : 760;
+      state.currentBarSpacing = Math.max(1.25, Math.min(8, rootWidth / Math.max(nextWidth, 1)));
+      timeScale.applyOptions({ barSpacing: state.currentBarSpacing });
+      requestAnimationFrame(() => {
+        recordChartDebugState(state);
+        updateOverlays(state);
+      });
+    }, { passive: false });
+  }
+
   function renderRange(card, rangeName) {
     const state = stateByCard.get(card);
     if (!state) return;
@@ -505,9 +538,7 @@
       fixRightEdge: false,
       rightOffset: 0,
     });
-    const to = Math.max(0, bars.length - 1);
-    const from = to - visibleCapacity + 1;
-    state.chart.timeScale().setVisibleLogicalRange({ from, to });
+    state.chart.timeScale().setVisibleLogicalRange(initialLogicalRange(bars.length, visibleCapacity));
     clampVisibleLogicalRange(state);
     requestAnimationFrame(() => {
       recordChartDebugState(state);
@@ -612,10 +643,11 @@
       renderedBarCount: 0,
       visibleBarCapacity: 0,
       clampingRange: false,
-      mode: card.dataset.chartMode || "candles",
+      mode: card.dataset.chartMode || "line",
       currentBarSpacing: 3,
     };
     installManualPan(state, root);
+    installVerticalZoom(state, root);
     chart.subscribeCrosshairMove((param) => renderTooltip(state, param));
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       clampVisibleLogicalRange(state);

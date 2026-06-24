@@ -81,7 +81,7 @@ from .scoring import SignalSnapshot, evaluate
 from .thesis import load_theses
 
 
-DEFAULT_YAHOO_LOOKBACK_DAYS = 730
+DEFAULT_ACCOUNT_HISTORY_START_DATE = "2017-01-01"
 DEFAULT_SNAPTRADE_ACCOUNTS_PATH = Path("data/private/brokers/snaptrade-accounts.json")
 
 
@@ -91,7 +91,7 @@ def _default_yahoo_start() -> str:
     )
     if configured_start:
         return configured_start
-    return (date.today() - timedelta(days=DEFAULT_YAHOO_LOOKBACK_DAYS)).isoformat()
+    return DEFAULT_ACCOUNT_HISTORY_START_DATE
 
 
 def _default_snaptrade_accounts_path(path: str | None) -> str | None:

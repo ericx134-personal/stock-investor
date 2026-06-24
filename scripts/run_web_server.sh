@@ -22,4 +22,5 @@ if [[ "${STOCK_INVESTOR_SKIP_RUNTIME_SYNC:-}" != "1" && -x "$SYNC_SCRIPT" ]]; th
   fi
 fi
 
-exec "$PYTHON_BIN" -m http.server "$WEB_PORT" --bind "$WEB_BIND" --directory "$RUNTIME_ROOT"
+PYTHONPATH="$RUNTIME_ROOT/src" exec "$PYTHON_BIN" -m stock_investor.web_server \
+  --port "$WEB_PORT" --bind "$WEB_BIND" --directory "$RUNTIME_ROOT"
