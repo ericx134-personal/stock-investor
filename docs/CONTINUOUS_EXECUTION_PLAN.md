@@ -62,7 +62,8 @@ Near-term product goals:
 Current execution queue:
 
 - P1: M102 add combined holdings/watchlist merger with per-source attribution.
-- P1: M103 add Fidelity CSV holdings import.
+- P1: M103B complete SnapTrade/Fidelity live authorization and import once API
+  keys are available; keep CSV only as a fallback, not the primary path.
 - P1: M082 add BUY/SELL/WAIT, sector, weight, and confidence filters.
 - P2: M061-M063 market-regime conditioning only after stability gates pass.
 - P2: M058 target-zone touch-rate replay and post-touch outcomes.
@@ -210,7 +211,12 @@ Current execution queue:
 
 - [x] M101 Add a read-only Moomoo watchlist importer.
 - [ ] M102 Add a combined holdings merger with per-source attribution.
-- [ ] M103 Add a Fidelity CSV importer for 401k/exported holdings.
+- [ ] M103 Add a Fidelity CSV importer only as a fallback if authorized
+  aggregation cannot cover the needed account.
+- [x] M103A Add a SnapTrade/Fidelity read-only authorization and account
+  import scaffold.
+- [ ] M103B Complete SnapTrade/Fidelity live authorization with `ericx134` and
+  import real accounts.
 - [ ] M104 Add Moomoo K-line fallback data only after M101 is stable.
 - [ ] M105 Evaluate Moomoo annotation import only if an official export format
   is confirmed.

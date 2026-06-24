@@ -149,6 +149,35 @@ does not trade, change Moomoo state, or store brokerage credentials. The
 Python SDK is only a client; it cannot read personal watchlists until local
 OpenD is running and logged in to the user's Moomoo account.
 
+## Fidelity / SnapTrade Read-Only Import
+
+Fidelity should use OAuth-style authorization through SnapTrade/Fidelity
+Access, not password scraping. You choose your SnapTrade dashboard username and
+password on SnapTrade's site. Inside this project, choose a stable
+`SNAPTRADE_USER_ID`; SnapTrade generates `SNAPTRADE_USER_SECRET`. Fidelity
+username, password, and MFA are entered only in the Fidelity authorization page.
+
+```bash
+export SNAPTRADE_CLIENT_ID="..."
+export SNAPTRADE_CONSUMER_KEY="..."
+
+PYTHONPATH=src python3 -m stock_investor.cli snaptrade-register-user ericx134 \
+  --output data/private/brokers/snaptrade-user.json
+
+export SNAPTRADE_USER_ID="ericx134"
+export SNAPTRADE_USER_SECRET="the-userSecret-from-the-private-json"
+
+PYTHONPATH=src python3 -m stock_investor.cli snaptrade-login-url --broker FIDELITY
+# Open the printed URL, log in to Fidelity there, and approve read-only access.
+
+PYTHONPATH=src python3 -m stock_investor.cli import-snaptrade-accounts \
+  data/private/brokers/snaptrade-accounts.json
+```
+
+The SnapTrade importer reads accounts, balances, and positions only. It writes
+masked account numbers and normalized positions under ignored private paths.
+Trading endpoints are not used.
+
 `fetch-sec` uses the SEC's official ticker-to-CIK mapping and Company Facts API
 to calculate annual quality and valuation scores. The SEC requires an
 identifying user agent, and the client paces requests below its published

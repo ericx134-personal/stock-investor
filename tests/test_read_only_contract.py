@@ -8,6 +8,12 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_FILES = sorted((ROOT / "src").rglob("*.py")) + sorted(
     (ROOT / "scripts").rglob("*.sh")
 )
+ALLOWED_READ_ONLY_HTTP_POSTS = {
+    "snaptrade.py": {
+        "/snapTrade/registerUser",
+        "/snapTrade/login",
+    }
+}
 FORBIDDEN_BROKERAGE_WRITES = re.compile(
     r"\b("
     r"place_(equity|option|crypto|futures)_order|"
@@ -45,9 +51,15 @@ class ReadOnlyContractTests(unittest.TestCase):
                         and str(keyword.value.value).upper()
                         in {"POST", "PUT", "PATCH", "DELETE"}
                     ):
+                        if _is_allowed_read_only_auth_post(path, node):
+                            continue
                         violations.append(
                             f"{path.relative_to(ROOT)}:{getattr(node, 'lineno', '?')}"
                         )
+                if _is_forbidden_snaptrade_post(path, node):
+                    violations.append(
+                        f"{path.relative_to(ROOT)}:{getattr(node, 'lineno', '?')}"
+                    )
         self.assertEqual(violations, [], f"HTTP write requests found: {violations}")
 
     def test_market_refresh_uses_no_credential_provider_by_default(self):
@@ -71,6 +83,32 @@ class ReadOnlyContractTests(unittest.TestCase):
         self.assertNotIn("APCA_API_SECRET_KEY", cli)
         self.assertNotIn("fetch-alpaca", script)
         self.assertNotIn("fetch-alpaca", cli)
+
+
+def _is_allowed_read_only_auth_post(path: Path, node: ast.Call) -> bool:
+    if path.name != "snaptrade.py":
+        return False
+    allowed = ALLOWED_READ_ONLY_HTTP_POSTS.get(path.name, set())
+    return any(
+        isinstance(argument, ast.Constant) and argument.value in allowed
+        for argument in node.args
+    )
+
+
+def _is_forbidden_snaptrade_post(path: Path, node: ast.Call) -> bool:
+    if path.name != "snaptrade.py":
+        return False
+    if not isinstance(node.func, ast.Attribute) or node.func.attr != "_request":
+        return False
+    if not node.args:
+        return False
+    method = node.args[0]
+    if not (isinstance(method, ast.Constant) and method.value == "POST"):
+        return False
+    for argument in node.args[1:]:
+        if isinstance(argument, ast.Constant):
+            return argument.value not in ALLOWED_READ_ONLY_HTTP_POSTS[path.name]
+    return True
 
 
 if __name__ == "__main__":

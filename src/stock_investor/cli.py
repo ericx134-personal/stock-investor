@@ -55,6 +55,14 @@ from .providers.moomoo import (
 )
 from .providers.robinhood import extract_historicals_from_session, load_historical_response
 from .providers.sec import fetch_company_facts, fetch_submissions, fetch_ticker_ciks
+from .providers.snaptrade import (
+    DEFAULT_BROKER as SNAPTRADE_DEFAULT_BROKER,
+    SnapTradeClient,
+    SnapTradeProviderError,
+    fetch_snaptrade_snapshot,
+    load_snaptrade_credentials,
+    write_snaptrade_snapshot,
+)
 from .providers.yahoo import (
     fetch_yahoo_daily_bars,
     fetch_yahoo_latest_quotes,
@@ -716,6 +724,92 @@ def _import_moomoo_watchlist(
     return 0
 
 
+def _snaptrade_register_user(user_id: str, output_path: str | None) -> int:
+    try:
+        credentials = load_snaptrade_credentials()
+        payload = SnapTradeClient(credentials).register_user(user_id)
+    except SnapTradeProviderError as error:
+        raise SystemExit(str(error)) from error
+    content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if output_path:
+        atomic_write_text(content, output_path)
+        print(f"Wrote SnapTrade user credentials to {output_path}")
+    else:
+        print(content, end="")
+    print("Store userSecret privately; do not commit it or put it in code.")
+    return 0
+
+
+def _snaptrade_login_url(
+    user_id: str | None,
+    user_secret: str | None,
+    broker: str | None,
+    custom_redirect: str | None,
+    output_path: str | None,
+) -> int:
+    try:
+        credentials = load_snaptrade_credentials(
+            require_user=not (user_id and user_secret)
+        )
+        resolved_user_id = user_id or credentials.user_id
+        resolved_user_secret = user_secret or credentials.user_secret
+        if not resolved_user_id or not resolved_user_secret:
+            raise SnapTradeProviderError(
+                "Provide --user-id and --user-secret or set SNAPTRADE_USER_ID "
+                "and SNAPTRADE_USER_SECRET."
+            )
+        payload = SnapTradeClient(credentials).login_url(
+            user_id=resolved_user_id,
+            user_secret=resolved_user_secret,
+            broker=broker,
+            custom_redirect=custom_redirect,
+        )
+    except SnapTradeProviderError as error:
+        raise SystemExit(str(error)) from error
+    content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if output_path:
+        atomic_write_text(content, output_path)
+        print(f"Wrote SnapTrade connection portal payload to {output_path}")
+    redirect = payload.get("redirectURI") if isinstance(payload, dict) else None
+    if redirect:
+        print(redirect)
+    else:
+        print(content, end="")
+    print("The connection portal URL expires in about 5 minutes.")
+    return 0
+
+
+def _import_snaptrade_accounts(
+    output_path: str,
+    user_id: str | None,
+    user_secret: str | None,
+) -> int:
+    try:
+        credentials = load_snaptrade_credentials(
+            require_user=not (user_id and user_secret)
+        )
+        resolved_user_id = user_id or credentials.user_id
+        resolved_user_secret = user_secret or credentials.user_secret
+        if not resolved_user_id or not resolved_user_secret:
+            raise SnapTradeProviderError(
+                "Provide --user-id and --user-secret or set SNAPTRADE_USER_ID "
+                "and SNAPTRADE_USER_SECRET."
+            )
+        payload = fetch_snaptrade_snapshot(
+            SnapTradeClient(credentials),
+            user_id=resolved_user_id,
+            user_secret=resolved_user_secret,
+        )
+    except SnapTradeProviderError as error:
+        raise SystemExit(str(error)) from error
+    write_snaptrade_snapshot(payload, output_path)
+    print(
+        f"Imported {payload['position_count']} SnapTrade positions across "
+        f"{payload['account_count']} accounts to {output_path}"
+    )
+    return 0
+
+
 def _diagnose_alerts(alerts_path: str, output_path: str | None) -> int:
     report = diagnose_alert_file(alerts_path)
     content = json.dumps(report, indent=2, sort_keys=True) + "\n"
@@ -1073,6 +1167,46 @@ def main() -> int:
     moomoo_watchlist_parser.add_argument("--port", type=int, default=MOOMOO_DEFAULT_PORT)
     moomoo_watchlist_parser.add_argument("--group", action="append", default=[])
 
+    snaptrade_register_parser = subparsers.add_parser(
+        "snaptrade-register-user",
+        help="register a SnapTrade user and store the returned user secret privately",
+    )
+    snaptrade_register_parser.add_argument(
+        "user_id",
+        help="stable SnapTrade user ID chosen by you; not a Fidelity username",
+    )
+    snaptrade_register_parser.add_argument("--output")
+
+    snaptrade_login_parser = subparsers.add_parser(
+        "snaptrade-login-url",
+        help="generate a read-only SnapTrade connection portal URL",
+    )
+    snaptrade_login_parser.add_argument(
+        "--user-id",
+        help="SnapTrade user ID chosen by you; defaults to SNAPTRADE_USER_ID",
+    )
+    snaptrade_login_parser.add_argument(
+        "--user-secret",
+        help="SnapTrade-generated user secret; defaults to SNAPTRADE_USER_SECRET",
+    )
+    snaptrade_login_parser.add_argument("--broker", default=SNAPTRADE_DEFAULT_BROKER)
+    snaptrade_login_parser.add_argument("--custom-redirect")
+    snaptrade_login_parser.add_argument("--output")
+
+    snaptrade_import_parser = subparsers.add_parser(
+        "import-snaptrade-accounts",
+        help="read SnapTrade accounts, balances, and positions into private JSON",
+    )
+    snaptrade_import_parser.add_argument("output")
+    snaptrade_import_parser.add_argument(
+        "--user-id",
+        help="SnapTrade user ID chosen by you; defaults to SNAPTRADE_USER_ID",
+    )
+    snaptrade_import_parser.add_argument(
+        "--user-secret",
+        help="SnapTrade-generated user secret; defaults to SNAPTRADE_USER_SECRET",
+    )
+
     diagnose_alerts_parser = subparsers.add_parser(
         "diagnose-alerts",
         help="measure selectivity and alert-fatigue risk from latest symbol alerts",
@@ -1295,6 +1429,18 @@ def main() -> int:
             args.port,
             tuple(args.group),
         )
+    if args.command == "snaptrade-register-user":
+        return _snaptrade_register_user(args.user_id, args.output)
+    if args.command == "snaptrade-login-url":
+        return _snaptrade_login_url(
+            args.user_id,
+            args.user_secret,
+            args.broker,
+            args.custom_redirect,
+            args.output,
+        )
+    if args.command == "import-snaptrade-accounts":
+        return _import_snaptrade_accounts(args.output, args.user_id, args.user_secret)
     if args.command == "diagnose-alerts":
         return _diagnose_alerts(args.alerts, args.output)
     if args.command == "compare-models":

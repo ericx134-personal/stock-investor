@@ -88,24 +88,37 @@ Official references:
 - https://www.fidelity.com/security/third-party-app-protection
 - https://nb.fidelity.com/public/nb/default/resourceslibrary_redesign/articles/datasecurity
 
-Best first implementation:
+Implemented SnapTrade first step:
 
-1. Add a `portfolio/fidelity-positions.csv` import path.
-2. Normalize Fidelity rows into the same position schema as Robinhood.
-3. Add a broker merge step that sums shares by symbol and computes weighted
+- `snaptrade-register-user` registers the chosen SnapTrade user ID
+  (`ericx134`) under the user's SnapTrade API key and returns a generated
+  `userSecret`.
+- `snaptrade-login-url` generates a read-only Connection Portal URL with
+  `connectionType=read`; Fidelity username, password, and MFA stay inside the
+  Fidelity/SnapTrade authorization flow.
+- `import-snaptrade-accounts` reads SnapTrade accounts, balances, and positions
+  into ignored private JSON with masked account numbers.
+- No SnapTrade trading endpoints are implemented.
+
+CSV fallback only:
+
+The user does not have a Fidelity CSV export available. Do not block on CSV.
+Only add a CSV importer if SnapTrade/Fidelity Access cannot cover the needed
+account or a one-off export becomes available later.
+
+1. Add a broker merge step that sums shares by symbol and computes weighted
    average cost where cost basis is available.
-4. Classify 401k mutual funds or target-date funds without ticker-compatible
+2. Classify 401k mutual funds or target-date funds without ticker-compatible
    daily prices separately instead of forcing stock signals.
-5. Add account-level fields only when available: account value, contribution
+3. Add account-level fields only when available: account value, contribution
    source if exported, cash/buying power if meaningful, and as-of timestamp.
 
 Longer-term Fidelity options:
 
-- Use Fidelity Access only if this project becomes a registered app or routes
-  through a supported aggregator that the user explicitly authorizes.
-- Treat Plaid/Finicity/Akoya-style aggregation as a separate product decision:
-  it adds vendor dependency, token handling, data retention policy, and likely
-  paid API access.
+- Continue with SnapTrade if the free tier remains sufficient for the user's
+  personal Fidelity/401k connection.
+- Re-evaluate Akoya/Plaid/Finicity only if SnapTrade coverage, freshness, or
+  pricing becomes inadequate.
 
 What not to do:
 
