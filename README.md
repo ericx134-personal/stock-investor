@@ -158,14 +158,16 @@ password on SnapTrade's site. Inside this project, choose a stable
 username, password, and MFA are entered only in the Fidelity authorization page.
 
 ```bash
-export SNAPTRADE_CLIENT_ID="..."
-export SNAPTRADE_CONSUMER_KEY="..."
+# Put these in data/private/service.env; the CLI also respects shell exports.
+SNAPTRADE_CLIENT_ID="..."
+SNAPTRADE_CONSUMER_KEY="..."
+SNAPTRADE_USER_ID="ericx134"
 
 PYTHONPATH=src python3 -m stock_investor.cli snaptrade-register-user ericx134 \
   --output data/private/brokers/snaptrade-user.json
 
-export SNAPTRADE_USER_ID="ericx134"
-export SNAPTRADE_USER_SECRET="the-userSecret-from-the-private-json"
+# Then paste the returned userSecret into data/private/service.env:
+SNAPTRADE_USER_SECRET="the-userSecret-from-the-private-json"
 
 PYTHONPATH=src python3 -m stock_investor.cli snaptrade-login-url --broker FIDELITY
 # Open the printed URL, log in to Fidelity there, and approve read-only access.

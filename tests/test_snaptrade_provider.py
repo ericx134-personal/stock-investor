@@ -5,12 +5,14 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from stock_investor.providers.snaptrade import (
     SnapTradeClient,
     SnapTradeCredentials,
     compute_request_signature,
     fetch_snaptrade_snapshot,
+    load_snaptrade_credentials,
     write_snaptrade_snapshot,
 )
 
@@ -164,6 +166,47 @@ class SnapTradeProviderTests(unittest.TestCase):
             write_snaptrade_snapshot(payload, path)
             loaded = json.loads(path.read_text())
         self.assertEqual(loaded, payload)
+
+    def test_load_credentials_reads_private_service_env(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / "service.env"
+            env_path.write_text(
+                "\n".join(
+                    [
+                        "SNAPTRADE_CLIENT_ID=file-client",
+                        "SNAPTRADE_CONSUMER_KEY='file-key'",
+                        "SNAPTRADE_USER_ID=ericx134",
+                        'SNAPTRADE_USER_SECRET="file-secret"',
+                    ]
+                )
+            )
+            with patch.dict("os.environ", {}, clear=True):
+                loaded = load_snaptrade_credentials(require_user=True, env_path=env_path)
+
+        self.assertEqual(loaded.client_id, "file-client")
+        self.assertEqual(loaded.consumer_key, "file-key")
+        self.assertEqual(loaded.user_id, "ericx134")
+        self.assertEqual(loaded.user_secret, "file-secret")
+
+    def test_environment_overrides_private_service_env(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / "service.env"
+            env_path.write_text(
+                "SNAPTRADE_CLIENT_ID=file-client\n"
+                "SNAPTRADE_CONSUMER_KEY=file-key\n"
+            )
+            with patch.dict(
+                "os.environ",
+                {
+                    "SNAPTRADE_CLIENT_ID": "env-client",
+                    "SNAPTRADE_CONSUMER_KEY": "env-key",
+                },
+                clear=True,
+            ):
+                loaded = load_snaptrade_credentials(env_path=env_path)
+
+        self.assertEqual(loaded.client_id, "env-client")
+        self.assertEqual(loaded.consumer_key, "env-key")
 
 
 if __name__ == "__main__":

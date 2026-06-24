@@ -34,13 +34,18 @@ class SnapTradeCredentials:
     base_url: str = DEFAULT_BASE_URL
 
 
-def load_snaptrade_credentials(require_user: bool = False) -> SnapTradeCredentials:
+def load_snaptrade_credentials(
+    require_user: bool = False,
+    *,
+    env_path: str | Path | None = None,
+) -> SnapTradeCredentials:
+    environment = _merged_environment(env_path)
     credentials = SnapTradeCredentials(
-        client_id=(os.environ.get("SNAPTRADE_CLIENT_ID") or "").strip(),
-        consumer_key=(os.environ.get("SNAPTRADE_CONSUMER_KEY") or "").strip(),
-        user_id=(os.environ.get("SNAPTRADE_USER_ID") or "").strip() or None,
-        user_secret=(os.environ.get("SNAPTRADE_USER_SECRET") or "").strip() or None,
-        base_url=(os.environ.get("SNAPTRADE_BASE_URL") or DEFAULT_BASE_URL).rstrip("/"),
+        client_id=(environment.get("SNAPTRADE_CLIENT_ID") or "").strip(),
+        consumer_key=(environment.get("SNAPTRADE_CONSUMER_KEY") or "").strip(),
+        user_id=(environment.get("SNAPTRADE_USER_ID") or "").strip() or None,
+        user_secret=(environment.get("SNAPTRADE_USER_SECRET") or "").strip() or None,
+        base_url=(environment.get("SNAPTRADE_BASE_URL") or DEFAULT_BASE_URL).rstrip("/"),
     )
     missing = []
     if not credentials.client_id:
@@ -56,6 +61,41 @@ def load_snaptrade_credentials(require_user: bool = False) -> SnapTradeCredentia
             "Missing SnapTrade environment variables: " + ", ".join(missing)
         )
     return credentials
+
+
+def _merged_environment(env_path: str | Path | None = None) -> dict[str, str]:
+    environment = dict(os.environ)
+    configured_path = env_path or os.environ.get("STOCK_INVESTOR_SERVICE_ENV")
+    path = Path(configured_path) if configured_path else Path("data/private/service.env")
+    if path.exists():
+        file_values = _parse_service_env(path)
+        for key, value in file_values.items():
+            environment.setdefault(key, value)
+    return environment
+
+
+def _parse_service_env(path: Path) -> dict[str, str]:
+    values = {}
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = _unquote_env_value(value.strip())
+        if key:
+            values[key] = value
+    return values
+
+
+def _unquote_env_value(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
 
 
 class SnapTradeClient:
