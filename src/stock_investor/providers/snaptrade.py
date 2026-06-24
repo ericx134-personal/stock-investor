@@ -120,8 +120,8 @@ class SnapTradeClient:
     def login_url(
         self,
         *,
-        user_id: str,
-        user_secret: str,
+        user_id: str | None = None,
+        user_secret: str | None = None,
         broker: str | None = DEFAULT_BROKER,
         custom_redirect: str | None = None,
     ) -> dict[str, Any]:
@@ -139,15 +139,20 @@ class SnapTradeClient:
         return self._request(
             "POST",
             "/snapTrade/login",
-            query_pairs=(("userId", user_id), ("userSecret", user_secret)),
+            query_pairs=_user_query_pairs(user_id, user_secret),
             body=body,
         )
 
-    def list_accounts(self, *, user_id: str, user_secret: str) -> list[dict[str, Any]]:
+    def list_accounts(
+        self,
+        *,
+        user_id: str | None = None,
+        user_secret: str | None = None,
+    ) -> list[dict[str, Any]]:
         response = self._request(
             "GET",
             "/accounts",
-            query_pairs=(("userId", user_id), ("userSecret", user_secret)),
+            query_pairs=_user_query_pairs(user_id, user_secret),
         )
         if not isinstance(response, list):
             raise SnapTradeProviderError("SnapTrade accounts response is not a list")
@@ -157,13 +162,13 @@ class SnapTradeClient:
         self,
         *,
         account_id: str,
-        user_id: str,
-        user_secret: str,
+        user_id: str | None = None,
+        user_secret: str | None = None,
     ) -> list[dict[str, Any]]:
         response = self._request(
             "GET",
             f"/accounts/{account_id}/balances",
-            query_pairs=(("userId", user_id), ("userSecret", user_secret)),
+            query_pairs=_user_query_pairs(user_id, user_secret),
         )
         if not isinstance(response, list):
             raise SnapTradeProviderError("SnapTrade balances response is not a list")
@@ -173,13 +178,13 @@ class SnapTradeClient:
         self,
         *,
         account_id: str,
-        user_id: str,
-        user_secret: str,
+        user_id: str | None = None,
+        user_secret: str | None = None,
     ) -> dict[str, Any]:
         response = self._request(
             "GET",
             f"/accounts/{account_id}/positions/all",
-            query_pairs=(("userId", user_id), ("userSecret", user_secret)),
+            query_pairs=_user_query_pairs(user_id, user_secret),
         )
         if not isinstance(response, dict):
             raise SnapTradeProviderError("SnapTrade positions response is not an object")
@@ -261,11 +266,20 @@ def compute_request_signature(
     return base64.b64encode(digest).decode()
 
 
+def _user_query_pairs(
+    user_id: str | None,
+    user_secret: str | None,
+) -> tuple[tuple[str, str], ...]:
+    if user_id and user_secret:
+        return (("userId", user_id), ("userSecret", user_secret))
+    return ()
+
+
 def fetch_snaptrade_snapshot(
     client: SnapTradeClient,
     *,
-    user_id: str,
-    user_secret: str,
+    user_id: str | None = None,
+    user_secret: str | None = None,
 ) -> dict[str, Any]:
     accounts = client.list_accounts(user_id=user_id, user_secret=user_secret)
     account_snapshots = []

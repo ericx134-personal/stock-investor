@@ -138,6 +138,17 @@ class SnapTradeProviderTests(unittest.TestCase):
         self.assertEqual(login_body["connectionType"], "read")
         self.assertEqual(login_body["broker"], "FIDELITY")
 
+    def test_personal_login_omits_user_identity_query(self):
+        opener = FakeOpener()
+        client = SnapTradeClient(credentials(), opener=opener, clock=lambda: 123)
+
+        login = client.login_url(broker="FIDELITY")
+
+        self.assertEqual(login["redirectURI"], "https://app.snaptrade.test/connect")
+        self.assertIn("/snapTrade/login?clientId=CID&timestamp=123", opener.requests[0].full_url)
+        self.assertNotIn("userId=", opener.requests[0].full_url)
+        self.assertNotIn("userSecret=", opener.requests[0].full_url)
+
     def test_fetch_snapshot_masks_account_number_and_normalizes_positions(self):
         opener = FakeOpener()
         client = SnapTradeClient(credentials(), opener=opener, clock=lambda: 123)
@@ -158,6 +169,15 @@ class SnapTradeProviderTests(unittest.TestCase):
         self.assertEqual(account["positions"][0]["symbol"], "AAPL")
         self.assertEqual(account["positions"][0]["units"], 3.0)
         self.assertEqual(account["positions"][1]["market_value"], 500.5)
+
+    def test_fetch_personal_snapshot_omits_user_identity_query(self):
+        opener = FakeOpener()
+        client = SnapTradeClient(credentials(), opener=opener, clock=lambda: 123)
+
+        payload = fetch_snaptrade_snapshot(client)
+
+        self.assertEqual(payload["account_count"], 1)
+        self.assertTrue(all("userSecret=" not in item.full_url for item in opener.requests))
 
     def test_write_snapshot(self):
         payload = {"schema_version": 1, "source": "snaptrade"}

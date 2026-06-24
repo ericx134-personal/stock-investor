@@ -729,7 +729,14 @@ def _snaptrade_register_user(user_id: str, output_path: str | None) -> int:
         credentials = load_snaptrade_credentials()
         payload = SnapTradeClient(credentials).register_user(user_id)
     except SnapTradeProviderError as error:
-        raise SystemExit(str(error)) from error
+        message = str(error)
+        if "Personal SnapTrade keys" in message:
+            print(
+                "SnapTrade reports this is a Personal key. Registration is not "
+                "needed; use snaptrade-login-url directly."
+            )
+            return 0
+        raise SystemExit(message) from error
     content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if output_path:
         atomic_write_text(content, output_path)
@@ -748,16 +755,9 @@ def _snaptrade_login_url(
     output_path: str | None,
 ) -> int:
     try:
-        credentials = load_snaptrade_credentials(
-            require_user=not (user_id and user_secret)
-        )
+        credentials = load_snaptrade_credentials()
         resolved_user_id = user_id or credentials.user_id
         resolved_user_secret = user_secret or credentials.user_secret
-        if not resolved_user_id or not resolved_user_secret:
-            raise SnapTradeProviderError(
-                "Provide --user-id and --user-secret or set SNAPTRADE_USER_ID "
-                "and SNAPTRADE_USER_SECRET."
-            )
         payload = SnapTradeClient(credentials).login_url(
             user_id=resolved_user_id,
             user_secret=resolved_user_secret,
@@ -785,16 +785,9 @@ def _import_snaptrade_accounts(
     user_secret: str | None,
 ) -> int:
     try:
-        credentials = load_snaptrade_credentials(
-            require_user=not (user_id and user_secret)
-        )
+        credentials = load_snaptrade_credentials()
         resolved_user_id = user_id or credentials.user_id
         resolved_user_secret = user_secret or credentials.user_secret
-        if not resolved_user_id or not resolved_user_secret:
-            raise SnapTradeProviderError(
-                "Provide --user-id and --user-secret or set SNAPTRADE_USER_ID "
-                "and SNAPTRADE_USER_SECRET."
-            )
         payload = fetch_snaptrade_snapshot(
             SnapTradeClient(credentials),
             user_id=resolved_user_id,

@@ -153,21 +153,17 @@ OpenD is running and logged in to the user's Moomoo account.
 
 Fidelity should use OAuth-style authorization through SnapTrade/Fidelity
 Access, not password scraping. You choose your SnapTrade dashboard username and
-password on SnapTrade's site. Inside this project, choose a stable
-`SNAPTRADE_USER_ID`; SnapTrade generates `SNAPTRADE_USER_SECRET`. Fidelity
-username, password, and MFA are entered only in the Fidelity authorization page.
+password on SnapTrade's site. For a SnapTrade Personal account, the personal
+client ID and consumer key represent your own SnapTrade user, so this project
+does not call `registerUser` and does not need `SNAPTRADE_USER_SECRET`.
+Fidelity username, password, and MFA are entered only in the Fidelity
+authorization page.
 
 ```bash
 # Put these in data/private/service.env; the CLI also respects shell exports.
 SNAPTRADE_CLIENT_ID="..."
 SNAPTRADE_CONSUMER_KEY="..."
 SNAPTRADE_USER_ID="ericx134"
-
-PYTHONPATH=src python3 -m stock_investor.cli snaptrade-register-user ericx134 \
-  --output data/private/brokers/snaptrade-user.json
-
-# Then paste the returned userSecret into data/private/service.env:
-SNAPTRADE_USER_SECRET="the-userSecret-from-the-private-json"
 
 PYTHONPATH=src python3 -m stock_investor.cli snaptrade-login-url --broker FIDELITY
 # Open the printed URL, log in to Fidelity there, and approve read-only access.
