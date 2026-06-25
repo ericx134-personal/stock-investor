@@ -632,7 +632,47 @@ def _asset_home(snapshot: dict, account_summary: dict, portfolio_totals: dict) -
         )
         subtitle = "Local portfolio file only"
         captured = str(account_summary.get("imported_at") or "unknown")[:10]
-    action_cards = broker_cards + """
+    today_dollars = portfolio_totals.get("today_dollars")
+    today_percent = (
+        float(today_dollars) / float(total_value)
+        if today_dollars is not None and total_value
+        else None
+    )
+    top_gain = portfolio_totals.get("top_today_gain")
+    top_loss = portfolio_totals.get("top_today_loss")
+    largest_weight = portfolio_totals.get("largest_weight")
+    signal_counts = portfolio_totals.get("signal_counts") or {}
+    buy_count = int(signal_counts.get("BUY", 0) or 0)
+    sell_count = int(signal_counts.get("SELL", 0) or 0)
+    wait_count = int(signal_counts.get("WAIT", 0) or 0)
+    triage_cards = "".join(
+        [
+            _asset_home_stat_card(
+                "Today P/L",
+                _signed_money(float(today_dollars)) if today_dollars is not None else "pending",
+                f"{_optional_signed_percent(today_percent)} of assets",
+                "positive" if today_dollars is not None and float(today_dollars) >= 0 else "negative",
+            ),
+            _asset_home_mover_card("Best today", top_gain, "positive"),
+            _asset_home_mover_card("Worst today", top_loss, "negative"),
+            _asset_home_stat_card(
+                "Largest weight",
+                (
+                    f"{html.escape(str(largest_weight.get('symbol', '')))} {_percent(largest_weight.get('weight'))}"
+                    if isinstance(largest_weight, dict)
+                    else "pending"
+                ),
+                "single-position concentration",
+            ),
+            _asset_home_stat_card(
+                "Valid signals",
+                f"{buy_count} BUY · {sell_count} SELL",
+                f"{wait_count} WAIT hidden until evidence improves",
+                "positive" if buy_count else ("negative" if sell_count else ""),
+            ),
+        ]
+    )
+    action_cards = triage_cards + broker_cards + """
         <button type="button" class="asset-nav-card" data-jump-tab="signals">
           <small>Signals</small><b>Holdings board</b><span>Prices, P/L, and model status</span>
         </button>
@@ -650,6 +690,30 @@ def _asset_home(snapshot: dict, account_summary: dict, portfolio_totals: dict) -
         {action_cards}
       </div>
     </section>"""
+
+
+def _asset_home_stat_card(
+    label: str, value: str, detail: str = "", css_class: str = ""
+) -> str:
+    class_name = f"asset-stat-card {css_class}".strip()
+    return f"""
+        <div class="{html.escape(class_name)}">
+          <small>{html.escape(label)}</small><b>{value}</b><span>{html.escape(detail)}</span>
+        </div>"""
+
+
+def _asset_home_mover_card(label: str, move: object, css_class: str) -> str:
+    if not isinstance(move, dict):
+        return _asset_home_stat_card(label, "none", "no qualifying mover", css_class)
+    symbol = str(move.get("symbol", ""))
+    value = move.get("value")
+    percent = move.get("percent")
+    return _asset_home_stat_card(
+        label,
+        f"{html.escape(symbol)} {_signed_compact_money(float(value)) if value is not None else 'pending'}",
+        _optional_signed_percent(percent),
+        css_class,
+    )
 
 
 def _asset_home_broker_card(institution: str, accounts: list[dict]) -> str:
@@ -2321,6 +2385,10 @@ def build_dashboard(
         "cost_basis": 0.0,
         "gain_dollars": 0.0,
         "today_dollars": 0.0,
+        "top_today_gain": None,
+        "top_today_loss": None,
+        "largest_weight": None,
+        "signal_counts": {"BUY": 0, "SELL": 0, "WAIT": 0},
     }
     for index, record in enumerate(records):
         alert = record.get("alert", {})
@@ -2390,6 +2458,33 @@ def build_dashboard(
             portfolio_totals["gain_dollars"] += float(gain_dollars)
         if today_dollars is not None:
             portfolio_totals["today_dollars"] += float(today_dollars)
+            today_move = {
+                "symbol": symbol,
+                "value": float(today_dollars),
+                "percent": today_return,
+            }
+            if float(today_dollars) >= 0 and (
+                portfolio_totals["top_today_gain"] is None
+                or float(today_dollars)
+                > float(portfolio_totals["top_today_gain"].get("value", 0))
+            ):
+                portfolio_totals["top_today_gain"] = today_move
+            if float(today_dollars) < 0 and (
+                portfolio_totals["top_today_loss"] is None
+                or float(today_dollars)
+                < float(portfolio_totals["top_today_loss"].get("value", 0))
+            ):
+                portfolio_totals["top_today_loss"] = today_move
+        portfolio_weight = float(record.get("portfolio_weight") or 0)
+        if (
+            portfolio_totals["largest_weight"] is None
+            or portfolio_weight
+            > float(portfolio_totals["largest_weight"].get("weight", 0))
+        ):
+            portfolio_totals["largest_weight"] = {
+                "symbol": symbol,
+                "weight": portfolio_weight,
+            }
         wave = {
             **wave_snapshot.get(record.get("symbol", ""), {}),
             **_next_resistance_zone(
@@ -2411,6 +2506,9 @@ def build_dashboard(
         )
         signal_label, signal_class, signal_percent, signal_evidence = _board_signal(
             historical_wave
+        )
+        portfolio_totals["signal_counts"][signal_label] = (
+            int(portfolio_totals["signal_counts"].get(signal_label, 0)) + 1
         )
         signal_probability = (
             shrink_direction_probability(
@@ -3153,12 +3251,14 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .asset-home h2 {{ font-size:52px; letter-spacing:-2.2px; line-height:1; margin:4px 0 }}
 .asset-home p {{ color:var(--muted); margin:8px 0 0 }}
 .asset-home-actions {{ align-content:start; display:grid; gap:10px; grid-template-columns:repeat(2,minmax(0,1fr)) }}
-.asset-broker-card,.asset-nav-card {{ background:#101010; border:1px solid var(--line); border-radius:12px; color:var(--text); cursor:pointer; min-width:0; padding:12px; text-align:left }}
+.asset-broker-card,.asset-nav-card,.asset-stat-card {{ background:#101010; border:1px solid var(--line); border-radius:12px; color:var(--text); min-width:0; padding:12px; text-align:left }}
 .asset-broker-card {{ align-items:center; display:flex; gap:10px }}
 .asset-nav-card {{ align-items:start; display:grid; gap:3px; min-height:72px }}
 .asset-broker-card:hover,.asset-nav-card:hover,.asset-broker-card:focus-visible,.asset-nav-card:focus-visible {{ background:#151515; border-color:#3d3d3d; outline:none }}
-.asset-broker-card span,.asset-nav-card span {{ min-width:0 }} .asset-broker-card b,.asset-nav-card b {{ display:block; font-size:17px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
-.asset-broker-card em,.asset-nav-card span {{ color:var(--muted); display:block; font-size:12px; font-style:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
+.asset-broker-card,.asset-nav-card {{ cursor:pointer }}
+.asset-broker-card span,.asset-nav-card span,.asset-stat-card span {{ min-width:0 }} .asset-broker-card b,.asset-nav-card b,.asset-stat-card b {{ display:block; font-size:17px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
+.asset-broker-card em,.asset-nav-card span,.asset-stat-card span {{ color:var(--muted); display:block; font-size:12px; font-style:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
+.asset-stat-card.positive b {{ color:var(--green) }} .asset-stat-card.negative b {{ color:var(--red) }}
 .broker-board {{ display:grid; gap:14px; margin:12px 0 24px }}
 .broker-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:18px; grid-template-columns:minmax(260px,1.5fr) minmax(260px,1fr); min-width:0; padding:20px 22px }}
 .broker-brand {{ align-items:center; display:flex; gap:15px; min-width:0 }} .broker-icon {{ flex:0 0 auto; font-size:30px; height:58px; width:58px }}
@@ -3561,7 +3661,9 @@ const arrangePortfolioRows = (rows) => {{
 }};
 const sortHoldings = () => {{
   if (!portfolioSort || !portfolioList) return;
-  const [field, direction] = portfolioSort.value.split("-");
+  const selectedSort = portfolioSort.value;
+  const direction = selectedSort.endsWith("-asc") ? "asc" : "desc";
+  const field = selectedSort.replace(/-(asc|desc)$/, "");
   const datasetKey = {{
     value: "sortValue",
     today: "sortToday",
