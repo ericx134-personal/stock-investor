@@ -80,6 +80,7 @@ from .thesis import load_theses
 
 DEFAULT_ACCOUNT_HISTORY_START_DATE = "2017-01-01"
 DEFAULT_SNAPTRADE_ACCOUNTS_PATH = Path("data/private/brokers/snaptrade-accounts.json")
+DEFAULT_MOOMOO_WATCHLISTS_PATH = Path("data/private/brokers/moomoo-watchlists.json")
 
 
 def _default_yahoo_start() -> str:
@@ -95,6 +96,12 @@ def _default_snaptrade_accounts_path(path: str | None) -> str | None:
     if path:
         return path
     return str(DEFAULT_SNAPTRADE_ACCOUNTS_PATH) if DEFAULT_SNAPTRADE_ACCOUNTS_PATH.exists() else None
+
+
+def _default_moomoo_watchlists_path(path: str | None) -> str | None:
+    if path:
+        return path
+    return str(DEFAULT_MOOMOO_WATCHLISTS_PATH) if DEFAULT_MOOMOO_WATCHLISTS_PATH.exists() else None
 
 
 def _print_alert(symbol: str, action: str, score: float, reasons: tuple[str, ...]) -> None:
@@ -798,6 +805,7 @@ def _import_snaptrade_accounts(
     user_secret: str | None,
     account_summary_output: str | None,
     account_summary_institution: str | None,
+    include_balance_history: bool,
 ) -> int:
     try:
         credentials = load_snaptrade_credentials()
@@ -807,6 +815,7 @@ def _import_snaptrade_accounts(
             SnapTradeClient(credentials),
             user_id=resolved_user_id,
             user_secret=resolved_user_secret,
+            include_balance_history=include_balance_history,
         )
     except SnapTradeProviderError as error:
         raise SystemExit(str(error)) from error
@@ -905,6 +914,7 @@ def _dashboard(
     latest_quotes_path: str | None,
     account_summary_path: str | None,
     snaptrade_accounts_path: str | None,
+    moomoo_watchlists_path: str | None,
 ) -> int:
     write_dashboard(
         build_dashboard(
@@ -933,6 +943,9 @@ def _dashboard(
             snaptrade_accounts_path=_default_snaptrade_accounts_path(
                 snaptrade_accounts_path
             ),
+            moomoo_watchlists_path=_default_moomoo_watchlists_path(
+                moomoo_watchlists_path
+            ),
         ),
         output_path,
     )
@@ -958,6 +971,7 @@ def _refresh(
     latest_quotes_path: str | None,
     price_adjustment: str | None,
     snaptrade_accounts_path: str | None,
+    moomoo_watchlists_path: str | None,
     production_safe: bool,
 ) -> int:
     if cash_balance and account_summary_path:
@@ -990,6 +1004,9 @@ def _refresh(
             price_adjustment=price_adjustment,
             snaptrade_accounts_path=_default_snaptrade_accounts_path(
                 snaptrade_accounts_path
+            ),
+            moomoo_watchlists_path=_default_moomoo_watchlists_path(
+                moomoo_watchlists_path
             ),
         )
     print(
@@ -1228,6 +1245,11 @@ def main() -> int:
         "--account-summary-institution",
         help="optional institution filter for account-summary-output, e.g. Robinhood",
     )
+    snaptrade_import_parser.add_argument(
+        "--include-balance-history",
+        action="store_true",
+        help="also try SnapTrade beta account balance history; ignored per account if unavailable",
+    )
 
     diagnose_alerts_parser = subparsers.add_parser(
         "diagnose-alerts",
@@ -1299,6 +1321,7 @@ def main() -> int:
     dashboard_parser.add_argument("--latest-quotes")
     dashboard_parser.add_argument("--account-summary")
     dashboard_parser.add_argument("--snaptrade-accounts")
+    dashboard_parser.add_argument("--moomoo-watchlists")
 
     refresh_parser = subparsers.add_parser(
         "refresh",
@@ -1328,6 +1351,7 @@ def main() -> int:
         choices=("unknown", "none", "split", "all"),
     )
     refresh_parser.add_argument("--snaptrade-accounts")
+    refresh_parser.add_argument("--moomoo-watchlists")
     refresh_parser.add_argument("--production-safe", action="store_true")
 
     args = parser.parse_args()
@@ -1474,6 +1498,7 @@ def main() -> int:
             args.user_secret,
             args.account_summary_output,
             args.account_summary_institution,
+            args.include_balance_history,
         )
     if args.command == "diagnose-alerts":
         return _diagnose_alerts(args.alerts, args.output)
@@ -1515,6 +1540,7 @@ def main() -> int:
             args.latest_quotes,
             args.account_summary,
             args.snaptrade_accounts,
+            args.moomoo_watchlists,
         )
     if args.command == "refresh":
         return _refresh(
@@ -1535,6 +1561,7 @@ def main() -> int:
             args.latest_quotes,
             args.price_adjustment,
             args.snaptrade_accounts,
+            args.moomoo_watchlists,
             args.production_safe,
         )
     return 2

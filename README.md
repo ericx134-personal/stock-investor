@@ -405,8 +405,8 @@ stay fixed as the dashboard evolves. The direct legacy path
 The service is intentionally bound to localhost because it contains private
 portfolio data. `launchd` starts it after login and restarts it after a crash.
 
-Unattended latest-market-data updates use Yahoo Finance chart data by default
-and do not require credentials. A private runtime file at
+Unattended latest-market-data updates prefer local Moomoo OpenD chart/quote data
+and fall back to Yahoo Finance when OpenD or symbol coverage fails. A private runtime file at
 `~/Library/Application Support/stock-investor/data/private/service.env` is only
 needed for optional settings such as archive retention.
 
@@ -423,12 +423,13 @@ copy current private artifacts into the service runtime. Re-run the installer
 only after moving the repo or changing LaunchAgent templates, not after
 ordinary code edits.
 
-The refresh service fetches account-aligned daily bars through Yahoo Finance chart
-data by default. Set `ACCOUNT_HISTORY_START_DATE=YYYY-MM-DD` in the private
-`data/private/service.env` file to anchor charts at the brokerage account open
-date; `YAHOO_START_DATE` remains as a lower-priority manual override. If neither
-is set, the service falls back to the recent two-year window. The fetched bars
-are merged with the existing price file so unsupported or delisted
+The refresh service fetches account-aligned daily bars through Moomoo first and
+Yahoo only as fallback. Set `ACCOUNT_HISTORY_START_DATE=YYYY-MM-DD` in the
+private `data/private/service.env` file to choose the earliest market-data date
+for symbol charts; `YAHOO_START_DATE` remains as a lower-priority manual
+override. Account value charts are not reconstructed from current holdings:
+they appear only when the broker/aggregator returns real account balance
+history. The fetched market bars are merged with the existing price file so unsupported or delisted
 symbols keep their last known history, atomically replaces the price input only
 after a successful fetch, then runs the production-safe evidence refresh. It
 uses bounded Yahoo provider retries and classifies provider failures in the

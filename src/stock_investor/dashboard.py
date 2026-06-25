@@ -29,8 +29,6 @@ ACTION_RANK = {
     "HOLD": 4,
 }
 
-ACCOUNT_HISTORY_START = date(2017, 1, 1)
-ACCOUNT_HISTORY_MAX_ANCHOR_MULTIPLE = 4.0
 DEFAULT_CHART_MODE = "line"
 
 
@@ -262,12 +260,190 @@ def _snaptrade_buying_power(account_snapshot: dict) -> float:
     )
 
 
+def _snaptrade_margin_used(account_snapshot: dict) -> float:
+    return max(0.0, -_snaptrade_cash(account_snapshot))
+
+
 def _snaptrade_account_is_visible(account_snapshot: dict) -> bool:
     return (
         abs(_snaptrade_account_total(account_snapshot)) >= 0.01
         or abs(_snaptrade_cash(account_snapshot)) >= 0.01
         or abs(_snaptrade_buying_power(account_snapshot)) >= 0.01
         or bool(account_snapshot.get("positions") or [])
+    )
+
+
+def _visible_snaptrade_accounts(snapshot: dict | None) -> list[dict]:
+    if not snapshot:
+        return []
+    return [
+        row
+        for row in snapshot.get("accounts", [])
+        if isinstance(row, dict) and _snaptrade_account_is_visible(row)
+    ]
+
+
+def _snaptrade_balance_history(
+    snapshot: dict | None,
+    institution_name: str | None = None,
+) -> list[Price]:
+    institution_filter = institution_name.lower() if institution_name else None
+    selected_accounts = [
+        account
+        for account in _visible_snaptrade_accounts(snapshot)
+        if not institution_filter
+        or _snaptrade_institution(account).lower() == institution_filter
+    ]
+    if not selected_accounts:
+        return []
+    account_histories: list[dict[date, float]] = []
+    for account in selected_accounts:
+        prices = _snaptrade_account_balance_history(account)
+        if len(prices) < 2:
+            return []
+        account_points = {price.date: price.close for price in prices}
+        if len(account_points) < 2:
+            return []
+        account_histories.append(account_points)
+    common_dates = set(account_histories[0])
+    for account_points in account_histories[1:]:
+        common_dates &= set(account_points)
+    if len(common_dates) < 2:
+        return []
+    return [
+        Price(
+            date=day,
+            open=sum(account_points[day] for account_points in account_histories),
+            high=sum(account_points[day] for account_points in account_histories),
+            low=sum(account_points[day] for account_points in account_histories),
+            close=sum(account_points[day] for account_points in account_histories),
+            volume=0,
+        )
+        for day in sorted(common_dates)
+    ]
+
+
+def _snaptrade_account_balance_history(account_snapshot: dict) -> list[Price]:
+    history = account_snapshot.get("balance_history")
+    if not isinstance(history, dict):
+        return []
+    points = history.get("history", [])
+    if not isinstance(points, list):
+        return []
+    account_points: dict[date, float] = {}
+    for point in points:
+        parsed = _snaptrade_balance_history_point(point)
+        if parsed is None:
+            continue
+        day, value = parsed
+        account_points[day] = value
+    return [
+        Price(
+            date=day,
+            open=value,
+            high=value,
+            low=value,
+            close=value,
+            volume=0,
+        )
+        for day, value in sorted(account_points.items())
+    ]
+
+
+def _snaptrade_balance_history_point(point: object) -> tuple[date, float] | None:
+    if not isinstance(point, dict):
+        return None
+    raw_date = point.get("date")
+    value = _safe_float(
+        point.get("total_value")
+        if point.get("total_value") is not None
+        else point.get("value")
+    )
+    if not raw_date or value is None or value <= 0:
+        return None
+    try:
+        day = date.fromisoformat(str(raw_date)[:10])
+    except ValueError:
+        return None
+    return day, value
+
+
+def _snaptrade_balance_history_status(
+    snapshot: dict | None,
+    institution_name: str | None = None,
+) -> str:
+    institution_filter = institution_name.lower() if institution_name else None
+    selected_accounts = [
+        account
+        for account in _visible_snaptrade_accounts(snapshot)
+        if not institution_filter
+        or _snaptrade_institution(account).lower() == institution_filter
+    ]
+    if not selected_accounts:
+        return "No funded broker accounts are available for account history."
+    missing = [
+        account
+        for account in selected_accounts
+        if not isinstance(account.get("balance_history"), dict)
+    ]
+    if missing:
+        return "Exact broker account history is not available for every account yet."
+    sparse = [
+        account
+        for account in selected_accounts
+        if len(
+            [
+                point
+                for point in (account.get("balance_history") or {}).get("history", [])
+                if _snaptrade_balance_history_point(point) is not None
+            ]
+        )
+        < 2
+    ]
+    if sparse:
+        return "Exact broker account history does not have enough points yet."
+    return "Exact broker account history is not available yet."
+
+
+def _snaptrade_institution(account_snapshot: dict) -> str:
+    account = account_snapshot.get("account") or {}
+    return str(
+        account.get("institution_name")
+        or account.get("brokerage")
+        or account.get("broker")
+        or "Broker"
+    )
+
+
+def _slug(value: str) -> str:
+    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in value).strip("-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug or "broker"
+
+
+def _broker_logo(institution: str) -> tuple[str, str, str | None]:
+    normalized = institution.lower()
+    if "robinhood" in normalized:
+        return "broker-logo-robinhood", "R", "https://robinhood.com/favicon.ico"
+    if "fidelity" in normalized:
+        return "broker-logo-fidelity", "F", "https://www.fidelity.com/favicon.ico"
+    if "moomoo" in normalized:
+        return "broker-logo-moomoo", "M", "https://www.moomoo.com/favicon.ico"
+    return "broker-logo-generic", institution[:1].upper() or "B", None
+
+
+def _broker_logo_html(institution: str, size_class: str) -> str:
+    logo_class, fallback, icon_url = _broker_logo(institution)
+    if icon_url:
+        return (
+            f'<span class="{html.escape(size_class)} {html.escape(logo_class)}">'
+            f'<img src="{html.escape(icon_url)}" alt="{html.escape(institution)} icon" loading="lazy" referrerpolicy="no-referrer">'
+            f"<b>{html.escape(fallback)}</b></span>"
+        )
+    return (
+        f'<span class="{html.escape(size_class)} {html.escape(logo_class)}">'
+        f"{html.escape(fallback)}</span>"
     )
 
 
@@ -278,102 +454,230 @@ def _snaptrade_last_sync(account_snapshot: dict) -> str:
     return str(value or "pending")
 
 
-def _broker_position_rows(accounts: list[dict]) -> str:
+def _account_position_rows(account_snapshot: dict) -> str:
     rows = []
-    for account_snapshot in accounts:
-        account = account_snapshot.get("account") or {}
-        account_name = str(account.get("name") or "Broker account")
-        for position in account_snapshot.get("positions", []):
-            if not isinstance(position, dict):
-                continue
-            symbol = str(position.get("symbol") or "").upper()
-            if not symbol:
-                continue
-            description = str(position.get("description") or "")
-            units = _safe_float(position.get("units")) or 0.0
-            price = _safe_float(position.get("price"))
-            market_value = _snaptrade_position_value(position)
-            average_cost = _safe_float(position.get("average_purchase_price"))
-            rows.append(
-                (
-                    -market_value,
-                    symbol,
-                    f"""<tr>
-                      <td><b>{html.escape(symbol)}</b><span>{html.escape(description[:72])}</span></td>
-                      <td>{html.escape(account_name)}</td>
-                      <td>{_optional_number(units)}</td>
-                      <td>{_optional_money(price)}</td>
-                      <td>{_optional_money(market_value)}</td>
-                      <td>{_optional_money(average_cost)}</td>
-                    </tr>""",
-                )
+    for position in account_snapshot.get("positions", []):
+        if not isinstance(position, dict):
+            continue
+        symbol = str(position.get("symbol") or "").upper()
+        if not symbol:
+            continue
+        description = str(position.get("description") or "")
+        units = _safe_float(position.get("units")) or 0.0
+        price = _safe_float(position.get("price"))
+        market_value = _snaptrade_position_value(position)
+        average_cost = _safe_float(position.get("average_purchase_price"))
+        rows.append(
+            (
+                -market_value,
+                symbol,
+                f"""<tr>
+                  <td><b>{html.escape(symbol)}</b><span>{html.escape(description[:72])}</span></td>
+                  <td>{_optional_number(units)}</td>
+                  <td>{_optional_money(price)}</td>
+                  <td>{_optional_money(market_value)}</td>
+                  <td>{_optional_money(average_cost)}</td>
+                </tr>""",
             )
+        )
     return "".join(row for _, _, row in sorted(rows)) or (
-        '<tr><td colspan="6">No broker positions are available yet.</td></tr>'
+        '<tr><td colspan="5">No positions are available for this account yet.</td></tr>'
     )
 
 
-def _broker_account_card(account_snapshot: dict) -> str:
+def _broker_account_section(
+    account_snapshot: dict,
+    payload_registry: dict | None = None,
+) -> str:
     account = account_snapshot.get("account") or {}
     account_name = str(account.get("name") or "Broker account")
     account_number = str(account.get("number") or "masked")
+    institution = _snaptrade_institution(account_snapshot)
+    logo = _broker_logo_html(institution, "broker-icon-mini")
     total = _snaptrade_account_total(account_snapshot)
-    cash = _snaptrade_cash(account_snapshot)
+    margin_used = _snaptrade_margin_used(account_snapshot)
     buying_power = _snaptrade_buying_power(account_snapshot)
     positions = len(account_snapshot.get("positions", []) or [])
     sync_status = "synced" if "pending" not in _snaptrade_last_sync(account_snapshot) else "pending"
+    account_history = _snaptrade_account_balance_history(account_snapshot)
+    account_history_status = (
+        "Exact broker account history is not available for this account yet."
+        if len(account_history) < 2
+        else ""
+    )
+    today_return = None
+    if len(account_history) >= 2 and account_history[-2].close:
+        today_return = (account_history[-1].close - account_history[-2].close) / account_history[-2].close
+    chart_key = f"__ACCOUNT__-{_slug(institution)}-{_slug(account_number)}"
+    account_chart = _account_kline_card(
+        account_history,
+        total,
+        today_return,
+        payload_registry,
+        account_history_status,
+        chart_key,
+        account_name,
+        compact=True,
+    )
     return f"""
-      <article class="broker-account-card">
+      <article class="broker-account-panel">
         <div class="broker-card-title">
-          <span class="broker-icon-mini">B</span>
+          {logo}
           <div><b>{html.escape(account_name)}</b><small>{html.escape(account_number)}</small></div>
         </div>
         <div class="broker-card-grid">
           <span><small>Value</small><b>{_optional_money(total)}</b></span>
-          <span><small>Cash</small><b>{_optional_money(cash)}</b></span>
+          <span><small>Margin used</small><b>{_optional_money(margin_used)}</b></span>
           <span><small>Buying power</small><b>{_optional_money(buying_power)}</b></span>
           <span><small>Positions</small><b>{positions}</b></span>
         </div>
         <small class="broker-sync {html.escape(sync_status)}">Holdings sync: {html.escape(_snaptrade_last_sync(account_snapshot))}</small>
+        <div class="broker-account-chart">{account_chart}</div>
+        <div class="broker-table-wrap">
+          <table class="broker-positions-table"><thead><tr><th>Symbol</th><th>Shares</th><th>Price</th><th>Value</th><th>Avg cost</th></tr></thead><tbody>{_account_position_rows(account_snapshot)}</tbody></table>
+        </div>
       </article>"""
 
 
-def _broker_tab(snapshot: dict) -> str:
-    raw_accounts = [row for row in snapshot.get("accounts", []) if isinstance(row, dict)]
-    accounts = [row for row in raw_accounts if _snaptrade_account_is_visible(row)]
+def _broker_institution_view(
+    institution: str,
+    accounts: list[dict],
+    captured_at: str,
+    payload_registry: dict | None = None,
+) -> str:
     if not accounts:
         return """
         <section class="broker-board empty-state">
           Broker data is not connected yet. Use the SnapTrade read-only import, then refresh this dashboard.
         </section>"""
     total_value = sum(_snaptrade_account_total(account) for account in accounts)
-    total_cash = sum(_snaptrade_cash(account) for account in accounts)
+    total_margin_used = sum(_snaptrade_margin_used(account) for account in accounts)
     total_buying_power = sum(_snaptrade_buying_power(account) for account in accounts)
-    position_count = int(snapshot.get("position_count") or sum(len(account.get("positions", []) or []) for account in accounts))
-    unique_symbols = snapshot.get("unique_symbols") or []
-    captured_at = str(snapshot.get("captured_at") or "unknown")
+    position_count = sum(len(account.get("positions", []) or []) for account in accounts)
+    unique_symbols = sorted(
+        {
+            str(position.get("symbol") or "").upper()
+            for account in accounts
+            for position in account.get("positions", [])
+            if isinstance(position, dict) and position.get("symbol")
+        }
+    )
+    logo = _broker_logo_html(institution, "broker-icon")
     return f"""
-    <section class="broker-board" aria-label="Connected broker accounts">
+    <section class="broker-board" aria-label="{html.escape(institution)} accounts">
       <section class="broker-hero">
         <div class="broker-brand">
-          <span class="broker-icon">B</span>
-          <div><small>Connected brokers via SnapTrade · read only</small><h2>{_optional_money(total_value)}</h2><p>{len(accounts)} funded accounts · {position_count} positions · {len(unique_symbols)} symbols</p></div>
+          {logo}
+          <div><small>{html.escape(institution)} via SnapTrade · read only</small><h2>{_optional_money(total_value)}</h2><p>{len(accounts)} funded accounts · {position_count} positions · {len(unique_symbols)} symbols</p></div>
         </div>
         <div class="broker-totals">
-          <span><small>Cash</small><b>{_optional_money(total_cash)}</b></span>
+          <span><small>Margin used</small><b>{_optional_money(total_margin_used)}</b></span>
           <span><small>Buying power</small><b>{_optional_money(total_buying_power)}</b></span>
           <span><small>Last import</small><b>{html.escape(captured_at[:10])}</b></span>
         </div>
       </section>
       <section class="broker-accounts-grid">
-        {"".join(_broker_account_card(account) for account in accounts)}
+        {"".join(_broker_account_section(account, payload_registry) for account in accounts)}
       </section>
-      <section class="broker-positions-panel">
-        <div class="broker-section-heading"><small>Imported holdings</small><h3>Broker positions</h3></div>
-        <div class="broker-table-wrap">
-          <table class="broker-positions-table"><thead><tr><th>Symbol</th><th>Account</th><th>Shares</th><th>Price</th><th>Value</th><th>Avg cost</th></tr></thead><tbody>{_broker_position_rows(accounts)}</tbody></table>
-        </div>
-        <p class="note">401k funds, cash sweeps, and non-stock instruments are displayed here but are not promoted into stock prediction signals until the broker-neutral merger can classify them safely.</p>
+      <p class="note">Each account is shown separately. 401k funds, cash sweeps, and non-stock instruments stay visible here but are not promoted into stock prediction signals until the broker-neutral merger can classify them safely.</p>
+    </section>"""
+
+
+def _broker_tab_fragments(
+    snapshot: dict,
+    payload_registry: dict | None = None,
+) -> tuple[str, str]:
+    accounts = _visible_snaptrade_accounts(snapshot)
+    if not accounts:
+        return "", ""
+    grouped: dict[str, list[dict]] = {}
+    for account in accounts:
+        grouped.setdefault(_snaptrade_institution(account), []).append(account)
+    buttons = []
+    panels = []
+    captured_at = str(snapshot.get("captured_at") or "unknown")
+    for institution in sorted(grouped, key=lambda item: (item != "Robinhood", item)):
+        target = f"broker-{_slug(institution)}"
+        logo = _broker_logo_html(institution, "broker-tab-mark")
+        buttons.append(
+            f'<button type="button" class="tab-button" data-tab-target="{html.escape(target)}" role="tab" aria-selected="false">{logo}{html.escape(institution)}</button>'
+        )
+        panels.append(
+            f'<section id="tab-{html.escape(target)}" class="tab-view" role="tabpanel" hidden>{_broker_institution_view(institution, grouped[institution], captured_at, payload_registry)}</section>'
+        )
+    return "\n".join(buttons), "\n".join(panels)
+
+
+def _asset_home(snapshot: dict, account_summary: dict, portfolio_totals: dict) -> str:
+    accounts = _visible_snaptrade_accounts(snapshot)
+    if accounts:
+        total_value = sum(_snaptrade_account_total(account) for account in accounts)
+        position_count = sum(len(account.get("positions", []) or []) for account in accounts)
+        institutions = {_snaptrade_institution(account) for account in accounts}
+        subtitle = f"{len(institutions)} brokers · {len(accounts)} funded accounts · {position_count} positions"
+        captured = str(snapshot.get("captured_at") or "unknown")[:10]
+    else:
+        cash = float(account_summary.get("total_cash", 0.0) or 0.0)
+        total_value = (
+            account_summary.get("account_value")
+            if account_summary.get("account_value") is not None
+            else float(portfolio_totals.get("market_value", 0.0) or 0.0) + cash
+        )
+        subtitle = "Local portfolio file only"
+        captured = str(account_summary.get("imported_at") or "unknown")[:10]
+    return f"""
+    <section class="asset-home" aria-label="Total asset value">
+      <small>Total assets</small>
+      <h2>{_optional_money(total_value)}</h2>
+      <p>{html.escape(subtitle)} · updated {html.escape(captured)}</p>
+    </section>"""
+
+
+def _load_moomoo_watchlists(path: str | Path | None) -> dict:
+    if not path or not Path(path).exists():
+        return {}
+    return json.loads(Path(path).read_text())
+
+
+def _moomoo_watchlist_view(payload: dict) -> str:
+    groups = [row for row in payload.get("groups", []) if isinstance(row, dict)]
+    items = [row for row in payload.get("items", []) if isinstance(row, dict)]
+    if not groups and not items:
+        return """
+        <section class="moomoo-board empty-state">
+          Moomoo watchlists are not imported yet. Keep Moomoo OpenD online and run the refresh.
+        </section>"""
+    names_by_symbol = {
+        str(item.get("symbol") or "").upper(): str(item.get("name") or "")
+        for item in items
+        if item.get("symbol")
+    }
+    group_cards = []
+    for group in groups:
+        group_name = str(group.get("group_name") or "Watchlist")
+        symbols = [
+            str(symbol).upper()
+            for symbol in group.get("symbols", [])
+            if str(symbol).strip()
+        ]
+        chips = "".join(
+            f"<span><b>{html.escape(symbol)}</b><small>{html.escape(names_by_symbol.get(symbol, ''))}</small></span>"
+            for symbol in symbols
+        )
+        group_cards.append(
+            f"""<article class="moomoo-watchlist-card">
+              <header><small>Watchlist</small><h3>{html.escape(group_name)}</h3><b>{len(symbols)}</b></header>
+              <div class="moomoo-symbol-grid">{chips or '<p class="empty-state">No symbols in this group.</p>'}</div>
+            </article>"""
+        )
+    return f"""
+    <section class="moomoo-board" aria-label="Moomoo watchlists">
+      <section class="moomoo-hero">
+        {_broker_logo_html("Moomoo", "broker-icon")}
+        <div><small>Moomoo OpenD · read only</small><h2>{int(payload.get("symbol_count") or len(names_by_symbol))} symbols</h2><p>{int(payload.get("group_count") or len(groups))} watchlists · imported {html.escape(str(payload.get("captured_at") or "unknown")[:10])}</p></div>
+      </section>
+      <section class="moomoo-watchlists-grid">
+        {''.join(group_cards)}
       </section>
     </section>"""
 
@@ -468,159 +772,20 @@ def _refresh_control(latest_quotes_path: str | Path | None, fallback: str) -> st
     </section>"""
 
 
-def _portfolio_account_history(
-    records: list[dict],
-    chart_prices: dict[str, list[Price]],
-    cash_balance: float = 0.0,
-    start_date: date = ACCOUNT_HISTORY_START,
-) -> list[Price]:
-    dated_values: dict[date, dict[str, float]] = {}
-    dated_coverage: dict[date, int] = {}
-    holding_count = 0
-    for record in records:
-        shares = float(record.get("shares") or 0)
-        raw_symbol = str(record.get("symbol", ""))
-        symbol = raw_symbol.upper()
-        history = chart_prices.get(raw_symbol, []) or chart_prices.get(symbol, [])
-        if shares <= 0 or not history:
-            continue
-        holding_count += 1
-        for item in history:
-            if (
-                item.open is None
-                or item.high is None
-                or item.low is None
-                or item.close is None
-                or float(item.close) <= 0
-                or item.date < start_date
-            ):
-                continue
-            bucket = dated_values.setdefault(
-                item.date, {"open": 0.0, "high": 0.0, "low": 0.0, "close": 0.0, "volume": 0.0}
-            )
-            bucket["open"] += float(item.open) * shares
-            bucket["high"] += float(item.high) * shares
-            bucket["low"] += float(item.low) * shares
-            bucket["close"] += float(item.close) * shares
-            bucket["volume"] += float(item.volume or 0)
-            dated_coverage[item.date] = dated_coverage.get(item.date, 0) + 1
-    if not dated_values:
-        return []
-    min_coverage = max(1, int(max(1, holding_count) * 0.55))
-    points = []
-    for day, values in sorted(dated_values.items()):
-        if dated_coverage.get(day, 0) < min_coverage:
-            continue
-        points.append(
-            Price(
-                date=day,
-                open=values["open"] + cash_balance,
-                high=values["high"] + cash_balance,
-                low=values["low"] + cash_balance,
-                close=values["close"] + cash_balance,
-                volume=values["volume"],
-            )
-        )
-    return points
-
-
-def _filter_account_history_outliers(
-    points: list[Price],
-    anchor_value: float,
-    max_anchor_multiple: float = ACCOUNT_HISTORY_MAX_ANCHOR_MULTIPLE,
-) -> list[Price]:
-    if not points:
-        return []
-    max_anchor = (
-        anchor_value * max_anchor_multiple
-        if anchor_value and anchor_value > 0
-        else None
-    )
-    filtered: list[Price] = []
-    previous_close: float | None = None
-    for point in points:
-        values = [point.open, point.high, point.low, point.close]
-        if any(value is None or float(value) <= 0 for value in values):
-            continue
-        high = float(point.high or 0)
-        low = float(point.low or 0)
-        close = float(point.close or 0)
-        if max_anchor is not None and high > max_anchor:
-            continue
-        if previous_close is not None:
-            if close > previous_close * 3.0 or close < previous_close * 0.25:
-                continue
-            if high > previous_close * 3.5 or low < previous_close * 0.2:
-                continue
-        filtered.append(point)
-        previous_close = close
-    return filtered
-
-
-def _portfolio_account_intraday_bars(
-    records: list[dict],
-    latest_quotes: dict[str, dict],
-    cash_balance: float = 0.0,
-    max_points: int = 420,
-) -> list[dict]:
-    intraday_values: dict[int, float] = {}
-    intraday_coverage: dict[int, int] = {}
-    holding_count = 0
-    for record in records:
-        shares = float(record.get("shares") or 0)
-        raw_symbol = str(record.get("symbol", ""))
-        symbol = raw_symbol.upper()
-        quote = latest_quotes.get(raw_symbol) or latest_quotes.get(symbol) or {}
-        path = quote.get("intraday_path") or []
-        if shares <= 0 or not path:
-            continue
-        holding_count += 1
-        for point in path:
-            point_time = point.get("time")
-            price = _safe_float(point.get("price"))
-            if point_time is None or price is None or price <= 0:
-                continue
-            timestamp = int(float(point_time))
-            intraday_values[timestamp] = intraday_values.get(timestamp, 0.0) + price * shares
-            intraday_coverage[timestamp] = intraday_coverage.get(timestamp, 0) + 1
-    if not intraday_values or holding_count <= 0:
-        return []
-    min_coverage = max(1, int(max(1, holding_count) * 0.55))
-    bars = []
-    previous_close = None
-    for timestamp, value in sorted(intraday_values.items()):
-        if intraday_coverage.get(timestamp, 0) < min_coverage:
-            continue
-        close = value + cash_balance
-        open_value = previous_close if previous_close is not None else close
-        bars.append(
-            {
-                "time": timestamp,
-                "open": open_value,
-                "high": max(open_value, close),
-                "low": min(open_value, close),
-                "close": close,
-                "volume": 0.0,
-                "source": "intraday_quote_path",
-            }
-        )
-        previous_close = close
-    return bars[-max_points:] if len(bars) >= 2 else []
-
-
 def _account_chart_payload(
     history: list[Price],
     account_value: float,
     today_return: float | None,
     payload_registry: dict | None,
-    intraday_bars: list[dict] | None = None,
+    symbol_key: str = "__ACCOUNT__",
+    display_name: str = "Account",
 ) -> dict | None:
     clean_history = [
         item
         for item in history
         if item.open is not None and item.high is not None and item.low is not None
     ]
-    if len(clean_history) < 20:
+    if len(clean_history) < 2:
         return None
     payload = _kline_chart_payload(
         clean_history,
@@ -630,24 +795,15 @@ def _account_chart_payload(
         None,
         None,
         None,
-        "__ACCOUNT__",
+        symbol_key,
         account_value,
         today_return,
         [],
     )
-    clean_intraday = [
-        bar
-        for bar in (intraday_bars or [])
-        if bar.get("open") is not None
-        and bar.get("high") is not None
-        and bar.get("low") is not None
-        and bar.get("close") is not None
-    ]
-    if clean_intraday:
-        payload["bars_intraday"] = clean_intraday
-        payload["quality"]["intraday_available"] = True
-    payload["display_name"] = "Account"
+    payload["symbol"] = symbol_key
+    payload["display_name"] = display_name
     payload["signal"] = {"label": "ACCOUNT", "class": "wait", "probability": None}
+    payload["quality"]["source"] = "snaptrade_balance_history"
     if payload_registry is not None:
         payload_registry[payload["symbol"]] = payload
     return payload
@@ -689,20 +845,31 @@ def _account_kline_card(
     account_value: float,
     today_return: float | None,
     payload_registry: dict | None,
-    intraday_bars: list[dict] | None = None,
+    unavailable_message: str = "Exact broker account history is not available yet.",
+    symbol_key: str = "__ACCOUNT__",
+    display_name: str = "Account",
+    compact: bool = False,
 ) -> str:
     payload = _account_chart_payload(
-        history, account_value, today_return, payload_registry, intraday_bars
+        history,
+        account_value,
+        today_return,
+        payload_registry,
+        symbol_key,
+        display_name,
     )
     if not payload:
-        return '<div class="account-chart-empty">Account history is not available yet.</div>'
+        return (
+            f'<div class="account-chart-empty">{html.escape(unavailable_message)}</div>'
+        )
     active_range = (
         payload["default_range"]
         if payload["ranges"].get(payload["default_range"], {}).get("available")
         else "1M"
     )
-    return f"""<section class="kline-chart-card account-kline-card" data-chart-symbol="__ACCOUNT__" data-active-chart-range="{html.escape(active_range)}" data-chart-mode="{DEFAULT_CHART_MODE}">
-      <div class="interactive-kline" data-chart-root role="img" aria-label="Account interactive candlestick chart"></div>
+    compact_class = " compact-account-chart" if compact else ""
+    return f"""<section class="kline-chart-card account-kline-card{compact_class}" data-chart-symbol="{html.escape(symbol_key)}" data-active-chart-range="{html.escape(active_range)}" data-chart-mode="line">
+      <div class="interactive-kline" data-chart-root role="img" aria-label="{html.escape(display_name)} broker-reported account value history"></div>
       <div class="chart-overlay" data-chart-overlay aria-hidden="true"></div>
       <div class="chart-tooltip" aria-live="polite" hidden></div>
       <div class="chart-status" data-chart-status>Loading local chart runtime…</div>
@@ -711,48 +878,9 @@ def _account_kline_card(
         <div class="chart-range-tabs" aria-label="Account chart time range">
           {_range_buttons(payload)}
         </div>
-        <div class="chart-mode-tabs" aria-label="Account chart display type">
-          {_chart_mode_buttons()}
-        </div>
       </div>
-      <div class="chart-legend account-chart-legend"><span>Account OHLC</span><span>Approximate volume</span></div>
+      <div class="chart-legend account-chart-legend"><span>Broker-reported account value</span></div>
     </section>"""
-
-
-def _portfolio_value_chart(points: list[Price], css_class: str) -> str:
-    if len(points) < 2:
-        return '<div class="account-chart-empty">Portfolio history is not available yet.</div>'
-    width, height, pad_x, pad_y = 920, 260, 8, 18
-    values = [float(item.close) for item in points if item.close is not None and float(item.close) > 0]
-    low, high = min(values), max(values)
-    span = high - low or max(high * 0.01, 1)
-    step = (width - pad_x * 2) / (len(points) - 1)
-    coords = []
-    area_coords = [f"{pad_x},{height - pad_y}"]
-    for index, item in enumerate(points):
-        value = float(item.close)
-        x = pad_x + index * step
-        y = pad_y + (high - value) / span * (height - pad_y * 2)
-        coords.append(f"{x:.1f},{y:.1f}")
-        area_coords.append(f"{x:.1f},{y:.1f}")
-    area_coords.append(f"{width - pad_x},{height - pad_y}")
-    grid = "".join(
-        f'<line x1="{pad_x}" x2="{width - pad_x}" y1="{pad_y + index * (height - pad_y * 2) / 3:.1f}" '
-        f'y2="{pad_y + index * (height - pad_y * 2) / 3:.1f}"/>'
-        for index in range(4)
-    )
-    first_label = points[0].date.strftime("%b %-d")
-    last_label = points[-1].date.strftime("%b %-d")
-    return (
-        f'<svg class="account-value-chart {html.escape(css_class)}" viewBox="0 0 {width} {height}" '
-        f'role="img" aria-label="Approximate account value history">'
-        f'<g class="account-grid">{grid}</g>'
-        f'<polygon class="account-area" points="{" ".join(area_coords)}"/>'
-        f'<polyline class="account-line" points="{" ".join(coords)}"/>'
-        f'<text x="{pad_x}" y="{height - 2}">{html.escape(first_label)}</text>'
-        f'<text x="{width - pad_x}" y="{height - 2}" text-anchor="end">{html.escape(last_label)}</text>'
-        f"</svg>"
-    )
 
 
 def _portfolio_account_overview(
@@ -760,7 +888,7 @@ def _portfolio_account_overview(
     history: list[Price],
     account_summary: dict,
     payload_registry: dict | None,
-    intraday_bars: list[dict] | None = None,
+    account_history_status: str | None = None,
 ) -> str:
     holdings_value = (
         _safe_float(account_summary.get("holdings_value"))
@@ -784,9 +912,12 @@ def _portfolio_account_overview(
     today_class = "positive" if today_dollars >= 0 else "negative"
     gain_class = "positive" if gain_dollars >= 0 else "negative"
     margin_class = "negative" if margin_used > 0 else "positive"
-    filtered_history = _filter_account_history_outliers(history, account_value)
     chart = _account_kline_card(
-        filtered_history, account_value, today_pct, payload_registry, intraday_bars
+        history,
+        account_value,
+        today_pct,
+        payload_registry,
+        account_history_status or "Exact broker account history is not available yet.",
     )
     return f"""
     <section class="account-overview" aria-label="Account overview">
@@ -1911,6 +2042,7 @@ def build_dashboard(
     latest_quotes_path: str | Path | None = None,
     account_summary_path: str | Path | None = None,
     snaptrade_accounts_path: str | Path | None = None,
+    moomoo_watchlists_path: str | Path | None = None,
 ) -> str:
     records = _latest_by_symbol(_load_jsonl(alerts_path))
     diagnostic = analyze_alert_burden(records)
@@ -1969,6 +2101,7 @@ def build_dashboard(
     account_summary = _load_account_summary(account_summary_path)
     account_connection = _account_connection_state(account_summary_path, account_summary)
     snaptrade_accounts = _load_snaptrade_accounts(snaptrade_accounts_path)
+    moomoo_watchlists = _load_moomoo_watchlists(moomoo_watchlists_path)
     wave_scorecard = (
         json.loads(Path(wave_scorecard_path).read_text())
         if wave_scorecard_path and Path(wave_scorecard_path).exists()
@@ -2499,27 +2632,31 @@ def build_dashboard(
     top_sell = (
         sorted_signal_tuples["SELL"][0][2] if sorted_signal_tuples["SELL"] else "none"
     )
-    account_cash_balance = float(account_summary.get("total_cash", 0.0) or 0.0)
-    account_history = _portfolio_account_history(
-        records,
-        chart_prices,
-        account_cash_balance,
-    )
-    account_intraday_bars = _portfolio_account_intraday_bars(
-        records,
-        latest_quotes,
-        account_cash_balance,
-    )
-    portfolio_account_overview = (
-        _account_connection_notice(account_connection)
-        + _portfolio_account_overview(
-            portfolio_totals,
-            account_history,
-            account_summary,
-            chart_payloads["symbols"],
-            account_intraday_bars,
+    portfolio_account_overview = ""
+    if not _visible_snaptrade_accounts(snaptrade_accounts):
+        account_history_institution = (
+            str(account_summary.get("institution_name") or "")
+            if account_summary.get("institution_name")
+            else None
         )
-    )
+        account_history = _snaptrade_balance_history(
+            snaptrade_accounts,
+            account_history_institution,
+        )
+        account_history_status = _snaptrade_balance_history_status(
+            snaptrade_accounts,
+            account_history_institution,
+        )
+        portfolio_account_overview = (
+            _account_connection_notice(account_connection)
+            + _portfolio_account_overview(
+                portfolio_totals,
+                account_history,
+                account_summary,
+                chart_payloads["symbols"],
+                account_history_status,
+            )
+        )
     portfolio_holdings = f"""
     <section class="portfolio-holdings-panel" aria-label="All portfolio holdings">
       <div class="holdings-toolbar">
@@ -2543,15 +2680,21 @@ def build_dashboard(
         {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
       </div>
     </section>"""
-    broker_view = _broker_tab(snaptrade_accounts) if snaptrade_accounts else ""
-    broker_tab_button = (
-        '<button type="button" class="tab-button" data-tab-target="broker" role="tab" aria-selected="false"><span class="broker-tab-mark">B</span> Brokers</button>'
-        if broker_view
+    asset_home = _asset_home(snaptrade_accounts, account_summary, portfolio_totals)
+    broker_tab_buttons, broker_tab_panels = _broker_tab_fragments(
+        snaptrade_accounts,
+        chart_payloads["symbols"],
+    )
+    moomoo_view = _moomoo_watchlist_view(moomoo_watchlists) if moomoo_watchlists else ""
+    moomoo_logo = _broker_logo_html("Moomoo", "broker-tab-mark")
+    moomoo_tab_button = (
+        f'<button type="button" class="tab-button" data-tab-target="moomoo" role="tab" aria-selected="false">{moomoo_logo}Moomoo</button>'
+        if moomoo_view
         else ""
     )
-    broker_tab_panel = (
-        f'<section id="tab-broker" class="tab-view" role="tabpanel" hidden>{broker_view}</section>'
-        if broker_view
+    moomoo_tab_panel = (
+        f'<section id="tab-moomoo" class="tab-view" role="tabpanel" hidden>{moomoo_view}</section>'
+        if moomoo_view
         else ""
     )
     prioritized_board = f"""
@@ -2946,6 +3089,12 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .tab-button:hover {{ color:var(--text) }} .tab-button.active {{ border-bottom-color:var(--green); color:var(--green) }} .tab-view {{ display:none }} .tab-view.active {{ display:block }}
 .broker-tab-mark,.broker-icon-mini,.broker-icon {{ align-items:center; background:#00a83b; border-radius:50%; color:#001b0a; display:inline-flex; font-weight:900; justify-content:center }}
 .broker-tab-mark {{ font-size:10px; height:17px; width:17px }}
+.broker-icon img,.broker-icon-mini img,.broker-tab-mark img {{ border-radius:inherit; display:block; height:100%; object-fit:cover; width:100% }}
+.broker-icon b,.broker-icon-mini b,.broker-tab-mark b {{ display:none }}
+.broker-logo-robinhood {{ background:#00c805; color:#001f08 }}
+.broker-logo-fidelity {{ background:#167b3a; color:#fff }}
+.broker-logo-moomoo {{ background:#ff6900; color:#050505 }}
+.broker-logo-generic {{ background:#2a2a2a; color:#f5f5f5 }}
 .portfolio-board {{ margin:12px 0 24px }}
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
@@ -2954,7 +3103,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .account-overview {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px 0 18px; max-width:1120px; overflow:hidden; padding:18px 22px 12px }}
 .account-copy small {{ color:var(--muted); display:block; font-size:15px; font-weight:650; margin-bottom:2px }} .account-copy h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:0 }}
 .account-copy p {{ color:var(--muted); margin:9px 0 0 }} .account-copy p.positive b,.account-stats .positive {{ color:var(--green) }} .account-copy p.negative b,.account-stats .negative {{ color:var(--red) }}
-.account-chart-wrap {{ margin:10px 0 8px; min-height:280px; width:100% }} .account-value-chart {{ display:block; height:auto; width:100% }}
+.account-chart-wrap {{ margin:10px 0 8px; min-height:280px; width:100% }}
 .account-kline-card {{ background:transparent; border:0; border-radius:0; margin:0; padding:0 }}
 .account-kline-card .interactive-kline {{ height:280px; margin-top:0 }}
 .account-kline-card .chart-controls {{ align-items:center; border-top:1px solid var(--line); display:flex; gap:14px; justify-content:space-between; margin:8px 0 0; padding-top:8px }}
@@ -2964,26 +3113,36 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .chart-mode-tabs button.active {{ background:var(--green); color:#001f08 }}
 .account-chart-legend {{ display:none }}
 .account-grid line {{ stroke:#252525; stroke-width:1 }} .account-line {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:3 }}
-.account-area {{ fill:currentColor; opacity:.08 }} .account-value-chart.positive {{ color:var(--green) }} .account-value-chart.negative {{ color:var(--red) }} .account-value-chart text {{ fill:var(--muted); font-size:11px }}
 .account-chart-empty {{ align-items:center; background:#0b0b0b; border-radius:10px; color:var(--muted); display:flex; min-height:230px; justify-content:center }}
 .account-stats {{ border-top:1px solid var(--line); display:grid; gap:0; grid-template-columns:repeat(4,1fr); margin-top:8px }}
 .account-stats div {{ border-right:1px solid var(--line); padding:11px 14px }} .account-stats div:first-child {{ padding-left:0 }} .account-stats div:last-child {{ border-right:0 }}
 .account-stats small {{ color:var(--muted); display:block; font-size:11px; font-weight:700 }} .account-stats b {{ display:block; font-size:18px; margin-top:2px }}
+.asset-home {{ background:#050505; border:1px solid var(--line); border-radius:16px; margin:14px 0 22px; max-width:760px; padding:26px }}
+.asset-home>small,.moomoo-hero small {{ color:var(--green); display:block; font-size:11px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }}
+.asset-home h2 {{ font-size:52px; letter-spacing:-2.2px; line-height:1; margin:4px 0 }}
+.asset-home p {{ color:var(--muted); margin:8px 0 0 }}
 .broker-board {{ display:grid; gap:14px; margin:12px 0 24px }}
-.broker-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:18px; grid-template-columns:minmax(280px,1.5fr) minmax(300px,1fr); padding:20px 22px }}
-.broker-brand {{ align-items:center; display:flex; gap:15px }} .broker-icon {{ font-size:30px; height:58px; width:58px }}
+.broker-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:18px; grid-template-columns:minmax(260px,1.5fr) minmax(260px,1fr); min-width:0; padding:20px 22px }}
+.broker-brand {{ align-items:center; display:flex; gap:15px; min-width:0 }} .broker-icon {{ flex:0 0 auto; font-size:30px; height:58px; width:58px }}
 .broker-brand small,.broker-section-heading small {{ color:#00a83b; display:block; font-size:10px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }}
-.broker-brand h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:2px 0 0 }} .broker-brand p {{ color:var(--muted); margin:8px 0 0 }}
-.broker-totals {{ display:grid; gap:8px; grid-template-columns:repeat(3,1fr) }} .broker-totals span,.broker-card-grid span {{ background:#101010; border:1px solid var(--line); border-radius:10px; padding:12px }}
-.broker-totals small,.broker-card-grid small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.3px; text-transform:uppercase }} .broker-totals b,.broker-card-grid b {{ display:block; font-size:18px; margin-top:4px }}
-.broker-accounts-grid {{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) }}
-.broker-account-card {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:12px; padding:15px }}
+.broker-brand h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:2px 0 0; overflow-wrap:anywhere }} .broker-brand p {{ color:var(--muted); margin:8px 0 0 }}
+.broker-totals {{ display:grid; gap:8px; grid-template-columns:repeat(3,minmax(0,1fr)) }} .broker-totals span,.broker-card-grid span {{ background:#101010; border:1px solid var(--line); border-radius:10px; min-width:0; padding:12px }}
+.broker-totals small,.broker-card-grid small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.3px; text-transform:uppercase }} .broker-totals b,.broker-card-grid b {{ display:block; font-size:18px; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
+.broker-accounts-grid {{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr)) }}
+.broker-account-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:12px; overflow:hidden; padding:15px }}
 .broker-card-title {{ align-items:center; display:flex; gap:10px }} .broker-icon-mini {{ height:28px; width:28px }} .broker-card-title b {{ display:block; font-size:17px }} .broker-card-title small,.broker-sync {{ color:var(--muted); display:block; font-size:12px }}
-.broker-card-grid {{ display:grid; gap:8px; grid-template-columns:repeat(2,1fr) }} .broker-sync.synced {{ color:var(--green) }}
+.broker-card-grid {{ display:grid; gap:8px; grid-template-columns:repeat(2,minmax(0,1fr)) }} .broker-sync.synced {{ color:var(--green) }}
 .broker-positions-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; overflow:hidden }}
 .broker-section-heading {{ padding:16px 18px 8px }} .broker-section-heading h3 {{ font-size:22px; margin:1px 0 0 }}
 .broker-table-wrap {{ overflow:auto }} .broker-positions-table td:first-child span {{ color:var(--muted); display:block; font-size:12px; margin-top:2px; max-width:360px }}
 .broker-positions-table th {{ color:#00a83b }} .broker-positions-panel .note {{ padding:0 18px 16px }}
+.moomoo-board {{ display:grid; gap:14px; margin:12px 0 24px }}
+.moomoo-hero,.moomoo-watchlist-card {{ background:#050505; border:1px solid var(--line); border-radius:14px; padding:18px }}
+.moomoo-hero {{ align-items:center; display:flex; gap:15px }}
+.moomoo-hero h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:3px 0 }} .moomoo-hero p {{ color:var(--muted); margin:8px 0 0 }}
+.moomoo-watchlists-grid {{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)) }}
+.moomoo-watchlist-card header {{ align-items:end; display:flex; justify-content:space-between; gap:12px; margin-bottom:12px }} .moomoo-watchlist-card h3 {{ font-size:22px; margin:0 }} .moomoo-watchlist-card header small {{ color:var(--green); display:block; font-size:10px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }} .moomoo-watchlist-card header b {{ color:var(--muted) }}
+.moomoo-symbol-grid {{ display:grid; gap:8px; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)) }} .moomoo-symbol-grid span {{ background:#101010; border:1px solid var(--line); border-radius:10px; min-width:0; padding:9px }} .moomoo-symbol-grid b {{ display:block; font-size:15px }} .moomoo-symbol-grid small {{ color:var(--muted); display:block; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
 .portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:10px 0 16px; overflow:hidden }}
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
@@ -3135,6 +3294,9 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 }} @media(max-width:899px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
+  .asset-home {{ max-width:none }}
+  .broker-hero {{ grid-template-columns:1fr }}
+  .broker-totals {{ grid-template-columns:repeat(3,minmax(0,1fr)) }}
   .account-stats {{ grid-template-columns:repeat(2,1fr) }} .account-stats div:nth-child(2n) {{ border-right:0 }}
   .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 90px 88px 86px 92px 58px 78px; min-height:64px; padding:11px 12px }}
   .holding-today-cash {{ display:none }}
@@ -3154,6 +3316,9 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
   .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }}
+  .asset-home {{ padding:20px }} .asset-home h2 {{ font-size:38px; letter-spacing:-1.5px }} .broker-totals,.broker-card-grid {{ grid-template-columns:1fr }}
+  .broker-hero {{ padding:16px }} .broker-brand {{ align-items:flex-start }} .broker-brand h2,.moomoo-hero h2 {{ font-size:32px }}
+  .moomoo-hero {{ align-items:flex-start; padding:16px }}
   .account-overview {{ padding:16px 16px 12px }} .account-copy h2 {{ font-size:34px }} .account-chart-wrap {{ min-height:260px }} .account-stats {{ grid-template-columns:1fr 1fr }} .account-kline-card .interactive-kline {{ height:260px }} .board-intro p {{ display:none }}
   .interactive-kline {{ height:380px }}
   .chart-controls {{ align-items:stretch; flex-direction:column; gap:8px }}
@@ -3172,16 +3337,22 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <p class="sub">Read-only decision support · {html.escape(model_label)} · generated {html.escape(generated)}</p>
 {refresh_control}
 <nav class="tabs" role="tablist" aria-label="Dashboard sections">
-  <button type="button" class="tab-button active" data-tab-target="portfolio" role="tab" aria-selected="true">Robinhood</button>
-  {broker_tab_button}
+  <button type="button" class="tab-button active" data-tab-target="home" role="tab" aria-selected="true">Home</button>
+  {broker_tab_buttons}
+  {moomoo_tab_button}
+  <button type="button" class="tab-button" data-tab-target="signals" role="tab" aria-selected="false">Signals</button>
   <button type="button" class="tab-button" data-tab-target="opportunities" role="tab" aria-selected="false">Opportunities</button>
   <button type="button" class="tab-button" data-tab-target="research" role="tab" aria-selected="false">Research</button>
   <button type="button" class="tab-button" data-tab-target="health" role="tab" aria-selected="false">Health &amp; Risk</button>
 </nav>
-<section id="tab-portfolio" class="tab-view active" role="tabpanel">
+<section id="tab-home" class="tab-view active" role="tabpanel">
+<section class="portfolio-board">{asset_home}</section>
+</section>
+{broker_tab_panels}
+{moomoo_tab_panel}
+<section id="tab-signals" class="tab-view" role="tabpanel" hidden>
 <section class="portfolio-board">{portfolio_account_overview}{portfolio_holdings}</section>
 </section>
-{broker_tab_panel}
 <section id="tab-opportunities" class="tab-view" role="tabpanel" hidden>
 {prioritized_board}
 </section>
@@ -3307,6 +3478,7 @@ tabButtons.forEach((button) => button.addEventListener("click", () => {{
     view.classList.toggle("active", active);
     view.hidden = !active;
   }});
+  window.requestAnimationFrame(() => window.StockInvestorKline?.initVisibleCharts());
 }}));
 
 const portfolioSort = document.getElementById("portfolio-sort");

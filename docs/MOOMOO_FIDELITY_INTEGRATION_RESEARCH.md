@@ -140,6 +140,11 @@ Near-term dashboard behavior:
 - Watchlist tab: Moomoo watchlist names, symbols, and research status.
 - Opportunities tab: only active BUY/SELL/WAIT review candidates from the model.
 - Data health tab: per-source freshness, missing symbols, and import warnings.
+- Account value chart: only show broker/aggregator-reported balance history.
+  SnapTrade exposes `GET /accounts/{accountId}/balanceHistory` as a beta,
+  disabled-by-default endpoint with a maximum one-year lookback. Do not rebuild
+  account history from current shares multiplied by historical prices, because
+  deposits, trades, cash, margin, and closed positions make that chart wrong.
 
 Near-term backend shape:
 
@@ -158,6 +163,6 @@ contract, many thin read-only importers.
 
 1. Combined holdings merger with per-broker source attribution.
 2. Fidelity CSV importer only as a fallback if SnapTrade coverage fails.
-3. Moomoo K-line fallback provider only after the watchlist importer is stable.
+3. Broker-neutral holdings/watchlist merger, keeping every source attributed.
 4. Optional Moomoo annotation import only if an official/user export format is
    confirmed.

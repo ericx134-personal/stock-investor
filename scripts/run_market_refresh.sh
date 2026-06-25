@@ -42,11 +42,16 @@ if [[ -f "$CONFIG" ]]; then
 fi
 ACCOUNT_SUMMARY="${ACCOUNT_SUMMARY_PATH:-portfolio/account-summary.json}"
 PRIMARY_ACCOUNT_INSTITUTION="${PRIMARY_ACCOUNT_INSTITUTION:-Robinhood}"
+MARKET_DATA_PROVIDER_ORDER="${MARKET_DATA_PROVIDER_ORDER:-moomoo,yahoo}"
+MOOMOO_WATCHLISTS="${MOOMOO_WATCHLISTS_PATH:-data/private/brokers/moomoo-watchlists.json}"
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] starting scheduled market refresh"
+write_progress 5 "starting"
 if [[ -n "${SNAPTRADE_CLIENT_ID:-}" && -n "${SNAPTRADE_CONSUMER_KEY:-}" ]]; then
   if PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli import-snaptrade-accounts \
     data/private/brokers/snaptrade-accounts.json \
     --account-summary-output "$ACCOUNT_SUMMARY" \
-    --account-summary-institution "$PRIMARY_ACCOUNT_INSTITUTION"; then
+    --account-summary-institution "$PRIMARY_ACCOUNT_INSTITUTION" \
+    --include-balance-history; then
     write_progress 15 "broker accounts updated"
   else
     echo "warning: SnapTrade account refresh failed; using previous account summary" >&2
@@ -56,9 +61,20 @@ ACCOUNT_ARGS=()
 if [[ -f "$ACCOUNT_SUMMARY" ]]; then
   ACCOUNT_ARGS=(--account-summary "$ACCOUNT_SUMMARY")
 fi
-
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] starting scheduled market refresh"
-write_progress 5 "starting"
+MOOMOO_ARGS=()
+if printf ',%s,' "$MARKET_DATA_PROVIDER_ORDER" | tr '[:upper:]' '[:lower:]' | grep -q ',moomoo,'; then
+  if PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli import-moomoo-watchlist "$MOOMOO_WATCHLISTS"; then
+    write_progress 22 "moomoo watchlists updated"
+    MOOMOO_ARGS=(--moomoo-watchlists "$MOOMOO_WATCHLISTS")
+  else
+    echo "warning: Moomoo watchlist import failed; using previous watchlist snapshot if available" >&2
+    if [[ -f "$MOOMOO_WATCHLISTS" ]]; then
+      MOOMOO_ARGS=(--moomoo-watchlists "$MOOMOO_WATCHLISTS")
+    fi
+  fi
+elif [[ -f "$MOOMOO_WATCHLISTS" ]]; then
+  MOOMOO_ARGS=(--moomoo-watchlists "$MOOMOO_WATCHLISTS")
+fi
 
 START_DATE="${ACCOUNT_HISTORY_START_DATE:-${YAHOO_START_DATE:-}}"
 if [[ -z "$START_DATE" ]]; then
@@ -66,7 +82,6 @@ if [[ -z "$START_DATE" ]]; then
 fi
 END_DATE="$(date -v+1d +%Y-%m-%d)"
 
-MARKET_DATA_PROVIDER_ORDER="${MARKET_DATA_PROVIDER_ORDER:-moomoo,yahoo}"
 PRICE_SOURCE=""
 PRICE_ADJUSTMENT="unknown"
 IFS=',' read -r -a PROVIDERS <<< "$MARKET_DATA_PROVIDER_ORDER"
@@ -144,6 +159,7 @@ PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli refresh \
   --price-source "$PRICE_SOURCE" \
   --latest-quotes "$LATEST_QUOTES" \
   --price-adjustment "$PRICE_ADJUSTMENT" \
+  "${MOOMOO_ARGS[@]}" \
   --production-safe
 write_progress 82 "dashboard rebuilt"
 

@@ -90,6 +90,16 @@ class FakeOpener:
                     ]
                 }
             )
+        if "/accounts/acct-1/balanceHistory?" in url:
+            return FakeResponse(
+                {
+                    "currency": "USD",
+                    "history": [
+                        {"date": "2026-06-23", "total_value": "900.00"},
+                        {"date": "2026-06-24", "total_value": "1000.00"},
+                    ],
+                }
+            )
         raise AssertionError(f"unexpected URL: {url}")
 
 
@@ -170,6 +180,22 @@ class SnapTradeProviderTests(unittest.TestCase):
         self.assertEqual(account["positions"][0]["symbol"], "AAPL")
         self.assertEqual(account["positions"][0]["units"], 3.0)
         self.assertEqual(account["positions"][1]["market_value"], 500.5)
+
+    def test_fetch_snapshot_can_include_account_balance_history(self):
+        opener = FakeOpener()
+        client = SnapTradeClient(credentials(), opener=opener, clock=lambda: 123)
+
+        payload = fetch_snaptrade_snapshot(client, include_balance_history=True)
+
+        account = payload["accounts"][0]
+        self.assertEqual(account["balance_history"]["currency"], "USD")
+        self.assertEqual(
+            account["balance_history"]["history"][1]["total_value"],
+            "1000.00",
+        )
+        self.assertTrue(
+            any("/accounts/acct-1/balanceHistory?" in item.full_url for item in opener.requests)
+        )
 
     def test_build_account_summary_filters_empty_accounts_and_institution(self):
         snapshot = {

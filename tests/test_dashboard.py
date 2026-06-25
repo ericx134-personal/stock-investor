@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 from stock_investor.dashboard import (
     _chart_ranges,
-    _filter_account_history_outliers,
     _kline_chart,
     _kline_chart_payload,
     _mini_sparkline,
@@ -71,16 +70,6 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('data-chart-mode="line" class="active">Line</button>', page)
         self.assertIn('data-chart-mode="candles">Candle</button>', page)
         self.assertIn('data-chart-range="1D" data-chart-bars="25" class="active">Daily</button>', page)
-
-    def test_account_history_filters_implausible_anchor_outliers(self):
-        history = [
-            Price(date=date(2026, 1, 1), open=100, high=105, low=95, close=100, volume=1),
-            Price(date=date(2026, 1, 2), open=101, high=102, low=99, close=101, volume=1),
-            Price(date=date(2026, 1, 3), open=4_500, high=4_600, low=4_400, close=4_550, volume=1),
-            Price(date=date(2026, 1, 4), open=102, high=103, low=100, close=102, volume=1),
-        ]
-        filtered = _filter_account_history_outliers(history, anchor_value=120)
-        self.assertEqual([item.date.isoformat() for item in filtered], ["2026-01-01", "2026-01-02", "2026-01-04"])
 
     def test_kline_payload_preserves_far_cost_basis_as_line_metadata(self):
         history = [
@@ -743,7 +732,52 @@ class DashboardTests(unittest.TestCase):
             )
             summary = root / "summary.json"
             summary.write_text(
-                json.dumps({"total_cash": -250, "total_buying_power": 100})
+                json.dumps(
+                    {
+                        "institution_name": "Robinhood",
+                        "total_cash": -250,
+                        "total_buying_power": 100,
+                    }
+                )
+            )
+            snaptrade = root / "snaptrade-accounts.json"
+            snaptrade.write_text(
+                json.dumps(
+                    {
+                        "captured_at": "2026-02-01T00:00:00+00:00",
+                        "accounts": [
+                            {
+                                "account": {
+                                    "name": "Robinhood Individual",
+                                    "number": "***1234",
+                                    "institution_name": "Robinhood",
+                                    "balance": {
+                                        "total": {"amount": 800, "currency": "USD"}
+                                    },
+                                },
+                                "balances": [{"cash": -250, "buying_power": 100}],
+                                "positions": [
+                                    {
+                                        "symbol": "ABC",
+                                        "units": 10,
+                                        "price": 105,
+                                        "market_value": 1050,
+                                    }
+                                ],
+                                "balance_history": {
+                                    "currency": "USD",
+                                    "history": [
+                                        {
+                                            "date": (start + timedelta(days=index)).isoformat(),
+                                            "total_value": f"{700 + index * 5:.2f}",
+                                        }
+                                        for index in range(30)
+                                    ],
+                                },
+                            }
+                        ],
+                    }
+                )
             )
 
             page = build_dashboard(
@@ -751,23 +785,101 @@ class DashboardTests(unittest.TestCase):
                 prices_path=prices,
                 latest_quotes_path=quotes,
                 account_summary_path=summary,
+                snaptrade_accounts_path=snaptrade,
             )
 
-        self.assertIn("<h2>$800.00</h2>", page)
+        self.assertIn("Robinhood via SnapTrade", page)
+        self.assertIn("$800.00", page)
         self.assertIn("Margin used", page)
         self.assertIn("$250.00", page)
         self.assertIn("Buying power", page)
         self.assertIn("$100.00", page)
         self.assertNotIn("on cost", page)
         self.assertNotIn("net capital", page)
-        self.assertNotIn("Account candles are approximate", page)
-        self.assertIn('data-chart-symbol="__ACCOUNT__"', page)
-        self.assertIn('"symbol":"__ACCOUNT__"', page)
-        self.assertIn('"bars_intraday"', page)
-        self.assertIn('"source":"intraday_quote_path"', page)
+        self.assertIn('data-chart-symbol="__ACCOUNT__-robinhood-1234"', page)
+        self.assertIn('"symbol":"__ACCOUNT__-robinhood-1234"', page)
+        self.assertIn('"source":"snaptrade_balance_history"', page)
+        self.assertIn("Broker-reported account value", page)
         self.assertIn('data-chart-mode="line"', page)
-        self.assertIn('data-chart-mode="candles"', page)
         self.assertIn('data-chart-range="1W"', page)
+
+    def test_dashboard_does_not_draw_approximate_account_chart_without_balance_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            alerts = root / "alerts.jsonl"
+            alerts.write_text(
+                json.dumps(
+                    {
+                        "symbol": "ABC",
+                        "shares": 10,
+                        "average_cost": 90,
+                        "cost_basis": 900,
+                        "market_value": 1000,
+                        "portfolio_weight": 1.0,
+                        "latest_close": 100,
+                        "unrealized_return": 0.111111,
+                        "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                        "technicals": {},
+                    }
+                )
+                + "\n"
+            )
+            prices = root / "prices.csv"
+            prices.write_text(
+                "date,symbol,close,open,high,low,volume\n"
+                + "".join(
+                    f"2026-01-{index + 1:02d},ABC,{100 + index:.2f},{99 + index:.2f},{102 + index:.2f},{98 + index:.2f},100000\n"
+                    for index in range(20)
+                )
+            )
+            summary = root / "summary.json"
+            summary.write_text(
+                json.dumps(
+                    {
+                        "institution_name": "Robinhood",
+                        "account_value": 1000,
+                        "total_cash": 0,
+                    }
+                )
+            )
+            snaptrade = root / "snaptrade-accounts.json"
+            snaptrade.write_text(
+                json.dumps(
+                    {
+                        "captured_at": "2026-02-01T00:00:00+00:00",
+                        "accounts": [
+                            {
+                                "account": {
+                                    "name": "Robinhood Individual",
+                                    "number": "***1234",
+                                    "institution_name": "Robinhood",
+                                    "balance": {
+                                        "total": {"amount": 1000, "currency": "USD"}
+                                    },
+                                },
+                                "balances": [{"cash": 0, "buying_power": 100}],
+                                "positions": [
+                                    {
+                                        "symbol": "ABC",
+                                        "units": 10,
+                                        "price": 100,
+                                        "market_value": 1000,
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                )
+            )
+            page = build_dashboard(
+                alerts,
+                prices_path=prices,
+                account_summary_path=summary,
+                snaptrade_accounts_path=snaptrade,
+            )
+
+        self.assertIn("Exact broker account history is not available for this account yet.", page)
+        self.assertNotIn('data-chart-symbol="__ACCOUNT__-"', page)
 
     def test_dashboard_adds_broker_tab_from_snaptrade_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -798,6 +910,39 @@ class DashboardTests(unittest.TestCase):
                         "position_count": 2,
                         "unique_symbols": ["FDIC91315", "TCEHY"],
                         "accounts": [
+                            {
+                                "account": {
+                                    "name": "Robinhood Individual",
+                                    "number": "***8183",
+                                    "institution_name": "Robinhood",
+                                    "balance": {
+                                        "total": {"amount": 1000.0, "currency": "USD"}
+                                    },
+                                },
+                                "balances": [{"cash": -50.0, "buying_power": 100.0}],
+                                "balance_history": {
+                                    "currency": "USD",
+                                    "history": [
+                                        {
+                                            "date": "2026-06-23",
+                                            "total_value": 950.0,
+                                        },
+                                        {
+                                            "date": "2026-06-24",
+                                            "total_value": 1000.0,
+                                        },
+                                    ],
+                                },
+                                "positions": [
+                                    {
+                                        "symbol": "HOOD",
+                                        "description": "Robinhood Markets",
+                                        "units": 10,
+                                        "price": 100.0,
+                                        "average_purchase_price": 70.0,
+                                    }
+                                ],
+                            },
                             {
                                 "account": {
                                     "name": "Empty Roth",
@@ -861,19 +1006,118 @@ class DashboardTests(unittest.TestCase):
 
             page = build_dashboard(alerts, snaptrade_accounts_path=snaptrade)
 
-        self.assertIn('data-tab-target="portfolio"', page)
-        self.assertIn(">Robinhood</button>", page)
-        self.assertIn('data-tab-target="broker"', page)
-        self.assertIn('id="tab-broker"', page)
-        self.assertIn("Connected brokers via SnapTrade", page)
-        self.assertIn("$2,750.00", page)
+        self.assertIn('data-tab-target="home"', page)
+        self.assertIn(">Home</button>", page)
+        self.assertIn('data-tab-target="broker-robinhood"', page)
+        self.assertIn('data-tab-target="broker-fidelity"', page)
+        self.assertIn('id="tab-broker-robinhood"', page)
+        self.assertIn('id="tab-broker-fidelity"', page)
+        self.assertNotIn('data-tab-target="broker"', page)
+        self.assertIn("Robinhood via SnapTrade", page)
+        self.assertIn("Fidelity via SnapTrade", page)
+        self.assertIn("$3,750.00", page)
+        self.assertIn("2 brokers · 3 funded accounts · 3 positions", page)
+        self.assertIn("1 funded accounts · 1 positions · 1 symbols", page)
         self.assertIn("2 funded accounts · 2 positions · 2 symbols", page)
+        self.assertEqual(page.count('class="broker-account-panel"'), 3)
+        self.assertIn('data-chart-symbol="__ACCOUNT__-robinhood-8183"', page)
+        self.assertIn('"source":"snaptrade_balance_history"', page)
+        self.assertIn("broker-logo-robinhood", page)
+        self.assertIn("broker-logo-fidelity", page)
+        self.assertIn("https://robinhood.com/favicon.ico", page)
+        self.assertIn("https://www.fidelity.com/favicon.ico", page)
+        self.assertIn("requestAnimationFrame(() => window.StockInvestorKline?.initVisibleCharts())", page)
         self.assertNotIn("Empty Roth", page)
+        self.assertIn("Robinhood Individual", page)
         self.assertIn("BrokerageLink", page)
         self.assertIn("Health Savings Account", page)
+        self.assertIn("HOOD", page)
         self.assertIn("TCEHY", page)
         self.assertIn("FDIC91315", page)
         self.assertIn("401k funds, cash sweeps, and non-stock instruments", page)
+
+    def test_dashboard_adds_moomoo_watchlist_tab(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            alerts = root / "alerts.jsonl"
+            alerts.write_text(
+                json.dumps(
+                    {
+                        "symbol": "ABC",
+                        "shares": 10,
+                        "average_cost": 90,
+                        "cost_basis": 900,
+                        "market_value": 1000,
+                        "portfolio_weight": 1.0,
+                        "latest_close": 100,
+                        "unrealized_return": 0.111111,
+                        "alert": {"action": "HOLD", "score": 0, "reasons": []},
+                        "technicals": {},
+                    }
+                )
+                + "\n"
+            )
+            watchlists = root / "moomoo-watchlists.json"
+            watchlists.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "source": "moomoo-opend",
+                        "captured_at": "2026-06-25T00:00:00+00:00",
+                        "group_count": 2,
+                        "symbol_count": 3,
+                        "groups": [
+                            {
+                                "group_name": "Robinhood",
+                                "symbol_count": 2,
+                                "symbols": ["AFRM", "HOOD"],
+                            },
+                            {
+                                "group_name": "401k",
+                                "symbol_count": 1,
+                                "symbols": ["FXAIX"],
+                            },
+                        ],
+                        "items": [
+                            {
+                                "group_name": "Robinhood",
+                                "code": "US.HOOD",
+                                "symbol": "HOOD",
+                                "market": "US",
+                                "name": "Robinhood Markets",
+                            },
+                            {
+                                "group_name": "Robinhood",
+                                "code": "US.AFRM",
+                                "symbol": "AFRM",
+                                "market": "US",
+                                "name": "Affirm",
+                            },
+                            {
+                                "group_name": "401k",
+                                "code": "US.FXAIX",
+                                "symbol": "FXAIX",
+                                "market": "US",
+                                "name": "Fidelity 500 Index",
+                            },
+                        ],
+                    }
+                )
+            )
+
+            page = build_dashboard(alerts, moomoo_watchlists_path=watchlists)
+
+        self.assertIn('data-tab-target="moomoo"', page)
+        self.assertIn('id="tab-moomoo"', page)
+        self.assertIn("broker-logo-moomoo", page)
+        self.assertIn("https://www.moomoo.com/favicon.ico", page)
+        self.assertIn("Moomoo OpenD · read only", page)
+        self.assertIn("3 symbols", page)
+        self.assertIn("Robinhood</h3>", page)
+        self.assertIn("401k</h3>", page)
+        self.assertIn("HOOD", page)
+        self.assertIn("AFRM", page)
+        self.assertIn("FXAIX", page)
 
     def test_dashboard_warns_but_keeps_stale_broker_account_view_visible(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -190,6 +190,24 @@ class SnapTradeClient:
             raise SnapTradeProviderError("SnapTrade positions response is not an object")
         return response
 
+    def get_account_balance_history(
+        self,
+        *,
+        account_id: str,
+        user_id: str | None = None,
+        user_secret: str | None = None,
+    ) -> dict[str, Any]:
+        response = self._request(
+            "GET",
+            f"/accounts/{account_id}/balanceHistory",
+            query_pairs=_user_query_pairs(user_id, user_secret),
+        )
+        if not isinstance(response, dict):
+            raise SnapTradeProviderError(
+                "SnapTrade balance history response is not an object"
+            )
+        return response
+
     def _request(
         self,
         method: str,
@@ -280,6 +298,7 @@ def fetch_snaptrade_snapshot(
     *,
     user_id: str | None = None,
     user_secret: str | None = None,
+    include_balance_history: bool = False,
 ) -> dict[str, Any]:
     accounts = client.list_accounts(user_id=user_id, user_secret=user_secret)
     account_snapshots = []
@@ -297,13 +316,21 @@ def fetch_snaptrade_snapshot(
             user_id=user_id,
             user_secret=user_secret,
         )
-        account_snapshots.append(
-            {
-                "account": _sanitize_account(account),
-                "balances": balances,
-                "positions": _normalize_positions(positions),
-            }
-        )
+        account_snapshot = {
+            "account": _sanitize_account(account),
+            "balances": balances,
+            "positions": _normalize_positions(positions),
+        }
+        if include_balance_history:
+            try:
+                account_snapshot["balance_history"] = client.get_account_balance_history(
+                    account_id=account_id,
+                    user_id=user_id,
+                    user_secret=user_secret,
+                )
+            except SnapTradeProviderError as error:
+                account_snapshot["balance_history_error"] = str(error)
+        account_snapshots.append(account_snapshot)
     return _snapshot_payload(account_snapshots)
 
 

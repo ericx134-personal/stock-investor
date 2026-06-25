@@ -475,6 +475,7 @@ def run_refresh(
     latest_quotes_path: str | Path | None = None,
     price_adjustment: str | None = None,
     snaptrade_accounts_path: str | Path | None = None,
+    moomoo_watchlists_path: str | Path | None = None,
 ) -> dict:
     """Refresh all read-only decision-support artifacts, writing the manifest last."""
     started_at = datetime.now(timezone.utc)
@@ -483,6 +484,9 @@ def run_refresh(
     if snaptrade_accounts_path is None:
         default_snaptrade = output_dir / "brokers" / "snaptrade-accounts.json"
         snaptrade_accounts_path = default_snaptrade if default_snaptrade.exists() else None
+    if moomoo_watchlists_path is None:
+        default_moomoo = output_dir / "brokers" / "moomoo-watchlists.json"
+        moomoo_watchlists_path = default_moomoo if default_moomoo.exists() else None
     positions = load_positions(positions_path)
     held_symbols = {position.symbol for position in positions if position.shares > 0}
     prices = load_prices(prices_path)
@@ -832,6 +836,7 @@ def run_refresh(
             latest_quotes_path=latest_quotes_path,
             account_summary_path=account_summary_path,
             snaptrade_accounts_path=snaptrade_accounts_path,
+            moomoo_watchlists_path=moomoo_watchlists_path,
         ),
         paths["dashboard"],
     )

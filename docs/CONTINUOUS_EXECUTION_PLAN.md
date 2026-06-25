@@ -33,6 +33,10 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - Keep broker-account imports product-oriented: SnapTrade is the read-only
   account aggregation path; Moomoo OpenD is the primary local market-data and
   watchlist path; Yahoo remains a fallback provider only.
+- Account value charts must be broker/aggregator-reported balance history only.
+  Never reconstruct account history from current share counts and historical
+  symbol prices; if exact balance history is unavailable, omit the account
+  chart rather than showing a misleading approximation.
 - Promote a model only when it improves sealed forward evidence without
   materially worsening calibration, drawdown, coverage, or stability.
 
@@ -221,6 +225,8 @@ Current execution queue:
   with Yahoo fallback when OpenD or symbol coverage fails. Current refresh
   uses Moomoo for daily bars and latest quotes, preserves missing-symbol
   reporting, and keeps broker account aggregation on SnapTrade.
+- [x] M104A Remove approximate account-history charting and gate account charts
+  on broker/aggregator-reported balance history.
 - [ ] M105 Evaluate Moomoo annotation import only if an official export format
   is confirmed.
 
