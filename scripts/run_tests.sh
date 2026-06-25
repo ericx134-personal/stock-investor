@@ -15,17 +15,15 @@ L1_TESTS=(
   tests.test_read_only_contract
   tests.test_snaptrade_provider
   tests.test_moomoo_provider
-  tests.test_robinhood
-  tests.test_robinhood_provider
   tests.test_data
   tests.test_yahoo
   tests.test_refresh
   tests.test_web_server
   tests.test_dashboard.DashboardTests.test_dashboard_write_mirrors_installed_runtime_copy
-  tests.test_dashboard.DashboardTests.test_dashboard_adds_fidelity_tab_from_snaptrade_snapshot
+  tests.test_dashboard.DashboardTests.test_dashboard_adds_broker_tab_from_snaptrade_snapshot
   tests.test_dashboard.DashboardTests.test_dashboard_uses_latest_quote_overlay_for_front_page_price
   tests.test_dashboard.DashboardTests.test_dashboard_account_overview_uses_margin_summary_and_account_chart
-  tests.test_dashboard.DashboardTests.test_dashboard_warns_but_keeps_stale_robinhood_account_view_visible
+  tests.test_dashboard.DashboardTests.test_dashboard_warns_but_keeps_stale_broker_account_view_visible
   tests.test_dashboard.DashboardTests.test_dashboard_prioritizes_and_escapes_alerts
 )
 

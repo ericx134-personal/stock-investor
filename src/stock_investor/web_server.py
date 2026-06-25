@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import threading
 from http import HTTPStatus
@@ -14,10 +15,23 @@ class RefreshState:
         self.lock = threading.Lock()
         self.status = "idle"
         self.message = ""
+        self.progress = 0
+        self.progress_file: Path | None = None
 
-    def snapshot(self) -> dict[str, str]:
+    def snapshot(self) -> dict[str, str | int]:
         with self.lock:
-            return {"status": self.status, "message": self.message}
+            status = self.status
+            message = self.message
+            progress = self.progress
+            progress_file = self.progress_file
+        if status == "running" and progress_file and progress_file.exists():
+            try:
+                payload = json.loads(progress_file.read_text())
+                progress = int(payload.get("progress", progress))
+                message = str(payload.get("message", message))
+            except (OSError, ValueError, TypeError):
+                pass
+        return {"status": status, "message": message, "progress": progress}
 
     def start(self, command: list[str], cwd: Path) -> bool:
         with self.lock:
@@ -25,6 +39,12 @@ class RefreshState:
                 return False
             self.status = "running"
             self.message = "refresh started"
+            self.progress = 1
+            self.progress_file = cwd / "data" / "private" / ".refresh-progress.json"
+            try:
+                self.progress_file.unlink()
+            except OSError:
+                pass
         thread = threading.Thread(
             target=self._run,
             args=(command, cwd),
@@ -35,16 +55,24 @@ class RefreshState:
         return True
 
     def _run(self, command: list[str], cwd: Path) -> None:
+        with self.lock:
+            progress_file = self.progress_file
+        env = os.environ.copy()
+        if progress_file:
+            progress_file.parent.mkdir(parents=True, exist_ok=True)
+            env["STOCK_INVESTOR_REFRESH_PROGRESS"] = str(progress_file)
         try:
-            subprocess.run(command, cwd=cwd, check=True)
+            subprocess.run(command, cwd=cwd, check=True, env=env)
         except Exception as error:  # pragma: no cover - defensive server guard
             with self.lock:
                 self.status = "failed"
                 self.message = str(error)
+                self.progress = 100
             return
         with self.lock:
             self.status = "succeeded"
             self.message = "refresh complete"
+            self.progress = 100
 
 
 def make_handler(root: Path, refresh_script: Path, state: RefreshState):
@@ -69,7 +97,7 @@ def make_handler(root: Path, refresh_script: Path, state: RefreshState):
                 return
             super().do_GET()
 
-        def _send_json(self, payload: dict[str, str]) -> None:
+        def _send_json(self, payload: dict[str, str | int]) -> None:
             body = (json.dumps(payload, separators=(",", ":")) + "\n").encode()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json")

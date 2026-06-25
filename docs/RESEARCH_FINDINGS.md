@@ -725,7 +725,7 @@ failures are kept separate from non-blocking research-quality failures.
 ## Per-Symbol Price Freshness Baseline
 
 The June 14, 2026 refresh writes `price-health-v1` with declared provenance
-`Robinhood MCP read-only export`. All 27 held symbols have a latest observation
+the configured broker/market-data import. All 27 held symbols have a latest observation
 dated June 12, 2026 and pass the current seven-calendar-day freshness gate.
 
 Freshness does not imply complete chart data. `SPCX` is fresh but has 0% full
@@ -977,9 +977,9 @@ model still uses preserved daily OHLCV inputs and scored forward outcomes.
 
 Decision rule: latest quotes may update visible current price, market value,
 today return, and unrealized gain/loss. They must not rewrite historical bars,
-change preserved forecasts, or create a trading action. Robinhood MCP read-only
+change preserved forecasts, or create a trading action. Broker read-only
 data can be added later as an optional foreground/manual source, but the macOS
-LaunchAgent refresh cannot depend on MCP session credentials. Credentialed
+LaunchAgent refresh cannot depend on interactive session credentials. Credentialed
 providers should not be introduced without an explicit product reason and user
 approval.
 

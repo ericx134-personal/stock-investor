@@ -488,11 +488,11 @@ inspected; after inspection it becomes development data for any later model.
 
 Recommended sequence:
 
-1. Read all linked Robinhood account positions and balances through the
-   official Trading MCP, then convert a sanitized snapshot into monitor inputs.
-2. Use no-credential Yahoo Finance chart data for unattended daily prices by
-   default. Use Robinhood historical exports only as explicit opt-in source
-   material when there is a clear reason.
+1. Read broker account positions and balances through SnapTrade read-only
+   aggregation, then normalize them into monitor inputs.
+2. Use Moomoo OpenD as the primary local K-line and quote source. Keep Yahoo
+   Finance as the no-credential fallback when OpenD, permissions, or symbol
+   coverage fail.
 3. Add SEC EDGAR APIs for filings and standardized company facts.
 4. Keep all real snapshots, price files, dashboards, and ledgers under ignored
    private paths.
@@ -558,7 +558,7 @@ preserves separately maintained risk metadata.
 - [x] Measure live leverage and single-name concentration
 - [x] Make leverage tolerance independently configurable from leverage alerts
 - [x] Persist sanitized live snapshots without account identifiers
-- [x] Convert exported Robinhood MCP daily histories into monitor prices
+- [x] Preserve full daily OHLCV histories in provider-neutral monitor prices
 - [x] Run the complete monitor on every held position using current daily bars
 - [x] Establish a sealed baseline of model-v1 alerts before changing signals
 - [ ] Compare alerts with 21/63/126-session forward outcomes and user feedback
@@ -591,7 +591,5 @@ under a new version with forward or sealed out-of-sample evidence.
   https://www.investor.gov/introduction-investing/getting-started/asset-allocation
 - FINRA explains concentration risk:
   https://www.finra.org/investors/insights/concentration-risk
-- Robinhood documents its official Agentic Trading access:
-  https://robinhood.com/us/en/support/articles/agentic-trading-overview/
 - SEC EDGAR provides public filing and company-facts APIs:
   https://www.sec.gov/search-filings/edgar-application-programming-interfaces

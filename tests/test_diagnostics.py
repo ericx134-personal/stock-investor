@@ -52,7 +52,7 @@ class DiagnosticTests(unittest.TestCase):
             },
             {"A", "B"},
             as_of=date(2026, 1, 10),
-            source=infer_price_source("robinhood-prices.csv"),
+            source=infer_price_source("market-prices.csv"),
             expected_sessions={
                 date(2026, 1, 7),
                 date(2026, 1, 8),

@@ -7,12 +7,14 @@ from unittest.mock import patch
 
 from stock_investor.dashboard import (
     _chart_ranges,
+    _filter_account_history_outliers,
     _kline_chart,
     _kline_chart_payload,
     _mini_sparkline,
     _next_resistance_zone,
     _price_plan,
     _professional_plan,
+    _sparkline_points,
     build_dashboard,
     write_dashboard,
 )
@@ -55,7 +57,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('"open":124.0', page)
         self.assertIn('"close":125.0', page)
         self.assertNotIn("pinch/scroll", page)
-        self.assertIn('data-active-chart-range="1M"', page)
+        self.assertIn('data-active-chart-range="1D"', page)
         self.assertIn('data-chart-range="1D"', page)
         self.assertIn('data-chart-range="MAX"', page)
         self.assertIn(">Daily</button>", page)
@@ -68,7 +70,17 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('class="chart-mode-tabs"', page)
         self.assertIn('data-chart-mode="line" class="active">Line</button>', page)
         self.assertIn('data-chart-mode="candles">Candle</button>', page)
-        self.assertIn('data-chart-range="1M" data-chart-bars="1" class="active">Monthly</button>', page)
+        self.assertIn('data-chart-range="1D" data-chart-bars="25" class="active">Daily</button>', page)
+
+    def test_account_history_filters_implausible_anchor_outliers(self):
+        history = [
+            Price(date=date(2026, 1, 1), open=100, high=105, low=95, close=100, volume=1),
+            Price(date=date(2026, 1, 2), open=101, high=102, low=99, close=101, volume=1),
+            Price(date=date(2026, 1, 3), open=4_500, high=4_600, low=4_400, close=4_550, volume=1),
+            Price(date=date(2026, 1, 4), open=102, high=103, low=100, close=102, volume=1),
+        ]
+        filtered = _filter_account_history_outliers(history, anchor_value=120)
+        self.assertEqual([item.date.isoformat() for item in filtered], ["2026-01-01", "2026-01-02", "2026-01-04"])
 
     def test_kline_payload_preserves_far_cost_basis_as_line_metadata(self):
         history = [
@@ -565,6 +577,9 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("kline-chart.js?v=20260623-scratch-ui", page)
         self.assertIn('class="refresh-strip"', page)
         self.assertIn("data-refresh-button", page)
+        self.assertIn('role="progressbar"', page)
+        self.assertIn("payload.progress", page)
+        self.assertNotIn("@keyframes refresh-progress", page)
         self.assertIn("/api/refresh", page)
         self.assertIn("white-space:nowrap", page)
         self.assertIn("overflow-x:auto", page)
@@ -666,6 +681,18 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("<small>10 shares</small>", page)
         self.assertNotIn("<span>More</span>", page)
 
+    def test_sparkline_points_accepts_datetime_quote_time(self):
+        points = _sparkline_points(
+            {
+                "price": 101.0,
+                "regular_market_time": "2026-06-24 20:44:12.459",
+                "intraday_path": [],
+            }
+        )
+
+        self.assertEqual(points[-1]["price"], 101.0)
+        self.assertIsInstance(points[-1]["time"], int)
+
     def test_dashboard_account_overview_uses_margin_summary_and_account_chart(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -742,7 +769,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('data-chart-mode="candles"', page)
         self.assertIn('data-chart-range="1W"', page)
 
-    def test_dashboard_adds_fidelity_tab_from_snaptrade_snapshot(self):
+    def test_dashboard_adds_broker_tab_from_snaptrade_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             alerts = root / "alerts.jsonl"
@@ -771,6 +798,18 @@ class DashboardTests(unittest.TestCase):
                         "position_count": 2,
                         "unique_symbols": ["FDIC91315", "TCEHY"],
                         "accounts": [
+                            {
+                                "account": {
+                                    "name": "Empty Roth",
+                                    "number": "***0000",
+                                    "institution_name": "Fidelity",
+                                    "balance": {
+                                        "total": {"amount": 0.0, "currency": "USD"}
+                                    },
+                                },
+                                "balances": [{"cash": 0.0, "buying_power": 0.0}],
+                                "positions": [],
+                            },
                             {
                                 "account": {
                                     "name": "BrokerageLink",
@@ -824,18 +863,19 @@ class DashboardTests(unittest.TestCase):
 
         self.assertIn('data-tab-target="portfolio"', page)
         self.assertIn(">Robinhood</button>", page)
-        self.assertIn('data-tab-target="fidelity"', page)
-        self.assertIn('id="tab-fidelity"', page)
-        self.assertIn("Fidelity via SnapTrade", page)
+        self.assertIn('data-tab-target="broker"', page)
+        self.assertIn('id="tab-broker"', page)
+        self.assertIn("Connected brokers via SnapTrade", page)
         self.assertIn("$2,750.00", page)
-        self.assertIn("2 accounts · 2 positions · 2 symbols", page)
+        self.assertIn("2 funded accounts · 2 positions · 2 symbols", page)
+        self.assertNotIn("Empty Roth", page)
         self.assertIn("BrokerageLink", page)
         self.assertIn("Health Savings Account", page)
         self.assertIn("TCEHY", page)
         self.assertIn("FDIC91315", page)
         self.assertIn("401k funds, cash sweeps, and non-stock instruments", page)
 
-    def test_dashboard_warns_but_keeps_stale_robinhood_account_view_visible(self):
+    def test_dashboard_warns_but_keeps_stale_broker_account_view_visible(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             alerts = root / "alerts.jsonl"

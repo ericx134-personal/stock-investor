@@ -39,9 +39,9 @@ def infer_price_source(
             "adjustment_confidence": "DECLARED" if adjustment_type else "UNKNOWN",
         }
     name = Path(path).name.lower()
-    if "robinhood" in name:
+    if "market-prices" in name:
         return {
-            "name": "Robinhood MCP export",
+            "name": "Configured market data provider",
             "confidence": "INFERRED",
             "adjustment_type": adjustment,
             "adjustment_confidence": "DECLARED" if adjustment_type else "UNKNOWN",

@@ -10,6 +10,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .brief import build_portfolio_learning_review, write_brief
+from .account_summary import load_account_cash
 from .dashboard import build_dashboard, write_dashboard
 from .data import Position, load_positions, load_prices
 from .diagnostics import (
@@ -50,7 +51,6 @@ from .monitor import (
     write_monitor_snapshot,
 )
 from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk_history
-from .robinhood import load_robinhood_cash
 from .research import (
     build_false_discovery_warnings,
     build_multiple_testing_ledger,
@@ -529,7 +529,7 @@ def run_refresh(
         else {}
     )
     cash = (
-        load_robinhood_cash(account_summary_path)
+        load_account_cash(account_summary_path)
         if account_summary_path
         else cash_balance
     )

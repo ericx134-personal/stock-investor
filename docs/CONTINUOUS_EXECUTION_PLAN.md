@@ -30,11 +30,9 @@ Status legend: `[ ]` pending, `[~]` active, `[x]` complete.
 - Preserve every forecast and model version. Never rewrite failed predictions.
 - Require focused tests, the full test suite, a real-data refresh, artifact
   inspection, documentation, and a reversible commit for completion.
-- Keep Robinhood MCP authenticated and online for read-only account refreshes.
-  If the MCP tool session reports stale OAuth after a successful local
-  `codex mcp login robinhood`, reconnect the MCP client or continue from a
-  fresh thread with the same repository state; never place trades or call
-  Robinhood write actions.
+- Keep broker-account imports product-oriented: SnapTrade is the read-only
+  account aggregation path; Moomoo OpenD is the primary local market-data and
+  watchlist path; Yahoo remains a fallback provider only.
 - Promote a model only when it improves sealed forward evidence without
   materially worsening calibration, drawdown, coverage, or stability.
 
@@ -219,7 +217,10 @@ Current execution queue:
   import real accounts.
 - [x] M103C Add a Fidelity dashboard tab from the ignored SnapTrade account
   snapshot without mixing 401k/cash instruments into stock predictions.
-- [ ] M104 Add Moomoo K-line fallback data only after M101 is stable.
+- [x] M104 Promote Moomoo K-line data to the primary local market-data source
+  with Yahoo fallback when OpenD or symbol coverage fails. Current refresh
+  uses Moomoo for daily bars and latest quotes, preserves missing-symbol
+  reporting, and keeps broker account aggregation on SnapTrade.
 - [ ] M105 Evaluate Moomoo annotation import only if an official export format
   is confirmed.
 

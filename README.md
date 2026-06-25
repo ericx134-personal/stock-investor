@@ -7,9 +7,8 @@ For teammates joining the project, start with
 [Collaborating Safely](docs/COLLABORATING.md), and the
 [Continuous Execution Plan](docs/CONTINUOUS_EXECUTION_PLAN.md) and
 [Long-Horizon Roadmap](docs/LONG_HORIZON_ROADMAP.md). To connect real portfolio
-data safely, follow the [Robinhood MCP Setup](docs/ROBINHOOD_MCP_SETUP.md) and
-the [Broker Input Contract](docs/BROKER_INPUT_CONTRACT.md). For future moomoo
-watchlist and Fidelity 401k import direction, see
+data safely, follow the [Broker Input Contract](docs/BROKER_INPUT_CONTRACT.md).
+For Moomoo watchlist/K-line and Fidelity/Robinhood aggregation direction, see
 [Moomoo and Fidelity Integration Research](docs/MOOMOO_FIDELITY_INTEGRATION_RESEARCH.md).
 
 The system is designed to answer a narrower and more useful question than
@@ -41,7 +40,7 @@ See [Testing Strategy](docs/TESTING.md) for when to use each level.
 - Explain every alert in plain language.
 - Treat backtests skeptically and validate strategies out of sample.
 - Require human approval for every trade until a strategy has earned trust.
-- Never store Robinhood passwords, MFA codes, session cookies, or recovery
+- Never store brokerage passwords, MFA codes, session cookies, or recovery
   credentials.
 
 ## Daily Monitor
@@ -65,15 +64,16 @@ PYTHONPATH=src python3 -m stock_investor.cli monitor \
   examples/positions.csv examples/prices.csv --history data/alerts.jsonl
 ```
 
-To fetch account-aligned real daily bars without credentials, use the Yahoo Finance chart
-fallback. It is the default provider for the always-on Mac refresh workflow:
+To fetch account-aligned real daily bars, prefer local Moomoo OpenD. Yahoo
+Finance remains a no-credential fallback for unattended refreshes when OpenD,
+permissions, or a symbol mapping fail:
 
 ```bash
-PYTHONPATH=src python3 -m stock_investor.cli fetch-yahoo \
-  portfolio/positions.csv data/prices.csv
+PYTHONPATH=src python3 -m stock_investor.cli fetch-moomoo \
+  portfolio/positions.csv data/prices.csv --merge-existing data/prices.csv
 PYTHONPATH=src python3 -m stock_investor.cli monitor \
   portfolio/positions.csv data/prices.csv \
-  --account-summary portfolio/robinhood-summary.json \
+  --account-summary portfolio/account-summary.json \
   --history data/alerts.jsonl
 ```
 
@@ -83,7 +83,7 @@ For a scheduled job, use the one-command daily workflow:
 export SEC_USER_AGENT="stock-investor your-email@example.com"
 PYTHONPATH=src python3 -m stock_investor.cli daily \
   portfolio/positions.csv data/prices.csv \
-  --account-summary portfolio/robinhood-summary.json \
+  --account-summary portfolio/account-summary.json \
   --fundamentals data/fundamentals.json --refresh-sec \
   --filing-state data/filing-state.json \
   --filing-alerts data/filing-alerts.jsonl \
@@ -95,52 +95,18 @@ PYTHONPATH=src python3 -m stock_investor.cli daily \
   --brief-output data/daily-brief.md
 ```
 
-## Robinhood Read-Only Import
+## Broker Account Imports
 
-Robinhood's official Trading MCP can read positions, balances, and transactions
-across all linked Robinhood accounts, while trade placement is restricted to
-the dedicated Agentic account. This project treats the connection as read-only.
+Broker accounts are imported through read-only aggregation, not agent tooling.
+The current product path is SnapTrade for Fidelity and Robinhood account data,
+Moomoo OpenD for watchlists and market data, and Yahoo only as a fallback
+market-data provider. Store all real snapshots, positions, and summaries under
+ignored private paths such as `portfolio/` and `data/private/brokers/`.
 
-Convert a sanitized MCP snapshot into monitor-ready holdings:
-
-```bash
-PYTHONPATH=src python3 -m stock_investor.cli sanitize-robinhood \
-  portfolio/combined-robinhood-read.json portfolio/robinhood-snapshot.json
-PYTHONPATH=src python3 -m stock_investor.cli import-robinhood \
-  portfolio/robinhood-snapshot.json portfolio/positions.csv \
-  portfolio/robinhood-summary.json --metadata portfolio/positions.csv \
-  --baseline-history portfolio/robinhood-baselines.jsonl
-```
-
-The normalized snapshot format is shown in
-[examples/robinhood-snapshot.json](examples/robinhood-snapshot.json). It
-contains `accounts`, each with `cash`, `buying_power`, and equity `positions`
-containing `symbol`, `quantity`, `average_cost`, and optional `asset_type`.
-`sanitize-robinhood` whitelists only balances and monitor-required position
-fields, dropping account numbers, nicknames, instrument IDs, and other fields.
-The importer aggregates the same ticker across accounts using weighted average
-cost, preserves existing risk metadata and watchlist rows, skips non-equity
-positions, and writes a sanitized summary. Optional baseline history appends
-only when holdings or balances change. New holdings intentionally receive blank
-sector and fundamental metadata, which blocks buy/add alerts until reviewed.
-
-Use either `--account-summary` or `--cash`, never both. Store all real snapshots,
-positions, and summaries under the ignored `portfolio/` directory.
-
-Robinhood MCP daily historical responses can also feed the monitor without
-market-data credentials. Export the read-only `get_equity_historicals` response with
-`interval=day`, `bounds=regular`, and split adjustment, then convert it:
-
-```bash
-PYTHONPATH=src python3 -m stock_investor.cli import-robinhood-prices \
-  portfolio/robinhood-historicals.json data/private/robinhood-prices.csv
-```
-
-The importer rejects non-daily intervals, removes explicitly interpolated
-gap-fill bars, and writes the same long-form price format used elsewhere.
-Because Robinhood notes that the newest historical bar may not be the official
-settled close, live monitoring should refresh after settlement or reconcile the
-latest date with the official quote close.
+Use either `--account-summary` or `--cash`, never both. The normalized
+`portfolio/account-summary.json` file contains account-level cash or margin and
+buying power. Position files should remain broker-neutral so the model does
+not know whether a holding came from Robinhood, Fidelity, or a watchlist.
 
 ## Moomoo Watchlist Import
 
@@ -280,7 +246,7 @@ PYTHONPATH=src python3 -m stock_investor.cli dashboard \
   --wave-conditional-scorecard data/private/wave-conditional-scorecard.json \
   --direction-forecasts data/private/wave-direction-forecasts.jsonl \
   --direction-forecast-outcomes data/private/wave-direction-forecast-outcomes.json \
-  --prices data/private/robinhood-prices.csv \
+  --prices data/private/market-prices.csv \
   --snaptrade-accounts data/private/brokers/snaptrade-accounts.json
 ```
 
@@ -357,8 +323,8 @@ including `HOLD` results, before comparing selectivity:
 
 ```bash
 PYTHONPATH=src python3 -m stock_investor.cli monitor \
-  portfolio/positions.csv data/private/robinhood-prices.csv \
-  --account-summary portfolio/robinhood-summary.json \
+  portfolio/positions.csv data/private/market-prices.csv \
+  --account-summary portfolio/account-summary.json \
   --model-version decision-support-v3 \
   --snapshot data/private/model-v3-snapshot.json \
   --history data/private/model-v3-alerts.jsonl
@@ -378,12 +344,12 @@ sanitized portfolio or price file:
 
 ```bash
 PYTHONPATH=src python3 -m stock_investor.cli refresh \
-  portfolio/positions.csv data/private/robinhood-prices.csv data/private \
+  portfolio/positions.csv data/private/market-prices.csv data/private \
   --model-version decision-support-v3 \
-  --account-summary portfolio/robinhood-summary.json \
+  --account-summary portfolio/account-summary.json \
   --baseline-snapshot data/private/model-v1-snapshot.json \
   --benchmark SPY \
-  --price-source "Robinhood MCP read-only export" \
+  --price-source "Moomoo OpenD K-line" \
   --price-adjustment unknown \
   --production-safe
 ```

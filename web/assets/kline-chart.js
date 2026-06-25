@@ -174,16 +174,16 @@
 
   function readableVisibleBars(root, rangeName, totalBars) {
     const width = root ? root.clientWidth : 760;
-    const fit = Math.max(54, Math.floor(width / 2.35));
+    const fit = Math.max(54, Math.floor(width / 6.5));
     const caps = {
-      "1D": 520,
-      "1W": 320,
-      "1M": 260,
-      "3M": 220,
-      "YTD": 360,
-      "1Y": 180,
-      "5Y": 260,
-      "MAX": 520,
+      "1D": 220,
+      "1W": 160,
+      "1M": 120,
+      "3M": 96,
+      "YTD": 220,
+      "1Y": 80,
+      "5Y": 120,
+      "MAX": 260,
     };
     return Math.max(1, Math.min(fit, caps[rangeName] || fit));
   }
@@ -198,7 +198,7 @@
   function barSpacingFor(root, visibleCount) {
     const width = root ? root.clientWidth : 760;
     const referenceBars = Math.max(visibleCount, 1);
-    return Math.max(1.25, Math.min(8, width / referenceBars));
+    return Math.max(3.2, Math.min(9.5, width / referenceBars));
   }
 
   function activeRange(payload) {
@@ -212,9 +212,18 @@
   function setStatus(card, message, isError) {
     const status = card.querySelector("[data-chart-status]");
     if (!status) return;
+    if (status._hideTimer) {
+      window.clearTimeout(status._hideTimer);
+      status._hideTimer = null;
+    }
     status.hidden = !message;
     status.textContent = message || "";
     status.classList.toggle("error", Boolean(isError));
+    if (message && !isError) {
+      status._hideTimer = window.setTimeout(() => {
+        status.hidden = true;
+      }, 3600);
+    }
   }
 
   function showFallback(card, show) {
@@ -480,7 +489,7 @@
       const bounded = boundedLogicalRange(state.renderedBarCount, target, state.visibleBarCapacity) || target;
       timeScale.setVisibleLogicalRange(bounded);
       const rootWidth = root ? root.clientWidth : 760;
-      state.currentBarSpacing = Math.max(1.25, Math.min(8, rootWidth / Math.max(nextWidth, 1)));
+      state.currentBarSpacing = Math.max(3.2, Math.min(9.5, rootWidth / Math.max(nextWidth, 1)));
       timeScale.applyOptions({ barSpacing: state.currentBarSpacing });
       requestAnimationFrame(() => {
         recordChartDebugState(state);

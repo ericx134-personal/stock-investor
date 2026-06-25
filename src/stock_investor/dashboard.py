@@ -30,6 +30,7 @@ ACTION_RANK = {
 }
 
 ACCOUNT_HISTORY_START = date(2017, 1, 1)
+ACCOUNT_HISTORY_MAX_ANCHOR_MULTIPLE = 4.0
 DEFAULT_CHART_MODE = "line"
 
 
@@ -145,21 +146,59 @@ def _sparkline_points(quote: dict) -> list[dict]:
         if not points or _safe_float(points[-1].get("price")) != latest_price:
             points.append({"price": latest_price})
         return points
-    latest_timestamp = int(float(latest_time))
-    if not points or int(float(points[-1].get("time") or 0)) < latest_timestamp:
+    latest_timestamp = _quote_time_to_timestamp(latest_time)
+    if latest_timestamp is None:
+        if not points or _safe_float(points[-1].get("price")) != latest_price:
+            points.append({"price": latest_price})
+        return points
+    if not points or (_quote_time_to_timestamp(points[-1].get("time")) or 0) < latest_timestamp:
         points.append({"time": latest_timestamp, "price": latest_price})
     elif _safe_float(points[-1].get("price")) != latest_price:
         points[-1] = {**points[-1], "price": latest_price}
     return points
 
 
+def _quote_time_to_timestamp(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp())
+
+
 def _load_account_summary(path: str | Path | None) -> dict:
     if not path or not Path(path).exists():
         return {}
     payload = json.loads(Path(path).read_text())
+    cash = _safe_float(payload.get("cash"))
+    buying_power = _safe_float(payload.get("buying_power"))
     return {
-        "total_cash": _safe_float(payload.get("total_cash")) or 0.0,
-        "total_buying_power": _safe_float(payload.get("total_buying_power")) or 0.0,
+        "account_value": _safe_float(payload.get("account_value"))
+        or _safe_float(payload.get("total_value")),
+        "holdings_value": _safe_float(payload.get("holdings_value"))
+        or _safe_float(payload.get("equity_value")),
+        "margin_used": _safe_float(payload.get("margin_used")),
+        "total_cash": (
+            cash
+            if cash is not None
+            else (_safe_float(payload.get("total_cash")) or 0.0)
+        ),
+        "total_buying_power": (
+            buying_power
+            if buying_power is not None
+            else (_safe_float(payload.get("total_buying_power")) or 0.0)
+        ),
         "account_count": int(payload.get("account_count") or 0),
         "imported_at": str(payload.get("imported_at") or ""),
         "requires_auth": bool(payload.get("requires_auth") or False),
@@ -223,6 +262,15 @@ def _snaptrade_buying_power(account_snapshot: dict) -> float:
     )
 
 
+def _snaptrade_account_is_visible(account_snapshot: dict) -> bool:
+    return (
+        abs(_snaptrade_account_total(account_snapshot)) >= 0.01
+        or abs(_snaptrade_cash(account_snapshot)) >= 0.01
+        or abs(_snaptrade_buying_power(account_snapshot)) >= 0.01
+        or bool(account_snapshot.get("positions") or [])
+    )
+
+
 def _snaptrade_last_sync(account_snapshot: dict) -> str:
     sync = (account_snapshot.get("account") or {}).get("sync_status") or {}
     holdings = sync.get("holdings") if isinstance(sync, dict) else {}
@@ -230,11 +278,11 @@ def _snaptrade_last_sync(account_snapshot: dict) -> str:
     return str(value or "pending")
 
 
-def _fidelity_position_rows(accounts: list[dict]) -> str:
+def _broker_position_rows(accounts: list[dict]) -> str:
     rows = []
     for account_snapshot in accounts:
         account = account_snapshot.get("account") or {}
-        account_name = str(account.get("name") or "Fidelity account")
+        account_name = str(account.get("name") or "Broker account")
         for position in account_snapshot.get("positions", []):
             if not isinstance(position, dict):
                 continue
@@ -261,13 +309,13 @@ def _fidelity_position_rows(accounts: list[dict]) -> str:
                 )
             )
     return "".join(row for _, _, row in sorted(rows)) or (
-        '<tr><td colspan="6">No Fidelity positions are available yet.</td></tr>'
+        '<tr><td colspan="6">No broker positions are available yet.</td></tr>'
     )
 
 
-def _fidelity_account_card(account_snapshot: dict) -> str:
+def _broker_account_card(account_snapshot: dict) -> str:
     account = account_snapshot.get("account") or {}
-    account_name = str(account.get("name") or "Fidelity account")
+    account_name = str(account.get("name") or "Broker account")
     account_number = str(account.get("number") or "masked")
     total = _snaptrade_account_total(account_snapshot)
     cash = _snaptrade_cash(account_snapshot)
@@ -275,27 +323,28 @@ def _fidelity_account_card(account_snapshot: dict) -> str:
     positions = len(account_snapshot.get("positions", []) or [])
     sync_status = "synced" if "pending" not in _snaptrade_last_sync(account_snapshot) else "pending"
     return f"""
-      <article class="fidelity-account-card">
-        <div class="fidelity-card-title">
-          <span class="fidelity-icon-mini">F</span>
+      <article class="broker-account-card">
+        <div class="broker-card-title">
+          <span class="broker-icon-mini">B</span>
           <div><b>{html.escape(account_name)}</b><small>{html.escape(account_number)}</small></div>
         </div>
-        <div class="fidelity-card-grid">
+        <div class="broker-card-grid">
           <span><small>Value</small><b>{_optional_money(total)}</b></span>
           <span><small>Cash</small><b>{_optional_money(cash)}</b></span>
           <span><small>Buying power</small><b>{_optional_money(buying_power)}</b></span>
           <span><small>Positions</small><b>{positions}</b></span>
         </div>
-        <small class="fidelity-sync {html.escape(sync_status)}">Holdings sync: {html.escape(_snaptrade_last_sync(account_snapshot))}</small>
+        <small class="broker-sync {html.escape(sync_status)}">Holdings sync: {html.escape(_snaptrade_last_sync(account_snapshot))}</small>
       </article>"""
 
 
-def _fidelity_tab(snapshot: dict) -> str:
-    accounts = [row for row in snapshot.get("accounts", []) if isinstance(row, dict)]
+def _broker_tab(snapshot: dict) -> str:
+    raw_accounts = [row for row in snapshot.get("accounts", []) if isinstance(row, dict)]
+    accounts = [row for row in raw_accounts if _snaptrade_account_is_visible(row)]
     if not accounts:
         return """
-        <section class="fidelity-board empty-state">
-          Fidelity data is not connected yet. Use the SnapTrade read-only import, then refresh this dashboard.
+        <section class="broker-board empty-state">
+          Broker data is not connected yet. Use the SnapTrade read-only import, then refresh this dashboard.
         </section>"""
     total_value = sum(_snaptrade_account_total(account) for account in accounts)
     total_cash = sum(_snaptrade_cash(account) for account in accounts)
@@ -304,25 +353,25 @@ def _fidelity_tab(snapshot: dict) -> str:
     unique_symbols = snapshot.get("unique_symbols") or []
     captured_at = str(snapshot.get("captured_at") or "unknown")
     return f"""
-    <section class="fidelity-board" aria-label="Fidelity accounts">
-      <section class="fidelity-hero">
-        <div class="fidelity-brand">
-          <span class="fidelity-icon">F</span>
-          <div><small>Fidelity via SnapTrade · read only</small><h2>{_optional_money(total_value)}</h2><p>{len(accounts)} accounts · {position_count} positions · {len(unique_symbols)} symbols</p></div>
+    <section class="broker-board" aria-label="Connected broker accounts">
+      <section class="broker-hero">
+        <div class="broker-brand">
+          <span class="broker-icon">B</span>
+          <div><small>Connected brokers via SnapTrade · read only</small><h2>{_optional_money(total_value)}</h2><p>{len(accounts)} funded accounts · {position_count} positions · {len(unique_symbols)} symbols</p></div>
         </div>
-        <div class="fidelity-totals">
+        <div class="broker-totals">
           <span><small>Cash</small><b>{_optional_money(total_cash)}</b></span>
           <span><small>Buying power</small><b>{_optional_money(total_buying_power)}</b></span>
           <span><small>Last import</small><b>{html.escape(captured_at[:10])}</b></span>
         </div>
       </section>
-      <section class="fidelity-accounts-grid">
-        {"".join(_fidelity_account_card(account) for account in accounts)}
+      <section class="broker-accounts-grid">
+        {"".join(_broker_account_card(account) for account in accounts)}
       </section>
-      <section class="fidelity-positions-panel">
-        <div class="fidelity-section-heading"><small>Imported holdings</small><h3>Fidelity positions</h3></div>
-        <div class="fidelity-table-wrap">
-          <table class="fidelity-positions-table"><thead><tr><th>Symbol</th><th>Account</th><th>Shares</th><th>Price</th><th>Value</th><th>Avg cost</th></tr></thead><tbody>{_fidelity_position_rows(accounts)}</tbody></table>
+      <section class="broker-positions-panel">
+        <div class="broker-section-heading"><small>Imported holdings</small><h3>Broker positions</h3></div>
+        <div class="broker-table-wrap">
+          <table class="broker-positions-table"><thead><tr><th>Symbol</th><th>Account</th><th>Shares</th><th>Price</th><th>Value</th><th>Avg cost</th></tr></thead><tbody>{_broker_position_rows(accounts)}</tbody></table>
         </div>
         <p class="note">401k funds, cash sweeps, and non-stock instruments are displayed here but are not promoted into stock prediction signals until the broker-neutral merger can classify them safely.</p>
       </section>
@@ -354,7 +403,7 @@ def _account_connection_state(
         return {
             "requires_auth": True,
             "status": "missing",
-            "detail": "No fresh Robinhood account summary was found.",
+            "detail": "No fresh broker account summary was found.",
             "imported_at": "",
             "path": str(source),
         }
@@ -364,7 +413,7 @@ def _account_connection_state(
         return {
             "requires_auth": True,
             "status": "oauth_required",
-            "detail": "Robinhood MCP reported that OAuth authorization is required.",
+            "detail": "The broker import reported that authorization is required.",
             "imported_at": imported_at,
             "path": str(source),
         }
@@ -375,14 +424,14 @@ def _account_connection_state(
             return {
                 "requires_auth": True,
                 "status": "stale",
-                "detail": f"Robinhood account data is {hours} hours old.",
+                "detail": f"Broker account data is {hours} hours old.",
                 "imported_at": imported_at,
                 "path": str(source),
             }
     return {
         "requires_auth": False,
         "status": "connected",
-        "detail": "Robinhood account summary is fresh enough for account-level totals.",
+        "detail": "Broker account summary is fresh enough for account-level totals.",
         "imported_at": imported_at,
         "path": str(source),
     }
@@ -392,12 +441,12 @@ def _account_connection_notice(state: dict) -> str:
     if not state.get("requires_auth"):
         return ""
     imported = state.get("imported_at") or "never"
-    detail = state.get("detail") or "Robinhood account authorization is required."
+    detail = state.get("detail") or "Broker account authorization is required."
     return f"""
     <section class="account-connection-notice" data-account-data-stale="true" aria-label="Account data stale">
       <b>Account data needs refresh</b>
       <span>{html.escape(detail)} Showing the last imported read-only portfolio for now. Login/connect work is shelved.</span>
-      <small>Last account import: {html.escape(str(imported))}. This app will not ask for your Robinhood password.</small>
+      <small>Last account import: {html.escape(str(imported))}. Use broker aggregators or local providers; this app will not ask for your brokerage password.</small>
     </section>"""
 
 
@@ -414,7 +463,7 @@ def _refresh_control(latest_quotes_path: str | Path | None, fallback: str) -> st
     <section class="refresh-strip" aria-label="Market data refresh">
       <span>Updated {html.escape(last_updated)}</span>
       <button type="button" data-refresh-button>Update</button>
-      <span class="refresh-progress" data-refresh-progress hidden><i></i></span>
+      <span class="refresh-progress" data-refresh-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><i></i></span>
       <small data-refresh-message></small>
     </section>"""
 
@@ -473,6 +522,39 @@ def _portfolio_account_history(
             )
         )
     return points
+
+
+def _filter_account_history_outliers(
+    points: list[Price],
+    anchor_value: float,
+    max_anchor_multiple: float = ACCOUNT_HISTORY_MAX_ANCHOR_MULTIPLE,
+) -> list[Price]:
+    if not points:
+        return []
+    max_anchor = (
+        anchor_value * max_anchor_multiple
+        if anchor_value and anchor_value > 0
+        else None
+    )
+    filtered: list[Price] = []
+    previous_close: float | None = None
+    for point in points:
+        values = [point.open, point.high, point.low, point.close]
+        if any(value is None or float(value) <= 0 for value in values):
+            continue
+        high = float(point.high or 0)
+        low = float(point.low or 0)
+        close = float(point.close or 0)
+        if max_anchor is not None and high > max_anchor:
+            continue
+        if previous_close is not None:
+            if close > previous_close * 3.0 or close < previous_close * 0.25:
+                continue
+            if high > previous_close * 3.5 or low < previous_close * 0.2:
+                continue
+        filtered.append(point)
+        previous_close = close
+    return filtered
 
 
 def _portfolio_account_intraday_bars(
@@ -680,11 +762,21 @@ def _portfolio_account_overview(
     payload_registry: dict | None,
     intraday_bars: list[dict] | None = None,
 ) -> str:
-    holdings_value = totals.get("market_value", 0.0)
+    holdings_value = (
+        _safe_float(account_summary.get("holdings_value"))
+        or totals.get("market_value", 0.0)
+    )
     cash_balance = float(account_summary.get("total_cash", 0.0) or 0.0)
     buying_power = float(account_summary.get("total_buying_power", 0.0) or 0.0)
-    margin_used = max(0.0, -cash_balance)
-    account_value = holdings_value + cash_balance
+    margin_used = (
+        _safe_float(account_summary.get("margin_used"))
+        if _safe_float(account_summary.get("margin_used")) is not None
+        else max(0.0, -cash_balance)
+    )
+    account_value = (
+        _safe_float(account_summary.get("account_value"))
+        or holdings_value + cash_balance
+    )
     today_dollars = totals.get("today_dollars", 0.0)
     gain_dollars = totals.get("gain_dollars", 0.0)
     prior_value = account_value - today_dollars
@@ -692,8 +784,9 @@ def _portfolio_account_overview(
     today_class = "positive" if today_dollars >= 0 else "negative"
     gain_class = "positive" if gain_dollars >= 0 else "negative"
     margin_class = "negative" if margin_used > 0 else "positive"
+    filtered_history = _filter_account_history_outliers(history, account_value)
     chart = _account_kline_card(
-        history, account_value, today_pct, payload_registry, intraday_bars
+        filtered_history, account_value, today_pct, payload_registry, intraday_bars
     )
     return f"""
     <section class="account-overview" aria-label="Account overview">
@@ -1708,7 +1801,7 @@ def _kline_chart_payload(
         "bars_daily": [_chart_bar(item) for item in clean_history],
         "bars_intraday": [],
         "ranges": _chart_ranges(clean_history) if clean_history else {},
-        "default_range": "YTD" if len(clean_history) >= 63 else "1M",
+        "default_range": "1D",
         "signal": {
             "label": signal_label,
             "class": signal_class,
@@ -2450,15 +2543,15 @@ def build_dashboard(
         {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
       </div>
     </section>"""
-    fidelity_view = _fidelity_tab(snaptrade_accounts) if snaptrade_accounts else ""
-    fidelity_tab_button = (
-        '<button type="button" class="tab-button" data-tab-target="fidelity" role="tab" aria-selected="false"><span class="fidelity-tab-mark">F</span> Fidelity</button>'
-        if fidelity_view
+    broker_view = _broker_tab(snaptrade_accounts) if snaptrade_accounts else ""
+    broker_tab_button = (
+        '<button type="button" class="tab-button" data-tab-target="broker" role="tab" aria-selected="false"><span class="broker-tab-mark">B</span> Brokers</button>'
+        if broker_view
         else ""
     )
-    fidelity_tab_panel = (
-        f'<section id="tab-fidelity" class="tab-view" role="tabpanel" hidden>{fidelity_view}</section>'
-        if fidelity_view
+    broker_tab_panel = (
+        f'<section id="tab-broker" class="tab-view" role="tabpanel" hidden>{broker_view}</section>'
+        if broker_view
         else ""
     )
     prioritized_board = f"""
@@ -2843,17 +2936,16 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .sub {{ color:var(--muted); margin:5px 0 28px }}
 .refresh-strip {{ align-items:center; color:var(--muted); display:flex; gap:9px; min-height:24px; margin:-14px 0 14px }}
 .refresh-strip span:first-child,.refresh-strip small {{ font-size:11px }} .refresh-strip button {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--green); cursor:pointer; font:inherit; font-size:11px; font-weight:800; padding:4px 9px }}
-.refresh-strip button:disabled {{ color:#555; cursor:progress }} .refresh-progress {{ background:#1b1b1b; border-radius:999px; display:inline-block; height:3px; overflow:hidden; width:88px }}
-.refresh-progress i {{ animation:refresh-progress 1s ease-in-out infinite; background:var(--green); border-radius:999px; display:block; height:100%; width:42% }}
-@keyframes refresh-progress {{ 0% {{ transform:translateX(-100%) }} 100% {{ transform:translateX(240%) }} }}
+.refresh-strip button:disabled {{ color:#555; cursor:progress }} .refresh-progress {{ background:#1b1b1b; border-radius:999px; display:inline-block; height:4px; overflow:hidden; width:96px }}
+.refresh-progress i {{ background:var(--green); border-radius:999px; display:block; height:100%; transform-origin:left center; transition:width .2s ease; width:0% }}
 .grid {{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:24px }}
 .stat,.panel,.holding-row {{ background:var(--panel); border:1px solid var(--line); border-radius:10px }}
 .stat {{ padding:18px }} .stat b {{ display:block; font-size:28px }} .stat span {{ color:var(--muted) }}
 .warning {{ color:var(--amber) }} .panel {{ padding:20px; margin:18px 0 }} h2 {{ margin:0 0 12px; font-size:19px }}
 .tabs {{ border-bottom:1px solid var(--line); display:flex; gap:24px; margin:22px 0 22px; max-width:100%; min-width:0; overflow-x:auto; scrollbar-width:none }} .tabs::-webkit-scrollbar {{ display:none }} .tab-button {{ align-items:center; background:transparent; border:0; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; display:inline-flex; flex:0 0 auto; font:inherit; font-weight:650; gap:7px; margin-bottom:-1px; padding:10px 1px }}
 .tab-button:hover {{ color:var(--text) }} .tab-button.active {{ border-bottom-color:var(--green); color:var(--green) }} .tab-view {{ display:none }} .tab-view.active {{ display:block }}
-.fidelity-tab-mark,.fidelity-icon-mini,.fidelity-icon {{ align-items:center; background:#00a83b; border-radius:50%; color:#001b0a; display:inline-flex; font-weight:900; justify-content:center }}
-.fidelity-tab-mark {{ font-size:10px; height:17px; width:17px }}
+.broker-tab-mark,.broker-icon-mini,.broker-icon {{ align-items:center; background:#00a83b; border-radius:50%; color:#001b0a; display:inline-flex; font-weight:900; justify-content:center }}
+.broker-tab-mark {{ font-size:10px; height:17px; width:17px }}
 .portfolio-board {{ margin:12px 0 24px }}
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
@@ -2867,9 +2959,9 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .account-kline-card .interactive-kline {{ height:280px; margin-top:0 }}
 .account-kline-card .chart-controls {{ align-items:center; border-top:1px solid var(--line); display:flex; gap:14px; justify-content:space-between; margin:8px 0 0; padding-top:8px }}
 .account-kline-card .chart-range-tabs {{ justify-content:flex-start; margin:0; padding-top:0 }}
-.chart-mode-tabs {{ align-items:center; display:flex; gap:6px }}
-.chart-mode-tabs button {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--muted); cursor:pointer; font:inherit; font-size:12px; font-weight:800; padding:6px 10px }}
-.chart-mode-tabs button.active {{ background:var(--green); border-color:var(--green); color:#001f08 }}
+.chart-mode-tabs {{ align-items:center; background:#101010; border:1px solid #333; border-radius:999px; display:inline-flex; gap:0; padding:2px }}
+.chart-mode-tabs button {{ background:transparent; border:0; border-radius:999px; color:var(--muted); cursor:pointer; font:inherit; font-size:12px; font-weight:800; min-width:58px; padding:5px 10px }}
+.chart-mode-tabs button.active {{ background:var(--green); color:#001f08 }}
 .account-chart-legend {{ display:none }}
 .account-grid line {{ stroke:#252525; stroke-width:1 }} .account-line {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:3 }}
 .account-area {{ fill:currentColor; opacity:.08 }} .account-value-chart.positive {{ color:var(--green) }} .account-value-chart.negative {{ color:var(--red) }} .account-value-chart text {{ fill:var(--muted); font-size:11px }}
@@ -2877,21 +2969,21 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .account-stats {{ border-top:1px solid var(--line); display:grid; gap:0; grid-template-columns:repeat(4,1fr); margin-top:8px }}
 .account-stats div {{ border-right:1px solid var(--line); padding:11px 14px }} .account-stats div:first-child {{ padding-left:0 }} .account-stats div:last-child {{ border-right:0 }}
 .account-stats small {{ color:var(--muted); display:block; font-size:11px; font-weight:700 }} .account-stats b {{ display:block; font-size:18px; margin-top:2px }}
-.fidelity-board {{ display:grid; gap:14px; margin:12px 0 24px }}
-.fidelity-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:18px; grid-template-columns:minmax(280px,1.5fr) minmax(300px,1fr); padding:20px 22px }}
-.fidelity-brand {{ align-items:center; display:flex; gap:15px }} .fidelity-icon {{ font-size:30px; height:58px; width:58px }}
-.fidelity-brand small,.fidelity-section-heading small {{ color:#00a83b; display:block; font-size:10px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }}
-.fidelity-brand h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:2px 0 0 }} .fidelity-brand p {{ color:var(--muted); margin:8px 0 0 }}
-.fidelity-totals {{ display:grid; gap:8px; grid-template-columns:repeat(3,1fr) }} .fidelity-totals span,.fidelity-card-grid span {{ background:#101010; border:1px solid var(--line); border-radius:10px; padding:12px }}
-.fidelity-totals small,.fidelity-card-grid small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.3px; text-transform:uppercase }} .fidelity-totals b,.fidelity-card-grid b {{ display:block; font-size:18px; margin-top:4px }}
-.fidelity-accounts-grid {{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) }}
-.fidelity-account-card {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:12px; padding:15px }}
-.fidelity-card-title {{ align-items:center; display:flex; gap:10px }} .fidelity-icon-mini {{ height:28px; width:28px }} .fidelity-card-title b {{ display:block; font-size:17px }} .fidelity-card-title small,.fidelity-sync {{ color:var(--muted); display:block; font-size:12px }}
-.fidelity-card-grid {{ display:grid; gap:8px; grid-template-columns:repeat(2,1fr) }} .fidelity-sync.synced {{ color:var(--green) }}
-.fidelity-positions-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; overflow:hidden }}
-.fidelity-section-heading {{ padding:16px 18px 8px }} .fidelity-section-heading h3 {{ font-size:22px; margin:1px 0 0 }}
-.fidelity-table-wrap {{ overflow:auto }} .fidelity-positions-table td:first-child span {{ color:var(--muted); display:block; font-size:12px; margin-top:2px; max-width:360px }}
-.fidelity-positions-table th {{ color:#00a83b }} .fidelity-positions-panel .note {{ padding:0 18px 16px }}
+.broker-board {{ display:grid; gap:14px; margin:12px 0 24px }}
+.broker-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:18px; grid-template-columns:minmax(280px,1.5fr) minmax(300px,1fr); padding:20px 22px }}
+.broker-brand {{ align-items:center; display:flex; gap:15px }} .broker-icon {{ font-size:30px; height:58px; width:58px }}
+.broker-brand small,.broker-section-heading small {{ color:#00a83b; display:block; font-size:10px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }}
+.broker-brand h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:2px 0 0 }} .broker-brand p {{ color:var(--muted); margin:8px 0 0 }}
+.broker-totals {{ display:grid; gap:8px; grid-template-columns:repeat(3,1fr) }} .broker-totals span,.broker-card-grid span {{ background:#101010; border:1px solid var(--line); border-radius:10px; padding:12px }}
+.broker-totals small,.broker-card-grid small {{ color:var(--muted); display:block; font-size:10px; font-weight:750; letter-spacing:.3px; text-transform:uppercase }} .broker-totals b,.broker-card-grid b {{ display:block; font-size:18px; margin-top:4px }}
+.broker-accounts-grid {{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) }}
+.broker-account-card {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:12px; padding:15px }}
+.broker-card-title {{ align-items:center; display:flex; gap:10px }} .broker-icon-mini {{ height:28px; width:28px }} .broker-card-title b {{ display:block; font-size:17px }} .broker-card-title small,.broker-sync {{ color:var(--muted); display:block; font-size:12px }}
+.broker-card-grid {{ display:grid; gap:8px; grid-template-columns:repeat(2,1fr) }} .broker-sync.synced {{ color:var(--green) }}
+.broker-positions-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; overflow:hidden }}
+.broker-section-heading {{ padding:16px 18px 8px }} .broker-section-heading h3 {{ font-size:22px; margin:1px 0 0 }}
+.broker-table-wrap {{ overflow:auto }} .broker-positions-table td:first-child span {{ color:var(--muted); display:block; font-size:12px; margin-top:2px; max-width:360px }}
+.broker-positions-table th {{ color:#00a83b }} .broker-positions-panel .note {{ padding:0 18px 16px }}
 .portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:10px 0 16px; overflow:hidden }}
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
@@ -2996,7 +3088,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .kline-zone-label {{ background:#050505; border:1px solid currentColor; border-radius:999px; color:inherit; font-size:10px; font-weight:800; padding:3px 8px; position:absolute; right:10px; top:4px; white-space:nowrap }}
 .chart-tooltip {{ background:#050505; border:1px solid #555; border-radius:8px; box-shadow:0 10px 28px rgba(0,0,0,.45); color:var(--text); font-size:11px; left:12px; min-width:210px; padding:8px 10px; pointer-events:none; position:absolute; top:72px; z-index:4 }}
 .chart-tooltip b,.chart-tooltip span {{ display:block }} .chart-tooltip span {{ color:var(--muted); margin-top:2px }}
-.chart-status,.chart-fallback {{ background:rgba(17,17,17,.92); border-radius:8px; bottom:54px; color:var(--muted); font-size:11px; left:18px; max-width:min(620px,calc(100% - 36px)); padding:7px 10px; position:absolute; z-index:3 }}
+.chart-status,.chart-fallback {{ background:rgba(17,17,17,.92); border:1px solid rgba(255,255,255,.08); border-radius:999px; color:var(--muted); font-size:11px; left:18px; max-width:min(620px,calc(100% - 36px)); padding:6px 10px; position:absolute; top:10px; z-index:3 }}
 .chart-controls {{ align-items:center; border-top:1px solid var(--line); display:flex; gap:14px; justify-content:space-between; margin:8px 0 0; min-width:0; padding-top:8px }}
 .chart-controls > * {{ min-width:0 }}
 .chart-range-tabs {{ align-items:center; display:flex; flex:1 1 auto; flex-wrap:nowrap; gap:22px; justify-content:flex-start; margin:0; max-width:100%; min-width:0; overflow-x:auto; padding-top:0; scrollbar-width:none }} .chart-range-tabs::-webkit-scrollbar {{ display:none }} .chart-range-tabs button {{ background:transparent; border:0; border-radius:8px; color:var(--green); cursor:pointer; flex:0 0 auto; font:inherit; font-size:13px; font-weight:800; padding:7px 10px; white-space:nowrap }} .chart-range-tabs button.active {{ background:var(--green); color:#001f08 }} .chart-range-tabs button:disabled {{ color:#474747; cursor:not-allowed }} .chart-legend {{ color:var(--muted); display:flex; flex-wrap:wrap; font-size:10px; gap:12px; margin-top:3px }} .chart-legend span::before {{ background:#777; border-radius:2px; content:""; display:inline-block; height:7px; margin-right:4px; width:7px }}
@@ -3081,7 +3173,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 {refresh_control}
 <nav class="tabs" role="tablist" aria-label="Dashboard sections">
   <button type="button" class="tab-button active" data-tab-target="portfolio" role="tab" aria-selected="true">Robinhood</button>
-  {fidelity_tab_button}
+  {broker_tab_button}
   <button type="button" class="tab-button" data-tab-target="opportunities" role="tab" aria-selected="false">Opportunities</button>
   <button type="button" class="tab-button" data-tab-target="research" role="tab" aria-selected="false">Research</button>
   <button type="button" class="tab-button" data-tab-target="health" role="tab" aria-selected="false">Health &amp; Risk</button>
@@ -3089,7 +3181,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <section id="tab-portfolio" class="tab-view active" role="tabpanel">
 <section class="portfolio-board">{portfolio_account_overview}{portfolio_holdings}</section>
 </section>
-{fidelity_tab_panel}
+{broker_tab_panel}
 <section id="tab-opportunities" class="tab-view" role="tabpanel" hidden>
 {prioritized_board}
 </section>
@@ -3285,9 +3377,15 @@ window.StockInvestorKline?.initVisibleCharts();
 const refreshButton = document.querySelector("[data-refresh-button]");
 const refreshProgress = document.querySelector("[data-refresh-progress]");
 const refreshMessage = document.querySelector("[data-refresh-message]");
-const setRefreshState = (message, running = false) => {{
+const refreshProgressFill = refreshProgress?.querySelector("i");
+const setRefreshState = (message, running = false, progress = 0) => {{
   if (refreshButton) refreshButton.disabled = running;
-  if (refreshProgress) refreshProgress.hidden = !running;
+  const boundedProgress = Math.max(0, Math.min(100, Number(progress || 0)));
+  if (refreshProgress) {{
+    refreshProgress.hidden = !running && boundedProgress <= 0;
+    refreshProgress.setAttribute("aria-valuenow", String(Math.round(boundedProgress)));
+  }}
+  if (refreshProgressFill) refreshProgressFill.style.width = `${{boundedProgress}}%`;
   if (refreshMessage) refreshMessage.textContent = message || "";
 }};
 const pollRefreshStatus = async () => {{
@@ -3295,24 +3393,24 @@ const pollRefreshStatus = async () => {{
   if (!response.ok) throw new Error(`refresh status ${{response.status}}`);
   const payload = await response.json();
   if (payload.status === "running") {{
-    setRefreshState("updating...", true);
+    setRefreshState(payload.message || "updating...", true, payload.progress || 0);
     window.setTimeout(() => pollRefreshStatus().catch(() => setRefreshState("refresh status unavailable")), 1800);
     return;
   }}
   if (payload.status === "succeeded") {{
-    setRefreshState("updated, reloading...", false);
+    setRefreshState("updated, reloading...", false, 100);
     window.setTimeout(() => window.location.reload(), 700);
     return;
   }}
   if (payload.status === "failed") {{
-    setRefreshState(payload.message || "refresh failed", false);
+    setRefreshState(payload.message || "refresh failed", false, 100);
     return;
   }}
-  setRefreshState(payload.message || "", false);
+  setRefreshState(payload.message || "", false, payload.progress || 0);
 }};
 refreshButton?.addEventListener("click", async () => {{
   try {{
-    setRefreshState("starting...", true);
+    setRefreshState("starting...", true, 1);
     const response = await fetch("/api/refresh", {{ method: "POST" }});
     if (!response.ok) throw new Error(`refresh ${{response.status}}`);
     await pollRefreshStatus();

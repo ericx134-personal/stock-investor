@@ -7,11 +7,11 @@ Date: 2026-06-23
 Use this project as the portfolio brain. Each broker or tool should feed it
 through a small, read-only import adapter:
 
-1. Robinhood remains the first real holdings source through the existing MCP
-   path.
-2. Moomoo should be added first as a watchlist and K-line data source.
-3. Fidelity 401k should start as CSV/manual export or an authorized aggregator
-   connection, not password automation.
+1. SnapTrade is the product-facing read-only aggregation path for Robinhood,
+   Fidelity, and future broker accounts.
+2. Moomoo should be the primary local watchlist and K-line data source.
+3. Yahoo Finance should remain a fallback market-data source, not the default
+   source of truth.
 
 The normalized files in `BROKER_INPUT_CONTRACT.md` stay the boundary. The model
 and dashboard should not know which broker produced a position.

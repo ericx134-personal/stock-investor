@@ -10,6 +10,7 @@ from unittest.mock import patch
 from stock_investor.providers.snaptrade import (
     SnapTradeClient,
     SnapTradeCredentials,
+    build_snaptrade_account_summary,
     compute_request_signature,
     fetch_snaptrade_snapshot,
     load_snaptrade_credentials,
@@ -169,6 +170,49 @@ class SnapTradeProviderTests(unittest.TestCase):
         self.assertEqual(account["positions"][0]["symbol"], "AAPL")
         self.assertEqual(account["positions"][0]["units"], 3.0)
         self.assertEqual(account["positions"][1]["market_value"], 500.5)
+
+    def test_build_account_summary_filters_empty_accounts_and_institution(self):
+        snapshot = {
+            "captured_at": "2026-06-25T00:00:00+00:00",
+            "accounts": [
+                {
+                    "account": {
+                        "institution_name": "Robinhood",
+                        "balance": {"total": {"amount": 0, "currency": "USD"}},
+                    },
+                    "balances": [{"cash": 0, "buying_power": 0}],
+                    "positions": [],
+                },
+                {
+                    "account": {
+                        "institution_name": "Robinhood",
+                        "balance": {"total": {"amount": 800, "currency": "USD"}},
+                    },
+                    "balances": [{"cash": -200, "buying_power": 100}],
+                    "positions": [{"symbol": "ABC", "units": 10, "price": 100}],
+                },
+                {
+                    "account": {
+                        "institution_name": "Fidelity",
+                        "balance": {"total": {"amount": 300, "currency": "USD"}},
+                    },
+                    "balances": [{"cash": 25, "buying_power": 25}],
+                    "positions": [{"symbol": "XYZ", "units": 3, "price": 100}],
+                },
+            ],
+        }
+
+        summary = build_snaptrade_account_summary(
+            snapshot,
+            institution_name="Robinhood",
+        )
+
+        self.assertEqual(summary["account_count"], 1)
+        self.assertEqual(summary["account_value"], 800)
+        self.assertEqual(summary["cash"], -200)
+        self.assertEqual(summary["margin_used"], 200)
+        self.assertEqual(summary["buying_power"], 100)
+        self.assertEqual(summary["holdings_value"], 1000)
 
     def test_fetch_personal_snapshot_omits_user_identity_query(self):
         opener = FakeOpener()

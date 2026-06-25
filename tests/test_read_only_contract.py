@@ -62,10 +62,14 @@ class ReadOnlyContractTests(unittest.TestCase):
                     )
         self.assertEqual(violations, [], f"HTTP write requests found: {violations}")
 
-    def test_market_refresh_uses_no_credential_provider_by_default(self):
+    def test_market_refresh_uses_moomoo_first_with_no_credential_fallback(self):
         script = (ROOT / "scripts" / "run_market_refresh.sh").read_text()
         cli = (ROOT / "src" / "stock_investor" / "cli.py").read_text()
-        self.assertIn("Using Yahoo Finance chart data (no credentials)", script)
+        self.assertIn('MARKET_DATA_PROVIDER_ORDER="${MARKET_DATA_PROVIDER_ORDER:-moomoo,yahoo}"', script)
+        self.assertIn("fetch-moomoo", script)
+        self.assertIn("fetch-yahoo", script)
+        self.assertIn("write_progress 35", script)
+        self.assertIn("write_progress 100", script)
         self.assertIn(
             'START_DATE="${ACCOUNT_HISTORY_START_DATE:-${YAHOO_START_DATE:-}}"',
             script,
@@ -74,6 +78,8 @@ class ReadOnlyContractTests(unittest.TestCase):
         self.assertIn('DEFAULT_ACCOUNT_HISTORY_START_DATE = "2017-01-01"', cli)
         self.assertIn('os.environ.get("ACCOUNT_HISTORY_START_DATE")', cli)
         self.assertIn('yahoo_parser.add_argument("--start", default=_default_yahoo_start())', cli)
+        self.assertIn('"fetch-moomoo"', cli)
+        self.assertIn('"fetch-moomoo-quotes"', cli)
         launchd = (ROOT / "scripts" / "macos" / "stock-investor-refresh.plist.in").read_text()
         self.assertIn("<key>StartCalendarInterval</key>", launchd)
         self.assertIn("<integer>6</integer>", launchd)

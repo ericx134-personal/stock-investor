@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 from stock_investor.providers.moomoo import (
     MoomooProviderError,
+    fetch_moomoo_daily_bars,
+    fetch_moomoo_latest_quotes,
     fetch_moomoo_watchlists,
     write_moomoo_watchlists,
 )
@@ -51,12 +53,58 @@ class FakeContext:
         }
         return 0, FakeTable(rows[group_name])
 
+    def request_history_kline(self, code, **kwargs):
+        self.history_call = (code, kwargs)
+        return 0, FakeTable(
+            [
+                {
+                    "code": code,
+                    "time_key": "2026-06-23 00:00:00",
+                    "open": 90,
+                    "close": 92,
+                    "high": 93,
+                    "low": 89,
+                    "volume": 1000,
+                },
+                {
+                    "code": code,
+                    "time_key": "2026-06-24 00:00:00",
+                    "open": 92,
+                    "close": 94,
+                    "high": 95,
+                    "low": 91,
+                    "volume": 1200,
+                },
+            ]
+        ), None
+
+    def get_market_snapshot(self, codes):
+        self.snapshot_codes = codes
+        return 0, FakeTable(
+            [
+                {
+                    "code": code,
+                    "last_price": 94,
+                    "prev_close_price": 92,
+                    "after_price": 95,
+                    "update_time": "2026-06-24 20:00:00",
+                }
+                for code in codes
+            ]
+        )
+
     def close(self):
         self.closed = True
 
 
 class FakeSdk:
     RET_OK = 0
+
+    class KLType:
+        K_DAY = "K_DAY"
+
+    class AuType:
+        QFQ = "QFQ"
 
     def __init__(self, context):
         self.context = context
@@ -159,6 +207,58 @@ class MoomooProviderTests(unittest.TestCase):
             write_moomoo_watchlists(payload, path)
             loaded = json.loads(path.read_text())
         self.assertEqual(loaded, payload)
+
+    def test_fetch_daily_bars_uses_opend_kline(self):
+        context = FakeContext()
+
+        payload = fetch_moomoo_daily_bars(
+            ["hood"],
+            "2026-06-01",
+            "2026-06-24",
+            sdk=FakeSdk(context),
+            check_connection=False,
+        )
+
+        self.assertEqual(context.history_call[0], "US.HOOD")
+        self.assertEqual(context.history_call[1]["ktype"], "K_DAY")
+        self.assertEqual(context.history_call[1]["autype"], "QFQ")
+        self.assertEqual([item.close for item in payload["HOOD"]], [92.0, 94.0])
+        self.assertTrue(context.closed)
+
+    def test_fetch_latest_quotes_uses_opend_snapshot(self):
+        context = FakeContext()
+
+        quotes = fetch_moomoo_latest_quotes(
+            ["HOOD"],
+            sdk=FakeSdk(context),
+            check_connection=False,
+        )
+
+        self.assertEqual(context.snapshot_codes, ["US.HOOD"])
+        self.assertEqual(quotes["HOOD"]["price"], 95.0)
+        self.assertAlmostEqual(quotes["HOOD"]["today_return"], 95 / 92 - 1)
+        self.assertEqual(quotes["HOOD"]["source"], "Moomoo OpenD market snapshot")
+
+    def test_snapshot_batch_failure_falls_back_to_single_symbols(self):
+        class PartialSnapshotContext(FakeContext):
+            def get_market_snapshot(self, codes):
+                if len(codes) > 1:
+                    return -1, "Unknown stock. BAD"
+                if codes == ["US.BAD"]:
+                    return -1, "Unknown stock. BAD"
+                return super().get_market_snapshot(codes)
+
+        failures = []
+        quotes = fetch_moomoo_latest_quotes(
+            ["HOOD", "BAD"],
+            sdk=FakeSdk(PartialSnapshotContext()),
+            check_connection=False,
+            on_failure=failures.append,
+        )
+
+        self.assertIn("HOOD", quotes)
+        self.assertNotIn("BAD", quotes)
+        self.assertEqual(failures[0].symbol, "BAD")
 
 
 if __name__ == "__main__":

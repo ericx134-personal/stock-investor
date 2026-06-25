@@ -311,6 +311,44 @@ def write_snaptrade_snapshot(payload: dict[str, Any], path: str | Path) -> None:
     atomic_write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", path)
 
 
+def build_snaptrade_account_summary(
+    snapshot: dict[str, Any],
+    *,
+    institution_name: str | None = None,
+) -> dict[str, Any]:
+    """Normalize SnapTrade balances into the dashboard account-summary contract."""
+    accounts = [
+        account
+        for account in snapshot.get("accounts", [])
+        if isinstance(account, dict)
+        and _matches_institution(account, institution_name)
+        and _account_is_visible(account)
+    ]
+    cash = sum(_account_cash(account) for account in accounts)
+    buying_power = sum(_account_buying_power(account) for account in accounts)
+    account_value = sum(_account_total(account) for account in accounts)
+    holdings_value = account_value - cash
+    return {
+        "schema_version": 1,
+        "source": "snaptrade",
+        "institution_name": institution_name,
+        "imported_at": snapshot.get("captured_at") or datetime.now(timezone.utc).isoformat(),
+        "as_of": snapshot.get("captured_at"),
+        "account_count": len(accounts),
+        "account_value": account_value,
+        "holdings_value": holdings_value,
+        "cash": cash,
+        "margin_used": max(0.0, -cash),
+        "buying_power": buying_power,
+        "total_cash": cash,
+        "total_buying_power": buying_power,
+    }
+
+
+def write_snaptrade_account_summary(payload: dict[str, Any], path: str | Path) -> None:
+    atomic_write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", path)
+
+
 def _query_string(pairs: tuple[tuple[str, str], ...]) -> str:
     return urlencode([(key, value) for key, value in pairs if value is not None])
 
@@ -328,6 +366,69 @@ def _sanitize_account(account: dict[str, Any]) -> dict[str, Any]:
         "opening_date": account.get("opening_date"),
         "is_paper": account.get("is_paper"),
     }
+
+
+def _matches_institution(account_snapshot: dict[str, Any], institution_name: str | None) -> bool:
+    if not institution_name:
+        return True
+    account = account_snapshot.get("account") or {}
+    return str(account.get("institution_name") or "").lower() == institution_name.lower()
+
+
+def _account_is_visible(account_snapshot: dict[str, Any]) -> bool:
+    return (
+        abs(_account_total(account_snapshot)) >= 0.01
+        or abs(_account_cash(account_snapshot)) >= 0.01
+        or abs(_account_buying_power(account_snapshot)) >= 0.01
+        or bool(account_snapshot.get("positions") or [])
+    )
+
+
+def _account_total(account_snapshot: dict[str, Any]) -> float:
+    account = account_snapshot.get("account") or {}
+    balance = account.get("balance") if isinstance(account.get("balance"), dict) else {}
+    total = _money_amount(balance.get("total"))
+    if total is not None:
+        return total
+    return sum(
+        _position_value(position)
+        for position in account_snapshot.get("positions", [])
+        if isinstance(position, dict)
+    ) + _account_cash(account_snapshot)
+
+
+def _account_cash(account_snapshot: dict[str, Any]) -> float:
+    return sum(
+        _first_number(balance, "cash") or 0.0
+        for balance in account_snapshot.get("balances", [])
+        if isinstance(balance, dict)
+    )
+
+
+def _account_buying_power(account_snapshot: dict[str, Any]) -> float:
+    return sum(
+        _first_number(balance, "buying_power") or 0.0
+        for balance in account_snapshot.get("balances", [])
+        if isinstance(balance, dict)
+    )
+
+
+def _position_value(position: dict[str, Any]) -> float:
+    market_value = _first_number(position, "market_value")
+    if market_value is not None:
+        return market_value
+    return (_first_number(position, "units") or 0.0) * (_first_number(position, "price") or 0.0)
+
+
+def _money_amount(value: Any) -> float | None:
+    if isinstance(value, dict):
+        return _first_number(value, "amount", "value")
+    if value is not None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+    return None
 
 
 def _mask_account_number(value: Any) -> str | None:

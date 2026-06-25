@@ -15,6 +15,7 @@ from .backtest import (
     write_oos_report,
 )
 from .archive import archive_private_artifacts, verify_private_archive
+from .account_summary import load_account_cash
 from .brief import build_brief, write_brief
 from .data import Price, load_positions, load_prices, write_prices_csv
 from .dashboard import build_dashboard, write_dashboard
@@ -50,17 +51,20 @@ from .providers.moomoo import (
     DEFAULT_HOST as MOOMOO_DEFAULT_HOST,
     DEFAULT_PORT as MOOMOO_DEFAULT_PORT,
     MoomooProviderError,
+    fetch_moomoo_daily_bars,
+    fetch_moomoo_latest_quotes,
     fetch_moomoo_watchlists,
     write_moomoo_watchlists,
 )
-from .providers.robinhood import extract_historicals_from_session, load_historical_response
 from .providers.sec import fetch_company_facts, fetch_submissions, fetch_ticker_ciks
 from .providers.snaptrade import (
     DEFAULT_BROKER as SNAPTRADE_DEFAULT_BROKER,
     SnapTradeClient,
     SnapTradeProviderError,
+    build_snaptrade_account_summary,
     fetch_snaptrade_snapshot,
     load_snaptrade_credentials,
+    write_snaptrade_account_summary,
     write_snaptrade_snapshot,
 )
 from .providers.yahoo import (
@@ -70,13 +74,6 @@ from .providers.yahoo import (
 )
 from .refresh import refresh_lock, run_refresh, validate_production_refresh
 from .risk import analyze_portfolio_risk, load_risk_policy, write_portfolio_risk_history
-from .robinhood import (
-    import_robinhood_snapshot,
-    load_robinhood_cash,
-    sanitize_robinhood_snapshot,
-    write_robinhood_baseline,
-    write_robinhood_import,
-)
 from .scoring import SignalSnapshot, evaluate
 from .thesis import load_theses
 
@@ -110,7 +107,7 @@ def _cash_balance(explicit_cash: float, account_summary_path: str | None) -> flo
     if explicit_cash and account_summary_path:
         raise SystemExit("use either --cash or --account-summary, not both")
     return (
-        load_robinhood_cash(account_summary_path)
+        load_account_cash(account_summary_path)
         if account_summary_path
         else explicit_cash
     )
@@ -329,6 +326,78 @@ def _fetch_yahoo_quotes(
     if missing:
         print("Yahoo missing latest quotes for: " + ", ".join(missing), flush=True)
     print(f"Wrote {len(quotes)} Yahoo latest quotes to {output_path}")
+    return 0
+
+
+def _fetch_moomoo(
+    positions_path: str,
+    output_path: str,
+    start: str,
+    end: str,
+    extra_symbols: tuple[str, ...] = (),
+    merge_existing_path: str | None = None,
+    host: str = MOOMOO_DEFAULT_HOST,
+    port: int = MOOMOO_DEFAULT_PORT,
+) -> int:
+    symbols = [position.symbol for position in load_positions(positions_path)]
+    symbols.extend(symbol.upper() for symbol in extra_symbols if symbol)
+    failures = []
+    updates = fetch_moomoo_daily_bars(
+        symbols,
+        start,
+        end,
+        host=host,
+        port=port,
+        on_failure=failures.append,
+    )
+    prices = (
+        merge_price_histories(
+            load_prices(merge_existing_path, strict_ohlcv=False),
+            updates,
+        )
+        if merge_existing_path and Path(merge_existing_path).exists()
+        else updates
+    )
+    prices = _clip_price_histories(prices, start)
+    write_prices_csv(prices, output_path)
+    for failure in failures:
+        print(
+            f"Moomoo {failure.operation} failure for {failure.symbol}: {failure.message}",
+            flush=True,
+        )
+    missing = sorted(set(symbols) - set(updates))
+    if missing:
+        print("Moomoo missing daily bars for: " + ", ".join(missing), flush=True)
+    print(f"Wrote {sum(map(len, prices.values()))} Moomoo daily bars to {output_path}")
+    return 0
+
+
+def _fetch_moomoo_quotes(
+    positions_path: str,
+    output_path: str,
+    extra_symbols: tuple[str, ...] = (),
+    host: str = MOOMOO_DEFAULT_HOST,
+    port: int = MOOMOO_DEFAULT_PORT,
+) -> int:
+    symbols = [position.symbol for position in load_positions(positions_path)]
+    symbols.extend(symbol.upper() for symbol in extra_symbols if symbol)
+    failures = []
+    quotes = fetch_moomoo_latest_quotes(
+        symbols,
+        host=host,
+        port=port,
+        on_failure=failures.append,
+    )
+    atomic_write_text(json.dumps(quotes, indent=2, sort_keys=True) + "\n", output_path)
+    for failure in failures:
+        print(
+            f"Moomoo {failure.operation} failure for {failure.symbol}: {failure.message}",
+            flush=True,
+        )
+    missing = sorted(set(symbols) - set(quotes))
+    if missing:
+        print("Moomoo missing latest quotes for: " + ", ".join(missing), flush=True)
+    print(f"Wrote {len(quotes)} Moomoo latest quotes to {output_path}")
     return 0
 
 
@@ -646,69 +715,6 @@ def _brief(
     return 0
 
 
-def _import_robinhood(
-    snapshot_path: str,
-    positions_path: str,
-    summary_path: str,
-    metadata_path: str | None,
-    default_max_weight: float,
-    baseline_path: str | None,
-) -> int:
-    positions, summary = import_robinhood_snapshot(
-        snapshot_path, metadata_path, default_max_weight
-    )
-    write_robinhood_import(positions, summary, positions_path, summary_path)
-    baseline_written = (
-        write_robinhood_baseline(positions, summary, baseline_path)
-        if baseline_path
-        else False
-    )
-    print(
-        f"Imported {summary.position_count} held symbols across "
-        f"{summary.account_count} Robinhood accounts to {positions_path}"
-    )
-    print(
-        f"Sanitized summary: cash ${summary.total_cash:,.2f}; "
-        f"buying power ${summary.total_buying_power:,.2f}"
-    )
-    if summary.skipped_non_equity_positions:
-        print(
-            f"Skipped {summary.skipped_non_equity_positions} non-equity positions."
-        )
-    if baseline_path:
-        status = "Appended" if baseline_written else "Unchanged"
-        print(f"{status} privacy-safe portfolio baseline at {baseline_path}")
-    return 0
-
-
-def _sanitize_robinhood(input_path: str, output_path: str) -> int:
-    payload = json.loads(Path(input_path).read_text())
-    sanitized = sanitize_robinhood_snapshot(payload)
-    atomic_write_text(json.dumps(sanitized, indent=2, sort_keys=True) + "\n", output_path)
-    print(f"Wrote privacy-safe Robinhood snapshot to {output_path}")
-    return 0
-
-
-def _import_robinhood_prices(input_path: str, output_path: str) -> int:
-    prices = load_historical_response(input_path)
-    write_prices_csv(prices, output_path)
-    print(
-        f"Wrote {sum(map(len, prices.values()))} Robinhood daily bars "
-        f"for {len(prices)} symbols to {output_path}"
-    )
-    return 0
-
-
-def _extract_robinhood_prices(session_path: str, output_path: str) -> int:
-    prices = extract_historicals_from_session(session_path)
-    write_prices_csv(prices, output_path)
-    print(
-        f"Extracted {sum(map(len, prices.values()))} Robinhood daily bars "
-        f"for {len(prices)} symbols to {output_path}"
-    )
-    return 0
-
-
 def _import_moomoo_watchlist(
     output_path: str,
     host: str,
@@ -790,6 +796,8 @@ def _import_snaptrade_accounts(
     output_path: str,
     user_id: str | None,
     user_secret: str | None,
+    account_summary_output: str | None,
+    account_summary_institution: str | None,
 ) -> int:
     try:
         credentials = load_snaptrade_credentials()
@@ -803,6 +811,16 @@ def _import_snaptrade_accounts(
     except SnapTradeProviderError as error:
         raise SystemExit(str(error)) from error
     write_snaptrade_snapshot(payload, output_path)
+    if account_summary_output:
+        account_summary = build_snaptrade_account_summary(
+            payload,
+            institution_name=account_summary_institution,
+        )
+        write_snaptrade_account_summary(account_summary, account_summary_output)
+        print(
+            f"Wrote {account_summary['account_count']} funded-account summary "
+            f"to {account_summary_output}"
+        )
     print(
         f"Imported {payload['position_count']} SnapTrade positions across "
         f"{payload['account_count']} accounts to {output_path}"
@@ -1031,6 +1049,29 @@ def main() -> int:
     yahoo_quotes_parser.add_argument("output")
     yahoo_quotes_parser.add_argument("--extra-symbol", action="append", default=[])
 
+    moomoo_parser = subparsers.add_parser(
+        "fetch-moomoo", help="fetch adjusted daily K-line prices from local Moomoo OpenD"
+    )
+    moomoo_parser.add_argument("positions")
+    moomoo_parser.add_argument("output")
+    moomoo_parser.add_argument("--start", default=_default_yahoo_start())
+    moomoo_parser.add_argument(
+        "--end", default=(date.today() + timedelta(days=1)).isoformat()
+    )
+    moomoo_parser.add_argument("--extra-symbol", action="append", default=[])
+    moomoo_parser.add_argument("--merge-existing")
+    moomoo_parser.add_argument("--host", default=MOOMOO_DEFAULT_HOST)
+    moomoo_parser.add_argument("--port", type=int, default=MOOMOO_DEFAULT_PORT)
+
+    moomoo_quotes_parser = subparsers.add_parser(
+        "fetch-moomoo-quotes", help="fetch latest quotes from local Moomoo OpenD"
+    )
+    moomoo_quotes_parser.add_argument("positions")
+    moomoo_quotes_parser.add_argument("output")
+    moomoo_quotes_parser.add_argument("--extra-symbol", action="append", default=[])
+    moomoo_quotes_parser.add_argument("--host", default=MOOMOO_DEFAULT_HOST)
+    moomoo_quotes_parser.add_argument("--port", type=int, default=MOOMOO_DEFAULT_PORT)
+
     daily_parser = subparsers.add_parser(
         "daily", help="fetch prices, monitor, and persist actionable alerts"
     )
@@ -1134,38 +1175,6 @@ def main() -> int:
     brief_parser.add_argument("--filing-alerts")
     brief_parser.add_argument("--feedback")
 
-    robinhood_parser = subparsers.add_parser(
-        "import-robinhood",
-        help="convert a sanitized read-only Robinhood MCP snapshot",
-    )
-    robinhood_parser.add_argument("snapshot")
-    robinhood_parser.add_argument("positions")
-    robinhood_parser.add_argument("summary")
-    robinhood_parser.add_argument("--metadata")
-    robinhood_parser.add_argument("--default-max-weight", type=float, default=0.10)
-    robinhood_parser.add_argument("--baseline-history")
-
-    sanitize_robinhood_parser = subparsers.add_parser(
-        "sanitize-robinhood",
-        help="whitelist a combined Robinhood read-only snapshot before persistence",
-    )
-    sanitize_robinhood_parser.add_argument("input")
-    sanitize_robinhood_parser.add_argument("output")
-
-    robinhood_prices_parser = subparsers.add_parser(
-        "import-robinhood-prices",
-        help="convert an exported Robinhood MCP daily historical response",
-    )
-    robinhood_prices_parser.add_argument("input")
-    robinhood_prices_parser.add_argument("output")
-
-    extract_robinhood_prices_parser = subparsers.add_parser(
-        "extract-robinhood-prices",
-        help="extract structured Robinhood daily histories from a Codex session log",
-    )
-    extract_robinhood_prices_parser.add_argument("session")
-    extract_robinhood_prices_parser.add_argument("output")
-
     moomoo_watchlist_parser = subparsers.add_parser(
         "import-moomoo-watchlist",
         help="read Moomoo/OpenD watchlists into a private normalized JSON file",
@@ -1213,6 +1222,11 @@ def main() -> int:
     snaptrade_import_parser.add_argument(
         "--user-secret",
         help="SnapTrade-generated user secret; defaults to SNAPTRADE_USER_SECRET",
+    )
+    snaptrade_import_parser.add_argument("--account-summary-output")
+    snaptrade_import_parser.add_argument(
+        "--account-summary-institution",
+        help="optional institution filter for account-summary-output, e.g. Robinhood",
     )
 
     diagnose_alerts_parser = subparsers.add_parser(
@@ -1347,6 +1361,25 @@ def main() -> int:
             args.output,
             tuple(args.extra_symbol or ()),
         )
+    if args.command == "fetch-moomoo":
+        return _fetch_moomoo(
+            args.positions,
+            args.output,
+            args.start,
+            args.end,
+            tuple(args.extra_symbol),
+            args.merge_existing,
+            args.host,
+            args.port,
+        )
+    if args.command == "fetch-moomoo-quotes":
+        return _fetch_moomoo_quotes(
+            args.positions,
+            args.output,
+            tuple(args.extra_symbol or ()),
+            args.host,
+            args.port,
+        )
     if args.command == "daily":
         return _daily(
             args.positions,
@@ -1417,21 +1450,6 @@ def main() -> int:
             args.filing_alerts,
             args.feedback,
         )
-    if args.command == "import-robinhood":
-        return _import_robinhood(
-            args.snapshot,
-            args.positions,
-            args.summary,
-            args.metadata,
-            args.default_max_weight,
-            args.baseline_history,
-        )
-    if args.command == "sanitize-robinhood":
-        return _sanitize_robinhood(args.input, args.output)
-    if args.command == "import-robinhood-prices":
-        return _import_robinhood_prices(args.input, args.output)
-    if args.command == "extract-robinhood-prices":
-        return _extract_robinhood_prices(args.session, args.output)
     if args.command == "import-moomoo-watchlist":
         return _import_moomoo_watchlist(
             args.output,
@@ -1450,7 +1468,13 @@ def main() -> int:
             args.output,
         )
     if args.command == "import-snaptrade-accounts":
-        return _import_snaptrade_accounts(args.output, args.user_id, args.user_secret)
+        return _import_snaptrade_accounts(
+            args.output,
+            args.user_id,
+            args.user_secret,
+            args.account_summary_output,
+            args.account_summary_institution,
+        )
     if args.command == "diagnose-alerts":
         return _diagnose_alerts(args.alerts, args.output)
     if args.command == "compare-models":

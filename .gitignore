@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 .venv/
 .env
+scratch*.md
 data/private/
 data/*.jsonl
 data/*.json
