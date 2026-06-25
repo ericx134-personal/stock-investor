@@ -43,12 +43,14 @@ fi
 ACCOUNT_SUMMARY="${ACCOUNT_SUMMARY_PATH:-portfolio/account-summary.json}"
 PRIMARY_ACCOUNT_INSTITUTION="${PRIMARY_ACCOUNT_INSTITUTION:-Robinhood}"
 MARKET_DATA_PROVIDER_ORDER="${MARKET_DATA_PROVIDER_ORDER:-moomoo,yahoo}"
+SNAPTRADE_ACCOUNTS="${SNAPTRADE_ACCOUNTS_PATH:-data/private/brokers/snaptrade-accounts.json}"
 MOOMOO_WATCHLISTS="${MOOMOO_WATCHLISTS_PATH:-data/private/brokers/moomoo-watchlists.json}"
+MERGED_UNIVERSE="${MERGED_UNIVERSE_PATH:-data/private/brokers/merged-universe.json}"
 echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] starting scheduled market refresh"
 write_progress 5 "starting"
 if [[ -n "${SNAPTRADE_CLIENT_ID:-}" && -n "${SNAPTRADE_CONSUMER_KEY:-}" ]]; then
   if PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli import-snaptrade-accounts \
-    data/private/brokers/snaptrade-accounts.json \
+    "$SNAPTRADE_ACCOUNTS" \
     --account-summary-output "$ACCOUNT_SUMMARY" \
     --account-summary-institution "$PRIMARY_ACCOUNT_INSTITUTION" \
     --include-balance-history; then
@@ -74,6 +76,17 @@ if printf ',%s,' "$MARKET_DATA_PROVIDER_ORDER" | tr '[:upper:]' '[:lower:]' | gr
   fi
 elif [[ -f "$MOOMOO_WATCHLISTS" ]]; then
   MOOMOO_ARGS=(--moomoo-watchlists "$MOOMOO_WATCHLISTS")
+fi
+
+if [[ -f "$SNAPTRADE_ACCOUNTS" || -f "$MOOMOO_WATCHLISTS" ]]; then
+  if PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli merge-broker-universe \
+    "$MERGED_UNIVERSE" \
+    --snaptrade-accounts "$SNAPTRADE_ACCOUNTS" \
+    --moomoo-watchlists "$MOOMOO_WATCHLISTS"; then
+    write_progress 25 "broker universe merged"
+  else
+    echo "warning: broker universe merge failed; continuing refresh" >&2
+  fi
 fi
 
 START_DATE="${ACCOUNT_HISTORY_START_DATE:-${YAHOO_START_DATE:-}}"

@@ -212,7 +212,7 @@ Current execution queue:
 ## Phase 11: Broker And Watchlist Inputs
 
 - [x] M101 Add a read-only Moomoo watchlist importer.
-- [ ] M102 Add a combined holdings merger with per-source attribution.
+- [x] M102 Add a combined holdings merger with per-source attribution.
 - [ ] M103 Add a Fidelity CSV importer only as a fallback if authorized
   aggregation cannot cover the needed account.
 - [x] M103A Add a SnapTrade/Fidelity read-only authorization and account

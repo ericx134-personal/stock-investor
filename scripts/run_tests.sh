@@ -13,6 +13,7 @@ LEVEL="$(printf '%s' "$LEVEL" | tr '[:lower:]' '[:upper:]')"
 
 L1_TESTS=(
   tests.test_read_only_contract
+  tests.test_broker_merge
   tests.test_snaptrade_provider
   tests.test_moomoo_provider
   tests.test_data

@@ -17,6 +17,7 @@ from .backtest import (
 from .archive import archive_private_artifacts, verify_private_archive
 from .account_summary import load_account_cash
 from .brief import build_brief, write_brief
+from .broker_merge import build_broker_universe_from_files
 from .data import Price, load_positions, load_prices, write_prices_csv
 from .dashboard import build_dashboard, write_dashboard
 from .diagnostics import (
@@ -81,6 +82,7 @@ from .thesis import load_theses
 DEFAULT_ACCOUNT_HISTORY_START_DATE = "2017-01-01"
 DEFAULT_SNAPTRADE_ACCOUNTS_PATH = Path("data/private/brokers/snaptrade-accounts.json")
 DEFAULT_MOOMOO_WATCHLISTS_PATH = Path("data/private/brokers/moomoo-watchlists.json")
+DEFAULT_MERGED_UNIVERSE_PATH = Path("data/private/brokers/merged-universe.json")
 
 
 def _default_yahoo_start() -> str:
@@ -837,6 +839,30 @@ def _import_snaptrade_accounts(
     return 0
 
 
+def _merge_broker_universe(
+    output_path: str,
+    snaptrade_accounts_path: str | None,
+    moomoo_watchlists_path: str | None,
+) -> int:
+    payload = build_broker_universe_from_files(
+        output_path=output_path,
+        snaptrade_accounts_path=_default_snaptrade_accounts_path(
+            snaptrade_accounts_path
+        ),
+        moomoo_watchlists_path=_default_moomoo_watchlists_path(
+            moomoo_watchlists_path
+        ),
+    )
+    counts = payload["counts"]
+    print(
+        f"Wrote merged broker universe to {output_path}: "
+        f"{counts['holding_symbols']} held symbols, "
+        f"{counts['watchlist_only_symbols']} watchlist-only symbols, "
+        f"{counts['watchlist_overlap_symbols']} overlaps"
+    )
+    return 0
+
+
 def _diagnose_alerts(alerts_path: str, output_path: str | None) -> int:
     report = diagnose_alert_file(alerts_path)
     content = json.dumps(report, indent=2, sort_keys=True) + "\n"
@@ -1251,6 +1277,18 @@ def main() -> int:
         help="also try SnapTrade beta account balance history; ignored per account if unavailable",
     )
 
+    broker_merge_parser = subparsers.add_parser(
+        "merge-broker-universe",
+        help="merge broker holdings and Moomoo watchlists into a private audit artifact",
+    )
+    broker_merge_parser.add_argument(
+        "output",
+        nargs="?",
+        default=str(DEFAULT_MERGED_UNIVERSE_PATH),
+    )
+    broker_merge_parser.add_argument("--snaptrade-accounts")
+    broker_merge_parser.add_argument("--moomoo-watchlists")
+
     diagnose_alerts_parser = subparsers.add_parser(
         "diagnose-alerts",
         help="measure selectivity and alert-fatigue risk from latest symbol alerts",
@@ -1499,6 +1537,12 @@ def main() -> int:
             args.account_summary_output,
             args.account_summary_institution,
             args.include_balance_history,
+        )
+    if args.command == "merge-broker-universe":
+        return _merge_broker_universe(
+            args.output,
+            args.snaptrade_accounts,
+            args.moomoo_watchlists,
         )
     if args.command == "diagnose-alerts":
         return _diagnose_alerts(args.alerts, args.output)

@@ -49,6 +49,13 @@ Optional per-broker snapshots should live under ignored private paths such as
 `data/private/brokers/fidelity.json`. These are raw-ish debug artifacts and
 must not be committed.
 
+`data/private/brokers/merged-universe.json` is the broker-neutral audit layer.
+It merges read-only SnapTrade holdings by symbol and keeps per-source
+attribution for each broker/account. It also separates Moomoo watchlist-only
+symbols from symbols already held. This file is private runtime state; it is
+not the model input yet. `portfolio/positions.csv` remains the explicit
+decision-support portfolio until the import flow has enough validation.
+
 ## Adapter Boundary
 
 Each broker adapter should do only three things:
@@ -72,6 +79,9 @@ export.
   ordinary equities.
 - Multiple brokers: merge rows by symbol using summed shares and weighted
   average cost. Preserve per-broker debug snapshots privately for audit.
+- Merged universe: generate it after account/watchlist imports so UI and future
+  import tools can use one small file without coupling to SnapTrade, Moomoo, or
+  a future Fidelity CSV fallback.
 
 ## Public Safety
 
