@@ -11,6 +11,8 @@ from pathlib import Path
 
 from .brief import build_portfolio_learning_review, write_brief
 from .account_summary import load_account_cash
+from .broker_merge import load_broker_json
+from .candidate_boundary import build_candidate_boundary
 from .dashboard import build_dashboard, write_dashboard
 from .data import Position, load_positions, load_prices
 from .diagnostics import (
@@ -174,6 +176,7 @@ def _artifact_paths(output_dir: Path, model_version: str) -> dict[str, Path]:
         "direction_error_cohorts": output_dir / "direction-error-cohorts.json",
         "first_observed_forecasts": output_dir / "first-observed-forecasts.json",
         "forecast_action_segments": output_dir / "forecast-action-segments.json",
+        "candidate_boundary": output_dir / "candidate-boundary.json",
         "portfolio_learning_review": output_dir / "portfolio-learning-review.md",
         "multiple_testing_ledger": output_dir / "multiple-testing-ledger.json",
         "false_discovery_warnings": output_dir / "false-discovery-warnings.json",
@@ -487,6 +490,7 @@ def run_refresh(
     if moomoo_watchlists_path is None:
         default_moomoo = output_dir / "brokers" / "moomoo-watchlists.json"
         moomoo_watchlists_path = default_moomoo if default_moomoo.exists() else None
+    default_broker_universe = output_dir / "brokers" / "merged-universe.json"
     positions = load_positions(positions_path)
     held_symbols = {position.symbol for position in positions if position.shares > 0}
     prices = load_prices(prices_path)
@@ -671,6 +675,12 @@ def run_refresh(
         direction_forecasts,
         direction_forecast_outcomes,
     )
+    candidate_boundary = build_candidate_boundary(
+        positions,
+        direction_forecasts,
+        broker_universe=load_broker_json(default_broker_universe),
+        moomoo_watchlists=load_broker_json(moomoo_watchlists_path),
+    )
     forecast_action_segments = build_forecast_action_segments(
         positions,
         direction_forecast_outcomes,
@@ -692,6 +702,7 @@ def run_refresh(
     )
     _write_json(direction_error_cohorts, paths["direction_error_cohorts"])
     _write_json(first_observed_forecasts, paths["first_observed_forecasts"])
+    _write_json(candidate_boundary, paths["candidate_boundary"])
     _write_json(forecast_action_segments, paths["forecast_action_segments"])
 
     alert_records = load_alert_records(paths["alerts"])
@@ -852,6 +863,11 @@ def run_refresh(
         warnings.append("No SEC fundamental snapshots are available.")
     if benchmark_symbol and not prices.get(benchmark_symbol):
         warnings.append(f"Benchmark {benchmark_symbol} price history is unavailable.")
+    if candidate_boundary["direction_forecast_violations"]:
+        warnings.append(
+            "Direction forecast universe contains non-held symbols: "
+            + ", ".join(candidate_boundary["direction_forecast_violations"])
+        )
     matured = sum(
         row.observations for row in scorecard if row.observations > 0
     )
@@ -976,6 +992,7 @@ def run_refresh(
         "forecast_action_segment_scorecard_rows": len(
             forecast_action_segments["scorecard"]
         ),
+        "candidate_boundary_counts": candidate_boundary["counts"],
         "forecast_action_segment_episode_counts": forecast_action_segments[
             "episode_segment_counts"
         ],

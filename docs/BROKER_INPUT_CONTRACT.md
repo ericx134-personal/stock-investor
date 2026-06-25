@@ -56,6 +56,12 @@ symbols from symbols already held. This file is private runtime state; it is
 not the model input yet. `portfolio/positions.csv` remains the explicit
 decision-support portfolio until the import flow has enough validation.
 
+`data/private/candidate-boundary.json` records the current separation between
+held symbols, zero-share CSV candidates, broker watchlist-only symbols, and the
+direction-forecast universe. A nonzero `direction_forecast_violations` count is
+a regression: watchlist-only symbols must not enter held-position direction
+forecasts unless they are explicitly promoted into real positions.
+
 ## Adapter Boundary
 
 Each broker adapter should do only three things:

@@ -200,7 +200,7 @@ Current execution queue:
 
 - [ ] M091 Build a broader point-in-time validation universe.
 - [ ] M092 Add liquidity and tradability diagnostics.
-- [ ] M093 Separate watchlist candidates from held-position forecasts.
+- [x] M093 Separate watchlist candidates from held-position forecasts.
 - [ ] M094 Add realized-return and dividend context.
 - [ ] M095 Add options exposure as risk context only.
 - [ ] M096 Add weekly learning digest and quarterly governance report.

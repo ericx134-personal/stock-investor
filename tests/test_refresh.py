@@ -168,6 +168,9 @@ class RefreshTests(unittest.TestCase):
             first_observed = json.loads(
                 (output / "first-observed-forecasts.json").read_text()
             )
+            candidate_boundary = json.loads(
+                (output / "candidate-boundary.json").read_text()
+            )
             forecast_action_segments = json.loads(
                 (output / "forecast-action-segments.json").read_text()
             )
@@ -199,6 +202,7 @@ class RefreshTests(unittest.TestCase):
         self.assertIn("direction_classification_metrics", manifest["artifacts"])
         self.assertIn("direction_error_cohorts", manifest["artifacts"])
         self.assertIn("first_observed_forecasts", manifest["artifacts"])
+        self.assertIn("candidate_boundary", manifest["artifacts"])
         self.assertIn("forecast_action_segments", manifest["artifacts"])
         self.assertIn("portfolio_learning_review", manifest["artifacts"])
         self.assertIn("multiple_testing_ledger", manifest["artifacts"])
@@ -240,6 +244,14 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(manifest["first_observed_forecast_tracked_count"], 1)
         self.assertEqual(manifest["first_observed_forecast_missing_count"], 0)
         self.assertIn("first_observed_forecast_changed_count", manifest)
+        self.assertEqual(
+            manifest["candidate_boundary_counts"]["direction_forecast_violations"],
+            0,
+        )
+        self.assertEqual(
+            manifest["candidate_boundary_counts"]["current_direction_forecast_symbols"],
+            1,
+        )
         self.assertIn("forecast_action_segment_scorecard_rows", manifest)
         self.assertEqual(
             manifest["forecast_action_segment_episode_counts"],
@@ -265,6 +277,13 @@ class RefreshTests(unittest.TestCase):
             first_observed["holdings"][0]["first_forecast"]["direction"],
             "WAIT",
         )
+        self.assertEqual(
+            candidate_boundary["schema_version"],
+            "candidate-boundary-v1",
+        )
+        self.assertEqual(candidate_boundary["forecast_scope"], "held_positions_only")
+        self.assertEqual(candidate_boundary["held_symbols"], ["ABC"])
+        self.assertEqual(candidate_boundary["direction_forecast_violations"], [])
         self.assertEqual(
             forecast_action_segments["schema_version"],
             "forecast-action-segments-v1",
