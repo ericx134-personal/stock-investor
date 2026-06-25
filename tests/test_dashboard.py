@@ -3,7 +3,6 @@ import unittest
 import json
 from datetime import date, timedelta
 from pathlib import Path
-from unittest.mock import patch
 
 from stock_investor.dashboard import (
     _chart_ranges,
@@ -197,31 +196,6 @@ class DashboardTests(unittest.TestCase):
         self.assertIsNone(sidecar["symbols"]["ABC"]["ranges"]["1D"]["fallback_reason"])
         self.assertIn('data-src="chart-payloads-v1.json"', dashboard_html)
         self.assertNotIn("bars_daily", dashboard_html)
-
-    def test_dashboard_write_mirrors_installed_runtime_copy(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            source = root / "source"
-            runtime = root / "runtime"
-            output = source / "data" / "private" / "dashboard-v3.html"
-            runtime.mkdir()
-            (runtime / ".source-root").write_text(str(source))
-            html = (
-                '<html><script type="application/json" id="chart-payloads-v1">'
-                '{"version":1,"source":"dashboard-v3","symbols":{}}</script></html>'
-            )
-            with patch.dict(
-                "os.environ",
-                {"STOCK_INVESTOR_RUNTIME_ROOT": str(runtime)},
-                clear=False,
-            ):
-                write_dashboard(html, output)
-
-            mirrored = runtime / "data" / "private" / "dashboard-v3.html"
-            mirrored_payload = runtime / "data" / "private" / "chart-payloads-v1.json"
-            self.assertTrue(mirrored.exists())
-            self.assertTrue(mirrored_payload.exists())
-            self.assertIn('data-src="chart-payloads-v1.json"', mirrored.read_text())
 
     def test_direction_forecast_outcomes_become_kline_markers(self):
         with tempfile.TemporaryDirectory() as directory:

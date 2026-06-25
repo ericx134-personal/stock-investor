@@ -84,7 +84,7 @@ def make_handler(root: Path, refresh_script: Path, state: RefreshState):
             if self.path != "/api/refresh":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            started = state.start([str(refresh_script), "--synced"], root)
+            started = state.start([str(refresh_script)], root)
             payload = {
                 "status": "started" if started else "running",
                 "message": "refresh started" if started else "refresh already running",

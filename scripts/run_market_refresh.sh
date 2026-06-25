@@ -1,15 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SOURCE_ROOT_FILE="$PROJECT_ROOT/.source-root"
-
-if [[ "${1:-}" != "--synced" && -f "$SOURCE_ROOT_FILE" ]]; then
-  if ! "$PROJECT_ROOT/scripts/sync_runtime.sh"; then
-    echo "warning: runtime sync failed; refreshing with existing runtime copy" >&2
-  fi
-  exec "$PROJECT_ROOT/scripts/run_market_refresh.sh" --synced
-fi
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 
 cd "$PROJECT_ROOT"
 

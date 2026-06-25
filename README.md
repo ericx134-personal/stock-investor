@@ -28,7 +28,6 @@ Use the tiered Makefile targets instead of running the full suite by habit:
 make test       # L1 fast regression, default
 make test-l2    # broader core regression
 make test-l3    # full audit + public safety
-make sync-runtime  # publish local private dashboard/code to the Mac service copy
 ```
 
 See [Testing Strategy](docs/TESTING.md) for when to use each level.
@@ -406,22 +405,15 @@ The service is intentionally bound to localhost because it contains private
 portfolio data. `launchd` starts it after login and restarts it after a crash.
 
 Unattended latest-market-data updates prefer local Moomoo OpenD chart/quote data
-and fall back to Yahoo Finance when OpenD or symbol coverage fails. A private runtime file at
-`~/Library/Application Support/stock-investor/data/private/service.env` is only
-needed for optional settings such as archive retention.
+and fall back to Yahoo Finance when OpenD or symbol coverage fails. Optional
+settings such as archive retention live in `data/private/service.env` inside
+the repo.
 
-macOS privacy controls prevent background LaunchAgents from reliably reading
-`Documents`, so the installer keeps private runtime data under
-`~/Library/Application Support/stock-investor`. The repo remains the source of
-truth for code: the installer records the repo path in `.source-root`, and the
-web/refresh services self-sync application code from that repo before serving
-or generating the dashboard. `write_dashboard` also mirrors generated dashboard
-HTML and `chart-payloads-v1.json` into the installed runtime when `.source-root`
-points back to this repo, so the stable bookmark does not keep showing an old
-workspace copy. Use `make sync-runtime` only when you intentionally want to
-copy current private artifacts into the service runtime. Re-run the installer
-only after moving the repo or changing LaunchAgent templates, not after
-ordinary code edits.
+The repo is the single source of truth for code, private generated artifacts,
+and the local web root. The macOS LaunchAgents installed by
+`scripts/install_macos_services.sh` point directly at this checkout, so there is
+no separate runtime copy to sync before checking the browser. Re-run the
+installer only after moving the repo or changing LaunchAgent templates.
 
 The refresh service fetches account-aligned daily bars through Moomoo first and
 Yahoo only as fallback. Set `ACCOUNT_HISTORY_START_DATE=YYYY-MM-DD` in the

@@ -97,6 +97,22 @@ class ReadOnlyContractTests(unittest.TestCase):
         self.assertNotIn("fetch-alpaca", script)
         self.assertNotIn("fetch-alpaca", cli)
 
+    def test_local_services_use_repo_as_single_source_of_truth(self):
+        service_files = {
+            "run_web_server": ROOT / "scripts" / "run_web_server.sh",
+            "run_market_refresh": ROOT / "scripts" / "run_market_refresh.sh",
+            "install_macos_services": ROOT / "scripts" / "install_macos_services.sh",
+            "web_server": ROOT / "src" / "stock_investor" / "web_server.py",
+            "dashboard": ROOT / "src" / "stock_investor" / "dashboard.py",
+        }
+        combined = "\n".join(path.read_text() for path in service_files.values())
+        self.assertNotIn("sync_runtime", combined)
+        self.assertNotIn("--synced", combined)
+        self.assertNotIn("STOCK_INVESTOR_RUNTIME_ROOT", combined)
+        self.assertNotIn("STOCK_INVESTOR_SKIP_RUNTIME_SYNC", combined)
+        self.assertNotIn("Application Support/stock-investor", combined)
+        self.assertFalse((ROOT / "scripts" / "sync_runtime.sh").exists())
+
 
 def _is_allowed_read_only_auth_post(path: Path, node: ast.Call) -> bool:
     if path.name != "snaptrade.py":

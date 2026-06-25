@@ -1,6 +1,6 @@
 PYTHON ?= /usr/bin/python3
 
-.PHONY: test test-l1 test-l2 test-l3 test-dashboard safety sync-runtime
+.PHONY: test test-l1 test-l2 test-l3 test-dashboard safety
 
 test: test-l1
 
@@ -18,6 +18,3 @@ test-dashboard:
 
 safety:
 	scripts/check_public_safety.sh
-
-sync-runtime:
-	scripts/sync_runtime.sh --private-data

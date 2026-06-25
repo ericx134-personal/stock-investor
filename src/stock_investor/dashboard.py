@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import html
 import json
-import os
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -3709,39 +3708,3 @@ def write_dashboard(content: str, path: str | Path) -> None:
     if payload is not None:
         sidecar_content = json.dumps(payload, indent=2, sort_keys=True) + "\n"
         atomic_write_text(sidecar_content, output_path.with_name("chart-payloads-v1.json"))
-    _mirror_dashboard_to_runtime(output_path, dashboard_content, sidecar_content)
-
-
-def _path_relative_to(path: Path, root: Path) -> Path | None:
-    try:
-        return path.resolve().relative_to(root.resolve())
-    except ValueError:
-        return None
-
-
-def _mirror_dashboard_to_runtime(
-    output_path: Path,
-    dashboard_content: str,
-    sidecar_content: str | None,
-) -> None:
-    if os.environ.get("STOCK_INVESTOR_DISABLE_RUNTIME_MIRROR"):
-        return
-    runtime_root = Path(
-        os.environ.get(
-            "STOCK_INVESTOR_RUNTIME_ROOT",
-            str(Path.home() / "Library" / "Application Support" / "stock-investor"),
-        )
-    )
-    source_root_file = runtime_root / ".source-root"
-    if not source_root_file.exists():
-        return
-    source_root = Path(source_root_file.read_text().strip())
-    relative = _path_relative_to(output_path, source_root)
-    if relative is None:
-        return
-    mirror_path = runtime_root / relative
-    if mirror_path.resolve() == output_path.resolve():
-        return
-    atomic_write_text(dashboard_content, mirror_path)
-    if sidecar_content is not None:
-        atomic_write_text(sidecar_content, mirror_path.with_name("chart-payloads-v1.json"))
