@@ -610,12 +610,20 @@ def _broker_tab_fragments(
 
 def _asset_home(snapshot: dict, account_summary: dict, portfolio_totals: dict) -> str:
     accounts = _visible_snaptrade_accounts(snapshot)
+    broker_cards = ""
     if accounts:
         total_value = sum(_snaptrade_account_total(account) for account in accounts)
         position_count = sum(len(account.get("positions", []) or []) for account in accounts)
         institutions = {_snaptrade_institution(account) for account in accounts}
         subtitle = f"{len(institutions)} brokers · {len(accounts)} funded accounts · {position_count} positions"
         captured = str(snapshot.get("captured_at") or "unknown")[:10]
+        grouped: dict[str, list[dict]] = {}
+        for account in accounts:
+            grouped.setdefault(_snaptrade_institution(account), []).append(account)
+        broker_cards = "".join(
+            _asset_home_broker_card(institution, grouped[institution])
+            for institution in sorted(grouped, key=lambda item: (item != "Robinhood", item))
+        )
     else:
         cash = float(account_summary.get("total_cash", 0.0) or 0.0)
         total_value = (
@@ -625,12 +633,36 @@ def _asset_home(snapshot: dict, account_summary: dict, portfolio_totals: dict) -
         )
         subtitle = "Local portfolio file only"
         captured = str(account_summary.get("imported_at") or "unknown")[:10]
+    action_cards = broker_cards + """
+        <button type="button" class="asset-nav-card" data-jump-tab="signals">
+          <small>Signals</small><b>Holdings board</b><span>Prices, P/L, and model status</span>
+        </button>
+        <button type="button" class="asset-nav-card" data-jump-tab="opportunities">
+          <small>Opportunities</small><b>Action lanes</b><span>Only valid BUY/SELL candidates</span>
+        </button>"""
     return f"""
     <section class="asset-home" aria-label="Total asset value">
-      <small>Total assets</small>
-      <h2>{_optional_money(total_value)}</h2>
-      <p>{html.escape(subtitle)} · updated {html.escape(captured)}</p>
+      <div class="asset-home-main">
+        <small>Total assets</small>
+        <h2>{_optional_money(total_value)}</h2>
+        <p>{html.escape(subtitle)} · updated {html.escape(captured)}</p>
+      </div>
+      <div class="asset-home-actions">
+        {action_cards}
+      </div>
     </section>"""
+
+
+def _asset_home_broker_card(institution: str, accounts: list[dict]) -> str:
+    total_value = sum(_snaptrade_account_total(account) for account in accounts)
+    position_count = sum(len(account.get("positions", []) or []) for account in accounts)
+    target = f"broker-{_slug(institution)}"
+    logo = _broker_logo_html(institution, "broker-icon-mini")
+    return f"""
+        <button type="button" class="asset-broker-card" data-jump-tab="{html.escape(target)}">
+          {logo}
+          <span><small>{html.escape(institution)}</small><b>{_optional_money(total_value)}</b><em>{len(accounts)} accounts · {position_count} positions</em></span>
+        </button>"""
 
 
 def _load_moomoo_watchlists(path: str | Path | None) -> dict:
@@ -3085,7 +3117,7 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .stat,.panel,.holding-row {{ background:var(--panel); border:1px solid var(--line); border-radius:10px }}
 .stat {{ padding:18px }} .stat b {{ display:block; font-size:28px }} .stat span {{ color:var(--muted) }}
 .warning {{ color:var(--amber) }} .panel {{ padding:20px; margin:18px 0 }} h2 {{ margin:0 0 12px; font-size:19px }}
-.tabs {{ border-bottom:1px solid var(--line); display:flex; gap:24px; margin:22px 0 22px; max-width:100%; min-width:0; overflow-x:auto; scrollbar-width:none }} .tabs::-webkit-scrollbar {{ display:none }} .tab-button {{ align-items:center; background:transparent; border:0; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; display:inline-flex; flex:0 0 auto; font:inherit; font-weight:650; gap:7px; margin-bottom:-1px; padding:10px 1px }}
+.tabs {{ border-bottom:1px solid var(--line); display:flex; gap:24px; margin:22px 0 22px; max-width:100%; min-width:0; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none }} .tabs::-webkit-scrollbar {{ display:none }} .tab-button {{ align-items:center; background:transparent; border:0; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; display:inline-flex; flex:0 0 auto; font:inherit; font-weight:650; gap:7px; margin-bottom:-1px; padding:10px 1px }}
 .tab-button:hover {{ color:var(--text) }} .tab-button.active {{ border-bottom-color:var(--green); color:var(--green) }} .tab-view {{ display:none }} .tab-view.active {{ display:block }}
 .broker-tab-mark,.broker-icon-mini,.broker-icon {{ align-items:center; background:#00a83b; border-radius:50%; color:#001b0a; display:inline-flex; font-weight:900; justify-content:center }}
 .broker-tab-mark {{ font-size:10px; height:17px; width:17px }}
@@ -3117,10 +3149,17 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .account-stats {{ border-top:1px solid var(--line); display:grid; gap:0; grid-template-columns:repeat(4,1fr); margin-top:8px }}
 .account-stats div {{ border-right:1px solid var(--line); padding:11px 14px }} .account-stats div:first-child {{ padding-left:0 }} .account-stats div:last-child {{ border-right:0 }}
 .account-stats small {{ color:var(--muted); display:block; font-size:11px; font-weight:700 }} .account-stats b {{ display:block; font-size:18px; margin-top:2px }}
-.asset-home {{ background:#050505; border:1px solid var(--line); border-radius:16px; margin:14px 0 22px; max-width:760px; padding:26px }}
-.asset-home>small,.moomoo-hero small {{ color:var(--green); display:block; font-size:11px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }}
+.asset-home {{ background:#050505; border:1px solid var(--line); border-radius:16px; display:grid; gap:22px; grid-template-columns:minmax(320px,.95fr) minmax(360px,1.2fr); margin:14px 0 22px; max-width:1120px; padding:26px }}
+.asset-home small,.moomoo-hero small {{ color:var(--green); display:block; font-size:11px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }}
 .asset-home h2 {{ font-size:52px; letter-spacing:-2.2px; line-height:1; margin:4px 0 }}
 .asset-home p {{ color:var(--muted); margin:8px 0 0 }}
+.asset-home-actions {{ align-content:start; display:grid; gap:10px; grid-template-columns:repeat(2,minmax(0,1fr)) }}
+.asset-broker-card,.asset-nav-card {{ background:#101010; border:1px solid var(--line); border-radius:12px; color:var(--text); cursor:pointer; min-width:0; padding:12px; text-align:left }}
+.asset-broker-card {{ align-items:center; display:flex; gap:10px }}
+.asset-nav-card {{ align-items:start; display:grid; gap:3px; min-height:72px }}
+.asset-broker-card:hover,.asset-nav-card:hover,.asset-broker-card:focus-visible,.asset-nav-card:focus-visible {{ background:#151515; border-color:#3d3d3d; outline:none }}
+.asset-broker-card span,.asset-nav-card span {{ min-width:0 }} .asset-broker-card b,.asset-nav-card b {{ display:block; font-size:17px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
+.asset-broker-card em,.asset-nav-card span {{ color:var(--muted); display:block; font-size:12px; font-style:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
 .broker-board {{ display:grid; gap:14px; margin:12px 0 24px }}
 .broker-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:18px; grid-template-columns:minmax(260px,1.5fr) minmax(260px,1fr); min-width:0; padding:20px 22px }}
 .broker-brand {{ align-items:center; display:flex; gap:15px; min-width:0 }} .broker-icon {{ flex:0 0 auto; font-size:30px; height:58px; width:58px }}
@@ -3206,8 +3245,8 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .health-status.low {{ background:var(--green-dim); color:var(--green) }} .health-status.medium {{ background:#2b240f; color:var(--amber) }} .health-status.high {{ background:#321214; color:var(--red) }}
 .board-action {{ background:#1b1b1b; color:var(--muted) }} .positive b {{ color:var(--green) }} .negative b {{ color:var(--red) }} .today-pill.positive b,.today-pill.negative b {{ color:inherit }}
 .drawer-backdrop {{ background:rgba(0,0,0,.78); display:none; inset:0; position:fixed; z-index:20 }} .drawer-backdrop.open {{ display:block }}
-.drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); max-width:1040px; overflow:auto; padding:24px; position:fixed; right:0; top:0; transform:translateX(105vw); transition:none; width:min(96vw,1040px); z-index:30 }}
-.drawer.open {{ transform:translateX(0) }} .drawer-close {{ background:#171717; border:1px solid var(--line); border-radius:999px; color:var(--text); cursor:pointer; display:block; font:inherit; margin-left:auto; padding:7px 12px; position:sticky; top:0; z-index:2 }}
+.drawer {{ background:#050505; border-left:1px solid var(--line); bottom:0; box-shadow:-24px 0 60px rgba(0,0,0,.75); display:none; max-width:1040px; overflow:auto; padding:24px; position:fixed; right:0; top:0; width:min(96vw,1040px); z-index:30 }}
+.drawer.open {{ display:block }} .drawer-close {{ background:#171717; border:1px solid var(--line); border-radius:999px; color:var(--text); cursor:pointer; display:block; font:inherit; margin-left:auto; padding:7px 12px; position:sticky; top:0; z-index:2 }}
 .drawer-heading {{ align-items:center; display:flex; justify-content:space-between; gap:12px; margin:34px 0 18px }} .drawer-heading h2 {{ display:inline; font-size:32px; margin:0 10px 0 0 }}
 .holding-detail {{ overflow-wrap:anywhere; padding:0 }} .detail-title {{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px }}
 .position-hero {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:1px; grid-template-columns:1.4fr repeat(5,1fr); margin:0 0 14px; overflow:hidden }}
@@ -3293,8 +3332,9 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .portfolio-holding-card {{ min-height:58px }}
 }} @media(max-width:899px) {{
   .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr 1fr }}
+  .tabs {{ gap:10px }}
   .decision-board {{ grid-template-columns:1fr 1fr }} .wait-column {{ grid-column:1 / -1 }}
-  .asset-home {{ max-width:none }}
+  .asset-home {{ grid-template-columns:1fr; max-width:none }}
   .broker-hero {{ grid-template-columns:1fr }}
   .broker-totals {{ grid-template-columns:repeat(3,minmax(0,1fr)) }}
   .account-stats {{ grid-template-columns:repeat(2,1fr) }} .account-stats div:nth-child(2n) {{ border-right:0 }}
@@ -3316,7 +3356,7 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
   .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }}
-  .asset-home {{ padding:20px }} .asset-home h2 {{ font-size:38px; letter-spacing:-1.5px }} .broker-totals,.broker-card-grid {{ grid-template-columns:1fr }}
+  .asset-home {{ padding:20px }} .asset-home h2 {{ font-size:38px; letter-spacing:-1.5px }} .asset-home-actions,.broker-totals,.broker-card-grid {{ grid-template-columns:1fr }}
   .broker-hero {{ padding:16px }} .broker-brand {{ align-items:flex-start }} .broker-brand h2,.moomoo-hero h2 {{ font-size:32px }}
   .moomoo-hero {{ align-items:flex-start; padding:16px }}
   .account-overview {{ padding:16px 16px 12px }} .account-copy h2 {{ font-size:34px }} .account-chart-wrap {{ min-height:260px }} .account-stats {{ grid-template-columns:1fr 1fr }} .account-kline-card .interactive-kline {{ height:260px }} .board-intro p {{ display:none }}
@@ -3466,10 +3506,11 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 <script>
 const tabButtons = [...document.querySelectorAll("[data-tab-target]")];
 const tabViews = [...document.querySelectorAll(".tab-view")];
-tabButtons.forEach((button) => button.addEventListener("click", () => {{
-  const target = button.dataset.tabTarget;
+const activateDashboardTab = (target) => {{
+  const activeButton = tabButtons.find((button) => button.dataset.tabTarget === target);
+  if (!activeButton) return;
   tabButtons.forEach((item) => {{
-    const active = item === button;
+    const active = item === activeButton;
     item.classList.toggle("active", active);
     item.setAttribute("aria-selected", String(active));
   }});
@@ -3478,8 +3519,11 @@ tabButtons.forEach((button) => button.addEventListener("click", () => {{
     view.classList.toggle("active", active);
     view.hidden = !active;
   }});
+  activeButton.scrollIntoView({{ block: "nearest", inline: "nearest" }});
   window.requestAnimationFrame(() => window.StockInvestorKline?.initVisibleCharts());
-}}));
+}};
+tabButtons.forEach((button) => button.addEventListener("click", () => activateDashboardTab(button.dataset.tabTarget)));
+document.querySelectorAll("[data-jump-tab]").forEach((button) => button.addEventListener("click", () => activateDashboardTab(button.dataset.jumpTab)));
 
 const portfolioSort = document.getElementById("portfolio-sort");
 const portfolioList = document.querySelector("[data-portfolio-holdings]");
