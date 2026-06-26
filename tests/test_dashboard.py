@@ -634,6 +634,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('data-label="Today return %"><b>+5.0%</b>', page)
         self.assertNotIn('<small>Today</small>', page)
         self.assertIn('data-label="Today $"><b>+$50</b>', page)
+        self.assertIn(".holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss { display:block }", page)
         self.assertIn('data-label="Price"><small>Price</small><b>$105.00</b>', page)
         self.assertIn('data-label="Market Value"><small>Market Value</small><b>$1,050.00</b>', page)
         self.assertIn('data-label="Weight"><small>Weight</small><b>20.0%</b>', page)

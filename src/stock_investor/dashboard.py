@@ -3413,10 +3413,13 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.13),rgba(0,200,5,.03) 40%,#050505 78%) }}
   .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.15),rgba(255,90,95,.035) 40%,#050505 78%) }}
   .portfolio-holding-card.signal-wait {{ background:#050505 }}
-}} @media(min-width:1360px) {{
-  .portfolio-holding-card {{ grid-template-columns:minmax(108px,1.05fr) 80px 84px 96px 60px 76px 88px }}
-  .holding-market-value,.holding-weight,.holding-gain-loss {{ display:block }}
-  .holding-spark .mini-sparkline {{ width:80px }}
+}} @media(min-width:1300px) {{
+  .portfolio-holding-card {{ gap:6px; grid-template-columns:minmax(92px,1fr) 64px 74px 64px 84px 48px 66px 72px; min-height:62px; padding-left:10px; padding-right:10px }}
+  .holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss {{ display:block }}
+  .holding-spark .mini-sparkline {{ width:64px }}
+  .today-pill {{ min-height:34px; padding:4px 6px }} .today-pill b {{ font-size:15px }}
+  .holding-today-cash b,.holding-weight b,.holding-gain-loss b {{ font-size:13px }}
+  .holding-market-value b {{ font-size:13px }} .holding-current b {{ font-size:16px }}
 }} @media(max-width:1299px) and (min-width:1100px) {{
   .portfolio-holding-card {{ gap:7px; grid-template-columns:minmax(76px,1fr) 58px 70px 70px; min-height:58px; padding-left:10px; padding-right:10px }}
   .holding-spark .mini-sparkline {{ width:58px }}
@@ -3437,15 +3440,15 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .broker-hero {{ grid-template-columns:1fr }}
   .broker-totals {{ grid-template-columns:repeat(3,minmax(0,1fr)) }}
   .account-stats {{ grid-template-columns:repeat(2,1fr) }} .account-stats div:nth-child(2n) {{ border-right:0 }}
-  .portfolio-holding-card {{ grid-template-columns:minmax(92px,1fr) 90px 88px 86px 92px 58px 78px; min-height:64px; padding:11px 12px }}
-  .holding-today-cash {{ display:none }}
+  .portfolio-holding-card {{ gap:6px; grid-template-columns:minmax(92px,1fr) 82px 78px 64px 86px 54px 72px 72px; min-height:64px; padding:11px 10px }}
+  .holding-today-cash {{ display:block }}
   .portfolio-holding-card>span::before {{ display:none }}
   .today-pill {{ justify-self:start; min-width:84px }}
   .holding-row {{ grid-template-columns:80px 1fr; gap:10px }}
   .board-action {{ display:none }} .board-basics {{ grid-column:1 / -1; margin-top:3px }}
 }} @media(max-width:700px) {{
   .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) 90px 86px 88px 92px }}
-  .holding-market-value,.holding-weight {{ display:none }}
+  .holding-today-cash,.holding-market-value,.holding-weight {{ display:none }}
   .holding-spark .mini-sparkline {{ height:38px; width:92px }}
 }} @media(max-width:620px) {{
   .portfolio-holding-card {{ grid-template-columns:minmax(88px,1fr) 90px 86px 92px }}
