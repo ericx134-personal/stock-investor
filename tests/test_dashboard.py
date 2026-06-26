@@ -379,7 +379,7 @@ class DashboardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             alerts = Path(directory) / "alerts.jsonl"
             alerts.write_text(
-                '{"symbol":"ABC","portfolio_weight":0.2,"latest_close":10,'
+                '{"symbol":"ABC","sector":"Technology","portfolio_weight":0.2,"latest_close":10,'
                 '"observed_at":"2026-01-01","alert":{"action":"TRIM_REVIEW",'
                 '"score":-0.4,"reasons":["Drawdown < review"]},'
                 '"technicals":{"drawdown_from_high":-0.3,"return_12_to_1":0.1}}\n'
@@ -518,6 +518,14 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn("<h2>Account Overview</h2>", page)
         self.assertNotIn("Robinhood-style account view", page)
         self.assertIn('id="portfolio-sort"', page)
+        self.assertIn('id="portfolio-signal-filter"', page)
+        self.assertIn('id="portfolio-sector-filter"', page)
+        self.assertIn('id="portfolio-weight-filter"', page)
+        self.assertIn('id="portfolio-confidence-filter"', page)
+        self.assertIn('data-filter-signal="WAIT"', page)
+        self.assertIn('data-filter-sector="Technology"', page)
+        self.assertIn('<option value="Technology">Technology</option>', page)
+        self.assertIn('data-holdings-filter-status', page)
         self.assertIn('data-portfolio-holdings', page)
         self.assertIn('class="portfolio-holding-card signal-wait"', page)
         self.assertIn("Market Value", page)

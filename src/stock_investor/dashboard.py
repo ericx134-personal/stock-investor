@@ -2379,6 +2379,7 @@ def build_dashboard(
     }
     chart_payloads = {"version": 1, "source": "dashboard-v3", "symbols": {}}
     portfolio_rows = []
+    portfolio_sector_options: set[str] = set()
     detail_panels = []
     portfolio_totals = {
         "market_value": 0.0,
@@ -2630,6 +2631,8 @@ def build_dashboard(
         recent_momentum = technicals.get("return_12_to_1")
         confidence_sort = float(signal_probability or 0)
         signal_rank = {"BUY": 3, "SELL": 2, "WAIT": 1}.get(signal_label, 0)
+        sector_label = str(record.get("sector") or "Unclassified")
+        portfolio_sector_options.add(sector_label)
         signal_source = "no promoted analog"
         if (
             signal_label in {"BUY", "SELL"}
@@ -2678,7 +2681,9 @@ def build_dashboard(
               data-sort-weight="{float(record.get("portfolio_weight") or 0):.6f}"
               data-sort-recent="{float(recent_momentum or 0):.6f}"
               data-sort-confidence="{confidence_sort:.6f}"
-              data-sort-signal="{signal_rank}">
+              data-sort-signal="{signal_rank}"
+              data-filter-signal="{html.escape(signal_label)}"
+              data-filter-sector="{html.escape(sector_label)}">
               <span class="holding-identity" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
               <span class="holding-spark" data-label="Trend">{mini_sparkline}</span>
               <span class="today-pill {today_return_class}" data-label="Today return %"><b>{_optional_signed_percent(today_return)}</b></span>
@@ -2786,28 +2791,66 @@ def build_dashboard(
                 account_history_status,
             )
         )
+    sector_filter_options = "".join(
+        f'<option value="{html.escape(sector)}">{html.escape(sector)}</option>'
+        for sector in sorted(portfolio_sector_options)
+        if sector
+    )
     portfolio_holdings = f"""
     <section class="portfolio-holdings-panel" aria-label="All portfolio holdings">
       <div class="holdings-toolbar">
         <div><small>Your holdings</small><h3>Portfolio</h3></div>
-        <label>Sort
-          <select id="portfolio-sort" aria-label="Sort portfolio holdings">
-            <option value="today-desc" selected>Today Return %</option>
-            <option value="today-dollars-desc">Today Return $</option>
-            <option value="value-desc">Market value</option>
-            <option value="gain-desc">Gain/Loss %</option>
-            <option value="gain-dollars-desc">Gain/Loss $</option>
-            <option value="recent-desc">12-1 momentum</option>
-            <option value="weight-desc">Portfolio weight</option>
-            <option value="confidence-desc">Signal confidence</option>
-            <option value="signal-desc">Signal type</option>
-            <option value="symbol-asc">Symbol A-Z</option>
-          </select>
-        </label>
+        <div class="holdings-controls">
+          <label>Signal
+            <select id="portfolio-signal-filter" aria-label="Filter portfolio by signal">
+              <option value="all" selected>All</option>
+              <option value="BUY">BUY</option>
+              <option value="SELL">SELL</option>
+              <option value="WAIT">WAIT</option>
+            </select>
+          </label>
+          <label>Sector
+            <select id="portfolio-sector-filter" aria-label="Filter portfolio by sector">
+              <option value="all" selected>All sectors</option>
+              {sector_filter_options}
+            </select>
+          </label>
+          <label>Weight
+            <select id="portfolio-weight-filter" aria-label="Filter portfolio by weight">
+              <option value="all" selected>All weights</option>
+              <option value="gte-10">10%+</option>
+              <option value="gte-5">5%+</option>
+              <option value="lt-1">&lt;1%</option>
+            </select>
+          </label>
+          <label>Confidence
+            <select id="portfolio-confidence-filter" aria-label="Filter portfolio by signal confidence">
+              <option value="all" selected>All confidence</option>
+              <option value="gte-65">65%+</option>
+              <option value="gte-55">55%+</option>
+              <option value="none">No signal</option>
+            </select>
+          </label>
+          <label>Sort
+            <select id="portfolio-sort" aria-label="Sort portfolio holdings">
+              <option value="today-desc" selected>Today Return %</option>
+              <option value="today-dollars-desc">Today Return $</option>
+              <option value="value-desc">Market value</option>
+              <option value="gain-desc">Gain/Loss %</option>
+              <option value="gain-dollars-desc">Gain/Loss $</option>
+              <option value="recent-desc">12-1 momentum</option>
+              <option value="weight-desc">Portfolio weight</option>
+              <option value="confidence-desc">Signal confidence</option>
+              <option value="signal-desc">Signal type</option>
+              <option value="symbol-asc">Symbol A-Z</option>
+            </select>
+          </label>
+        </div>
       </div>
       <div class="portfolio-holdings-list" data-portfolio-holdings>
         {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
       </div>
+      <p class="holdings-filter-status" data-holdings-filter-status hidden>No holdings match current filters.</p>
     </section>"""
     asset_home = _asset_home(snaptrade_accounts, account_summary, portfolio_totals)
     broker_tab_buttons, broker_tab_panels = _broker_tab_fragments(
@@ -3285,6 +3328,9 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
 .holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
+.holdings-controls {{ align-items:center; display:flex; flex-wrap:wrap; gap:8px 12px; justify-content:flex-end }}
+.holdings-controls label {{ align-items:center; display:flex; white-space:nowrap }}
+.holdings-filter-status {{ color:var(--muted); margin:0; padding:16px }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ container-type:inline-size; display:grid; grid-template-columns:1fr; position:relative }}
 .portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); border-left:3px solid transparent; color:var(--text); cursor:pointer; display:grid; font:inherit; gap:8px; grid-template-columns:minmax(86px,1fr) 82px 84px 80px 100px 66px 86px 92px; min-height:60px; min-width:0; overflow:hidden; padding:9px 12px 9px 10px; text-align:left; width:100% }}
@@ -3629,6 +3675,11 @@ document.querySelectorAll("[data-jump-tab]").forEach((button) => button.addEvent
 
 const portfolioSort = document.getElementById("portfolio-sort");
 const portfolioList = document.querySelector("[data-portfolio-holdings]");
+const portfolioSignalFilter = document.getElementById("portfolio-signal-filter");
+const portfolioSectorFilter = document.getElementById("portfolio-sector-filter");
+const portfolioWeightFilter = document.getElementById("portfolio-weight-filter");
+const portfolioConfidenceFilter = document.getElementById("portfolio-confidence-filter");
+const holdingsFilterStatus = document.querySelector("[data-holdings-filter-status]");
 const arrangePortfolioRows = (rows) => {{
   rows.forEach((row) => {{
     row.style.gridColumn = "";
@@ -3662,6 +3713,23 @@ const arrangePortfolioRows = (rows) => {{
     row.style.gridRow = String(index + 1);
   }});
 }};
+const holdingMatchesFilters = (row) => {{
+  const signal = portfolioSignalFilter?.value || "all";
+  if (signal !== "all" && row.dataset.filterSignal !== signal) return false;
+  const sector = portfolioSectorFilter?.value || "all";
+  if (sector !== "all" && row.dataset.filterSector !== sector) return false;
+  const weight = Number(row.dataset.sortWeight || 0);
+  const weightFilter = portfolioWeightFilter?.value || "all";
+  if (weightFilter === "gte-10" && weight < 0.10) return false;
+  if (weightFilter === "gte-5" && weight < 0.05) return false;
+  if (weightFilter === "lt-1" && weight >= 0.01) return false;
+  const confidence = Number(row.dataset.sortConfidence || 0);
+  const confidenceFilter = portfolioConfidenceFilter?.value || "all";
+  if (confidenceFilter === "gte-65" && confidence < 0.65) return false;
+  if (confidenceFilter === "gte-55" && confidence < 0.55) return false;
+  if (confidenceFilter === "none" && confidence > 0) return false;
+  return true;
+}};
 const sortHoldings = () => {{
   if (!portfolioSort || !portfolioList) return;
   const selectedSort = portfolioSort.value;
@@ -3680,6 +3748,9 @@ const sortHoldings = () => {{
     symbol: "sortSymbol",
   }}[field];
   const rows = [...portfolioList.querySelectorAll(".portfolio-holding-card")];
+  rows.forEach((row) => {{
+    row.hidden = !holdingMatchesFilters(row);
+  }});
   rows.sort((left, right) => {{
     if (field === "symbol") {{
       return (left.dataset[datasetKey] || "").localeCompare(right.dataset[datasetKey] || "");
@@ -3688,9 +3759,18 @@ const sortHoldings = () => {{
     const rightValue = Number(right.dataset[datasetKey] || 0);
     return direction === "asc" ? leftValue - rightValue : rightValue - leftValue;
   }});
-  arrangePortfolioRows(rows);
+  const visibleRows = rows.filter((row) => !row.hidden);
+  const hiddenRows = rows.filter((row) => row.hidden);
+  if (holdingsFilterStatus) holdingsFilterStatus.hidden = visibleRows.length > 0;
+  arrangePortfolioRows(visibleRows);
+  hiddenRows.forEach((row) => {{
+    row.style.gridColumn = "";
+    row.style.gridRow = "";
+    portfolioList.appendChild(row);
+  }});
 }};
 portfolioSort?.addEventListener("change", sortHoldings);
+[portfolioSignalFilter, portfolioSectorFilter, portfolioWeightFilter, portfolioConfidenceFilter].forEach((control) => control?.addEventListener("change", sortHoldings));
 sortHoldings();
 window.StockInvestorKline?.initVisibleCharts();
 

@@ -31,6 +31,8 @@ class MonitorResult:
     thesis: ThesisAssessment | None
     technicals: TechnicalSignals | None
     alert: Alert
+    sector: str | None = None
+    theme: str | None = None
 
 
 def _portfolio_values(
@@ -112,6 +114,8 @@ def run_monitor(
                     thesis,
                     None,
                     alert,
+                    position.sector,
+                    position.theme,
                 )
             )
             continue
@@ -140,6 +144,8 @@ def run_monitor(
                     thesis,
                     None,
                     alert,
+                    position.sector,
+                    position.theme,
                 )
             )
             continue
@@ -225,6 +231,8 @@ def run_monitor(
                 thesis,
                 technicals,
                 alert,
+                position.sector,
+                position.theme,
             )
         )
     return results

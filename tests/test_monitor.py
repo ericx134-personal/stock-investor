@@ -175,7 +175,19 @@ class MonitorTests(unittest.TestCase):
 
     def test_snapshot_records_holds_and_model_version(self):
         results = run_monitor(
-            [position("HOLD")],
+            [
+                Position(
+                    "HOLD",
+                    1,
+                    100,
+                    1.0,
+                    0.8,
+                    0.5,
+                    0.5,
+                    sector="Technology",
+                    theme="AI",
+                )
+            ],
             {"HOLD": price_history(100, 0)},
             model_version="decision-support-v2",
         )
@@ -188,6 +200,8 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(payload["results"][0]["shares"], 1)
         self.assertEqual(payload["results"][0]["average_cost"], 100)
         self.assertEqual(payload["results"][0]["cost_basis"], 100)
+        self.assertEqual(payload["results"][0]["sector"], "Technology")
+        self.assertEqual(payload["results"][0]["theme"], "AI")
 
     def test_decision_history_records_holds_idempotently(self):
         results = run_monitor(

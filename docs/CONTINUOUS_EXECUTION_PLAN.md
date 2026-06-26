@@ -66,7 +66,7 @@ Current execution queue:
 - P1: M102 add combined holdings/watchlist merger with per-source attribution.
 - P1: M103B complete SnapTrade/Fidelity live authorization and import once API
   keys are available; keep CSV only as a fallback, not the primary path.
-- P1: M082 add BUY/SELL/WAIT, sector, weight, and confidence filters.
+- P1: M082 add BUY/SELL/WAIT, sector, weight, and confidence filters. `[x]`
 - P2: M061-M063 market-regime conditioning only after stability gates pass.
 - P2: M058 target-zone touch-rate replay and post-touch outcomes.
 
@@ -181,7 +181,7 @@ Current execution queue:
 ## Phase 9: Dashboard And User Comprehension
 
 - [x] M081 Add compact model-health and opportunity summaries.
-- [ ] M082 Add BUY/SELL/WAIT, sector, weight, and confidence filters.
+- [x] M082 Add BUY/SELL/WAIT, sector, weight, and confidence filters.
 - [ ] M083 Add ticker search and probability sorting.
 - [x] M084 Add chart crosshair and OHLCV tooltips.
 - [x] M084A Restore responsive Robinhood-style holdings rows and visible detail drawer.
