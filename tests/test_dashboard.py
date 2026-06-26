@@ -517,30 +517,23 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("K-line evidence", page)
         self.assertNotIn("<h2>Account Overview</h2>", page)
         self.assertNotIn("Robinhood-style account view", page)
-        self.assertIn('id="portfolio-sort"', page)
-        self.assertIn('id="portfolio-search"', page)
-        self.assertIn('id="portfolio-signal-filter"', page)
-        self.assertIn('id="portfolio-sector-filter"', page)
-        self.assertIn('id="portfolio-weight-filter"', page)
-        self.assertIn('id="portfolio-confidence-filter"', page)
-        self.assertIn('data-filter-signal="WAIT"', page)
-        self.assertIn('data-filter-sector="Technology"', page)
-        self.assertIn('<option value="Technology">Technology</option>', page)
-        self.assertIn('data-holdings-filter-status', page)
-        self.assertIn('data-portfolio-holdings', page)
-        self.assertIn('class="portfolio-holding-card signal-wait"', page)
-        self.assertIn("Market Value", page)
-        self.assertIn("Gain/Loss %", page)
+        self.assertNotIn('data-tab-target="signals"', page)
+        self.assertNotIn('id="tab-signals"', page)
+        self.assertNotIn('id="portfolio-sort"', page)
+        self.assertNotIn('id="portfolio-search"', page)
+        self.assertNotIn('id="portfolio-signal-filter"', page)
+        self.assertNotIn('id="portfolio-sector-filter"', page)
+        self.assertNotIn('id="portfolio-weight-filter"', page)
+        self.assertNotIn('id="portfolio-confidence-filter"', page)
+        self.assertNotIn('data-portfolio-holdings', page)
+        self.assertIn("broker-holding-card", page)
+        self.assertIn("Market value", page)
+        self.assertIn("Gain / loss", page)
         self.assertIn("12-1 momentum", page)
-        self.assertIn("Pressure", page)
-        self.assertIn("Today Return %", page)
-        self.assertIn("Today Return $", page)
-        self.assertIn("Signal probability", page)
-        self.assertIn('const portfolioSearch = document.getElementById("portfolio-search");', page)
-        self.assertIn('includes(query)', page)
-        self.assertIn('const selectedSort = portfolioSort.value;', page)
-        self.assertIn('const field = selectedSort.replace(/-(asc|desc)$/, "");', page)
-        self.assertNotIn('const [field, direction] = portfolioSort.value.split("-");', page)
+        self.assertIn('data-detail-target="holding-detail-0"', page)
+        self.assertNotIn('const portfolioSearch = document.getElementById("portfolio-search");', page)
+        self.assertNotIn("sortHoldings", page)
+        self.assertNotIn("arrangePortfolioRows", page)
         self.assertIn("First Observed Forecast Tracking", page)
         self.assertIn("wave-direction-v1", page)
         self.assertIn("M078 accountability", page)
@@ -548,12 +541,6 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Acted-on proxy", page)
         self.assertIn("M079 observational comparison", page)
         self.assertIn("Open monthly portfolio-learning review", page)
-        self.assertIn("sortHoldings", page)
-        self.assertIn("arrangePortfolioRows", page)
-        self.assertIn('class="portfolio-board signals-board-layout"', page)
-        self.assertIn('class="signals-chart-column"', page)
-        self.assertIn('class="signals-list-column"', page)
-        self.assertIn('grid-template-columns:minmax(0,1fr) minmax(420px,520px)', page)
         self.assertIn('grid-template-areas:"id spark today price" "cash value weight gain"', page)
         self.assertNotIn('row.style.gridColumn = "1"', page)
         self.assertNotIn('leftRows', page)
@@ -572,11 +559,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("/api/refresh", page)
         self.assertIn("white-space:nowrap", page)
         self.assertIn("overflow-x:auto", page)
-        self.assertIn('class="account-overview"', page)
-        self.assertIn("Account value", page)
-        self.assertIn("Margin used", page)
-        self.assertIn("Gain/Loss", page)
-        self.assertIn("Buying power", page)
+        self.assertNotIn('class="account-overview"', page)
         self.assertNotIn("<small>Cash</small>", page)
         self.assertIn('data-tab-target="opportunities"', page)
         self.assertNotIn("Latest prices", page)
@@ -645,30 +628,60 @@ class DashboardTests(unittest.TestCase):
                     }
                 )
             )
-            page = build_dashboard(alerts, latest_quotes_path=quotes)
+            snaptrade = root / "snaptrade-accounts.json"
+            snaptrade.write_text(
+                json.dumps(
+                    {
+                        "captured_at": "2026-06-24T00:25:08+00:00",
+                        "accounts": [
+                            {
+                                "account": {
+                                    "name": "Robinhood Individual",
+                                    "number": "***1234",
+                                    "institution_name": "Robinhood",
+                                    "balance": {
+                                        "total": {"amount": 1050.0, "currency": "USD"}
+                                    },
+                                },
+                                "balances": [{"cash": 0.0, "buying_power": 100.0}],
+                                "positions": [
+                                    {
+                                        "symbol": "ABC",
+                                        "description": "ABC Corp",
+                                        "units": 10,
+                                        "price": 100.0,
+                                        "market_value": 1000.0,
+                                        "average_purchase_price": 90.0,
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                )
+            )
+            page = build_dashboard(
+                alerts,
+                latest_quotes_path=quotes,
+                snaptrade_accounts_path=snaptrade,
+            )
         self.assertIn("$105.00", page)
         self.assertIn("+5.0%", page)
         self.assertIn("$1,050.00", page)
-        self.assertIn("+$150.00", page)
+        self.assertIn("+$50.00", page)
         self.assertIn("16.7%", page)
-        self.assertIn('value="today-desc" selected>Today Return %</option>', page)
-        self.assertIn('value="today-dollars-desc">Today Return $</option>', page)
-        self.assertIn('class="today-pill positive"', page)
-        self.assertIn('data-label="Today return %"><b>+5.0%</b>', page)
+        self.assertIn('data-tab-target="broker-robinhood"', page)
+        self.assertIn('class="portfolio-holding-card broker-holding-card signal-wait"', page)
+        self.assertNotIn('value="today-desc" selected>Today Return %</option>', page)
+        self.assertNotIn('value="today-dollars-desc">Today Return $</option>', page)
+        self.assertNotIn('id="tab-signals"', page)
         self.assertNotIn('<small>Today</small>', page)
-        self.assertIn('data-label="Today $"><b>+$50</b>', page)
-        self.assertIn(".holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss { display:block }", page)
-        self.assertIn('data-label="Price"><small>Price</small><b>$105.00</b>', page)
-        self.assertIn('data-label="Market Value"><small>Market Value</small><b>$1,050.00</b>', page)
-        self.assertIn('data-label="Weight"><small>Weight</small><b>20.0%</b>', page)
-        self.assertIn('data-label="Gain/Loss"><small>Gain/Loss</small><b>+16.7%</b>', page)
         self.assertNotIn('data-label="Prediction"', page)
         self.assertIn('rel="icon"', page)
         self.assertIn('class="mini-sparkline', page)
         self.assertNotIn("<span>Today %</span><span>Today $</span>", page)
         self.assertNotIn("<span>Portfolio %</span><span>Prediction</span>", page)
         self.assertIn("<div><small>Shares</small><b>10</b></div>", page)
-        self.assertIn("<small>10 shares</small>", page)
+        self.assertIn("<small>10 shares · ABC Corp</small>", page)
         self.assertNotIn("<span>More</span>", page)
 
     def test_sparkline_points_accepts_datetime_quote_time(self):
@@ -889,7 +902,7 @@ class DashboardTests(unittest.TestCase):
             alerts.write_text(
                 json.dumps(
                     {
-                        "symbol": "ABC",
+                        "symbol": "HOOD",
                         "shares": 10,
                         "average_cost": 90,
                         "cost_basis": 900,
@@ -1033,6 +1046,10 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("BrokerageLink", page)
         self.assertIn("Health Savings Account", page)
         self.assertIn("HOOD", page)
+        self.assertIn('class="portfolio-holding-card broker-holding-card signal-wait"', page)
+        self.assertIn('data-detail-target="holding-detail-0"', page)
+        self.assertIn('class="broker-account-holdings"', page)
+        self.assertNotIn("broker-positions-table", page)
         self.assertIn("TCEHY", page)
         self.assertIn("FDIC91315", page)
         self.assertIn("401k funds, cash sweeps, and non-stock instruments", page)
@@ -1120,7 +1137,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("AFRM", page)
         self.assertIn("FXAIX", page)
 
-    def test_dashboard_warns_but_keeps_stale_broker_account_view_visible(self):
+    def test_dashboard_does_not_render_legacy_summary_only_account_view(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             alerts = root / "alerts.jsonl"
@@ -1154,18 +1171,18 @@ class DashboardTests(unittest.TestCase):
 
             page = build_dashboard(alerts, account_summary_path=summary)
 
-        self.assertIn('class="account-connection-notice"', page)
-        self.assertIn('data-account-data-stale="true"', page)
-        self.assertIn("Account data needs refresh", page)
-        self.assertIn("Showing the last imported read-only portfolio for now.", page)
-        self.assertIn("Login/connect work is shelved.", page)
+        self.assertNotIn('class="account-connection-notice"', page)
+        self.assertNotIn('data-account-data-stale="true"', page)
+        self.assertNotIn("Account data needs refresh", page)
+        self.assertNotIn("Showing the last imported read-only portfolio for now.", page)
+        self.assertNotIn("Login/connect work is shelved.", page)
         self.assertNotIn('type="password"', page)
         self.assertNotIn("robinhood.com/login", page)
         self.assertNotIn('class="robinhood-connect-page"', page)
-        self.assertIn('class="account-overview"', page)
-        self.assertIn('class="portfolio-holdings-panel"', page)
+        self.assertNotIn('class="account-overview"', page)
+        self.assertNotIn('id="tab-signals"', page)
         self.assertIn('id="holding-detail-0"', page)
-        self.assertIn("<h2>$750.00</h2>", page)
+        self.assertIn("$750.00", page)
 
     def test_dashboard_does_not_blend_evidence_across_model_versions(self):
         with tempfile.TemporaryDirectory() as directory:

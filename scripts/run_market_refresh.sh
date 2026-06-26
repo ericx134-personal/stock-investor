@@ -55,6 +55,10 @@ ACCOUNT_ARGS=()
 if [[ -f "$ACCOUNT_SUMMARY" ]]; then
   ACCOUNT_ARGS=(--account-summary "$ACCOUNT_SUMMARY")
 fi
+SNAPTRADE_ARGS=()
+if [[ -f "$SNAPTRADE_ACCOUNTS" ]]; then
+  SNAPTRADE_ARGS=(--snaptrade-accounts "$SNAPTRADE_ACCOUNTS")
+fi
 MOOMOO_ARGS=()
 if printf ',%s,' "$MARKET_DATA_PROVIDER_ORDER" | tr '[:upper:]' '[:lower:]' | grep -q ',moomoo,'; then
   if PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli import-moomoo-watchlist "$MOOMOO_WATCHLISTS"; then
@@ -164,6 +168,7 @@ PYTHONPATH=src /usr/bin/python3 -m stock_investor.cli refresh \
   --price-source "$PRICE_SOURCE" \
   --latest-quotes "$LATEST_QUOTES" \
   --price-adjustment "$PRICE_ADJUSTMENT" \
+  "${SNAPTRADE_ARGS[@]}" \
   "${MOOMOO_ARGS[@]}" \
   --production-safe
 write_progress 82 "dashboard rebuilt"

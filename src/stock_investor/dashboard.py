@@ -453,40 +453,94 @@ def _snaptrade_last_sync(account_snapshot: dict) -> str:
     return str(value or "pending")
 
 
-def _account_position_rows(account_snapshot: dict) -> str:
-    rows = []
-    for position in account_snapshot.get("positions", []):
-        if not isinstance(position, dict):
-            continue
+def _broker_position_cards(
+    account_snapshot: dict,
+    holding_context_by_symbol: dict[str, dict[str, object]] | None = None,
+) -> str:
+    positions = [
+        position
+        for position in account_snapshot.get("positions", [])
+        if isinstance(position, dict) and position.get("symbol")
+    ]
+    if not positions:
+        return '<p class="empty-state">No positions are available for this account yet.</p>'
+    account_total = _snaptrade_account_total(account_snapshot)
+    cards = []
+    for position in positions:
         symbol = str(position.get("symbol") or "").upper()
-        if not symbol:
-            continue
+        context = (holding_context_by_symbol or {}).get(symbol, {})
         description = str(position.get("description") or "")
         units = _safe_float(position.get("units")) or 0.0
-        price = _safe_float(position.get("price"))
-        market_value = _snaptrade_position_value(position)
+        context_price = _safe_float(context.get("display_price"))
+        price = context_price if context_price is not None else _safe_float(position.get("price"))
+        market_value = units * price if context_price is not None else _snaptrade_position_value(position)
+        if market_value <= 0 and price is not None:
+            market_value = units * price
         average_cost = _safe_float(position.get("average_purchase_price"))
-        rows.append(
+        cost_basis = units * average_cost if average_cost is not None else None
+        gain_dollars = (
+            market_value - cost_basis
+            if cost_basis is not None and cost_basis > 0
+            else None
+        )
+        gain_return = (
+            gain_dollars / cost_basis
+            if gain_dollars is not None and cost_basis
+            else context.get("gain_return")
+        )
+        gain_class = "positive" if gain_return is not None and float(gain_return) >= 0 else "negative"
+        today_return = context.get("today_return")
+        today_class = str(context.get("today_return_class") or "positive")
+        previous_close = _safe_float(context.get("previous_close"))
+        today_dollars = (
+            units * ((price or 0.0) - previous_close)
+            if previous_close is not None and price is not None
+            else None
+        )
+        account_weight = market_value / account_total if account_total > 0 else None
+        detail_id = str(context.get("detail_id") or "")
+        signal_class = str(context.get("signal_class") or "wait")
+        signal_label = str(context.get("signal_label") or "No model detail")
+        mini_sparkline = str(context.get("mini_sparkline") or "")
+        if not mini_sparkline:
+            mini_sparkline = _mini_sparkline([], [], today_class)
+        detail_attr = (
+            f' data-detail-target="{html.escape(detail_id)}"'
+            if detail_id
+            else ' aria-disabled="true"'
+        )
+        tag = "button" if detail_id else "div"
+        type_attr = ' type="button"' if tag == "button" else ""
+        no_detail_class = "" if detail_id else " no-detail"
+        subtitle = f"{_optional_number(units)} shares"
+        if description:
+            subtitle = f"{subtitle} · {description[:48]}"
+        cards.append(
             (
                 -market_value,
                 symbol,
-                f"""<tr>
-                  <td><b>{html.escape(symbol)}</b><span>{html.escape(description[:72])}</span></td>
-                  <td>{_optional_number(units)}</td>
-                  <td>{_optional_money(price)}</td>
-                  <td>{_optional_money(market_value)}</td>
-                  <td>{_optional_money(average_cost)}</td>
-                </tr>""",
+                f"""
+                <{tag}{type_attr} class="portfolio-holding-card broker-holding-card signal-{html.escape(signal_class)}{no_detail_class}"{detail_attr}
+                  title="{html.escape(description or signal_label)}"
+                  aria-label="{html.escape(symbol)} holding, {html.escape(signal_label)}">
+                  <span class="holding-identity"><strong>{html.escape(symbol)}</strong><small>{html.escape(subtitle)}</small></span>
+                  <span class="holding-spark" data-label="Trend">{mini_sparkline}</span>
+                  <span class="today-pill {html.escape(today_class)}" data-label="Today return %"><b>{_optional_signed_percent(today_return)}</b></span>
+                  <span class="holding-today-cash {html.escape(today_class)}" data-label="Today $"><b>{_signed_compact_money(today_dollars)}</b></span>
+                  <span class="holding-market-value" data-label="Market Value"><small>Market Value</small><b>{_optional_money(market_value)}</b></span>
+                  <span class="holding-weight" data-label="Weight"><small>Weight</small><b>{_percent(account_weight)}</b></span>
+                  <span class="{gain_class} holding-gain-loss" data-label="Gain/Loss"><small>Gain/Loss</small><b>{_optional_signed_percent(gain_return)}</b></span>
+                  <span class="holding-current {html.escape(today_class)}" data-label="Price"><small>Price</small><b>{_optional_money(price)}</b></span>
+                </{tag}>""",
             )
         )
-    return "".join(row for _, _, row in sorted(rows)) or (
-        '<tr><td colspan="5">No positions are available for this account yet.</td></tr>'
-    )
+    return "".join(row for _, _, row in sorted(cards))
 
 
 def _broker_account_section(
     account_snapshot: dict,
     payload_registry: dict | None = None,
+    holding_context_by_symbol: dict[str, dict[str, object]] | None = None,
 ) -> str:
     account = account_snapshot.get("account") or {}
     account_name = str(account.get("name") or "Broker account")
@@ -532,8 +586,10 @@ def _broker_account_section(
         </div>
         <small class="broker-sync {html.escape(sync_status)}">Holdings sync: {html.escape(_snaptrade_last_sync(account_snapshot))}</small>
         <div class="broker-account-chart">{account_chart}</div>
-        <div class="broker-table-wrap">
-          <table class="broker-positions-table"><thead><tr><th>Symbol</th><th>Shares</th><th>Price</th><th>Value</th><th>Avg cost</th></tr></thead><tbody>{_account_position_rows(account_snapshot)}</tbody></table>
+        <div class="broker-account-holdings">
+          <div class="portfolio-holdings-list broker-holdings-list">
+            {_broker_position_cards(account_snapshot, holding_context_by_symbol)}
+          </div>
         </div>
       </article>"""
 
@@ -543,6 +599,7 @@ def _broker_institution_view(
     accounts: list[dict],
     captured_at: str,
     payload_registry: dict | None = None,
+    holding_context_by_symbol: dict[str, dict[str, object]] | None = None,
 ) -> str:
     if not accounts:
         return """
@@ -576,7 +633,7 @@ def _broker_institution_view(
         </div>
       </section>
       <section class="broker-accounts-grid">
-        {"".join(_broker_account_section(account, payload_registry) for account in accounts)}
+        {"".join(_broker_account_section(account, payload_registry, holding_context_by_symbol) for account in accounts)}
       </section>
       <p class="note">Each account is shown separately. 401k funds, cash sweeps, and non-stock instruments stay visible here but are not promoted into stock prediction signals until the broker-neutral merger can classify them safely.</p>
     </section>"""
@@ -585,6 +642,7 @@ def _broker_institution_view(
 def _broker_tab_fragments(
     snapshot: dict,
     payload_registry: dict | None = None,
+    holding_context_by_symbol: dict[str, dict[str, object]] | None = None,
 ) -> tuple[str, str]:
     accounts = _visible_snaptrade_accounts(snapshot)
     if not accounts:
@@ -602,7 +660,7 @@ def _broker_tab_fragments(
             f'<button type="button" class="tab-button" data-tab-target="{html.escape(target)}" role="tab" aria-selected="false">{logo}{html.escape(institution)}</button>'
         )
         panels.append(
-            f'<section id="tab-{html.escape(target)}" class="tab-view" role="tabpanel" hidden>{_broker_institution_view(institution, grouped[institution], captured_at, payload_registry)}</section>'
+            f'<section id="tab-{html.escape(target)}" class="tab-view" role="tabpanel" hidden>{_broker_institution_view(institution, grouped[institution], captured_at, payload_registry, holding_context_by_symbol)}</section>'
         )
     return "\n".join(buttons), "\n".join(panels)
 
@@ -673,9 +731,6 @@ def _asset_home(snapshot: dict, account_summary: dict, portfolio_totals: dict) -
         ]
     )
     action_cards = triage_cards + broker_cards + """
-        <button type="button" class="asset-nav-card" data-jump-tab="signals">
-          <small>Signals</small><b>Holdings board</b><span>Prices, P/L, and model status</span>
-        </button>
         <button type="button" class="asset-nav-card" data-jump-tab="opportunities">
           <small>Opportunities</small><b>Action lanes</b><span>Only valid BUY/SELL candidates</span>
         </button>"""
@@ -774,78 +829,6 @@ def _moomoo_watchlist_view(payload: dict) -> str:
       <section class="moomoo-watchlists-grid">
         {''.join(group_cards)}
       </section>
-    </section>"""
-
-
-def _parse_utc_datetime(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def _account_connection_state(
-    path: str | Path | None,
-    summary: dict,
-    *,
-    max_age_hours: int = 36,
-) -> dict:
-    if not path:
-        return {"requires_auth": False, "status": "not_configured", "detail": ""}
-    source = Path(path)
-    if not source.exists() or not summary:
-        return {
-            "requires_auth": True,
-            "status": "missing",
-            "detail": "No fresh broker account summary was found.",
-            "imported_at": "",
-            "path": str(source),
-        }
-    imported_at = summary.get("imported_at") or ""
-    imported_dt = _parse_utc_datetime(imported_at)
-    if summary.get("requires_auth"):
-        return {
-            "requires_auth": True,
-            "status": "oauth_required",
-            "detail": "The broker import reported that authorization is required.",
-            "imported_at": imported_at,
-            "path": str(source),
-        }
-    if imported_dt is not None:
-        age = datetime.now(timezone.utc) - imported_dt
-        if age > timedelta(hours=max_age_hours):
-            hours = max(1, round(age.total_seconds() / 3600))
-            return {
-                "requires_auth": True,
-                "status": "stale",
-                "detail": f"Broker account data is {hours} hours old.",
-                "imported_at": imported_at,
-                "path": str(source),
-            }
-    return {
-        "requires_auth": False,
-        "status": "connected",
-        "detail": "Broker account summary is fresh enough for account-level totals.",
-        "imported_at": imported_at,
-        "path": str(source),
-    }
-
-
-def _account_connection_notice(state: dict) -> str:
-    if not state.get("requires_auth"):
-        return ""
-    imported = state.get("imported_at") or "never"
-    detail = state.get("detail") or "Broker account authorization is required."
-    return f"""
-    <section class="account-connection-notice" data-account-data-stale="true" aria-label="Account data stale">
-      <b>Account data needs refresh</b>
-      <span>{html.escape(detail)} Showing the last imported read-only portfolio for now. Login/connect work is shelved.</span>
-      <small>Last account import: {html.escape(str(imported))}. Use broker aggregators or local providers; this app will not ask for your brokerage password.</small>
     </section>"""
 
 
@@ -975,59 +958,6 @@ def _account_kline_card(
         </div>
       </div>
       <div class="chart-legend account-chart-legend"><span>Broker-reported account value</span></div>
-    </section>"""
-
-
-def _portfolio_account_overview(
-    totals: dict[str, float],
-    history: list[Price],
-    account_summary: dict,
-    payload_registry: dict | None,
-    account_history_status: str | None = None,
-) -> str:
-    holdings_value = (
-        _safe_float(account_summary.get("holdings_value"))
-        or totals.get("market_value", 0.0)
-    )
-    cash_balance = float(account_summary.get("total_cash", 0.0) or 0.0)
-    buying_power = float(account_summary.get("total_buying_power", 0.0) or 0.0)
-    margin_used = (
-        _safe_float(account_summary.get("margin_used"))
-        if _safe_float(account_summary.get("margin_used")) is not None
-        else max(0.0, -cash_balance)
-    )
-    account_value = (
-        _safe_float(account_summary.get("account_value"))
-        or holdings_value + cash_balance
-    )
-    today_dollars = totals.get("today_dollars", 0.0)
-    gain_dollars = totals.get("gain_dollars", 0.0)
-    prior_value = account_value - today_dollars
-    today_pct = today_dollars / prior_value if prior_value > 0 else None
-    today_class = "positive" if today_dollars >= 0 else "negative"
-    gain_class = "positive" if gain_dollars >= 0 else "negative"
-    margin_class = "negative" if margin_used > 0 else "positive"
-    chart = _account_kline_card(
-        history,
-        account_value,
-        today_pct,
-        payload_registry,
-        account_history_status or "Exact broker account history is not available yet.",
-    )
-    return f"""
-    <section class="account-overview" aria-label="Account overview">
-      <div class="account-copy">
-        <small>Individual</small>
-        <h2>${account_value:,.2f}</h2>
-        <p class="{today_class}"><b>{_signed_money(today_dollars)}</b> ({_optional_signed_percent(today_pct)}) today</p>
-      </div>
-      <div class="account-chart-wrap">{chart}</div>
-      <div class="account-stats" aria-label="Account summary">
-        <div><small>Account value</small><b>{_optional_money(account_value)}</b></div>
-        <div><small>Margin used</small><b class="{margin_class}">{_optional_money(margin_used)}</b></div>
-        <div><small>Gain/Loss</small><b class="{gain_class}">{_signed_money(gain_dollars)}</b></div>
-        <div><small>Buying power</small><b>{_optional_money(buying_power)}</b></div>
-      </div>
     </section>"""
 
 
@@ -2194,7 +2124,6 @@ def build_dashboard(
         else {}
     )
     account_summary = _load_account_summary(account_summary_path)
-    account_connection = _account_connection_state(account_summary_path, account_summary)
     snaptrade_accounts = _load_snaptrade_accounts(snaptrade_accounts_path)
     moomoo_watchlists = _load_moomoo_watchlists(moomoo_watchlists_path)
     wave_scorecard = (
@@ -2378,8 +2307,7 @@ def build_dashboard(
         "WAIT": [],
     }
     chart_payloads = {"version": 1, "source": "dashboard-v3", "symbols": {}}
-    portfolio_rows = []
-    portfolio_sector_options: set[str] = set()
+    holding_context_by_symbol: dict[str, dict[str, object]] = {}
     detail_panels = []
     portfolio_totals = {
         "market_value": 0.0,
@@ -2632,7 +2560,6 @@ def build_dashboard(
         confidence_sort = float(signal_probability or 0)
         signal_rank = {"BUY": 3, "SELL": 2, "WAIT": 1}.get(signal_label, 0)
         sector_label = str(record.get("sector") or "Unclassified")
-        portfolio_sector_options.add(sector_label)
         signal_source = "no promoted analog"
         if (
             signal_label in {"BUY", "SELL"}
@@ -2668,32 +2595,26 @@ def build_dashboard(
             symbol_history,
             today_return_class,
         )
-        portfolio_rows.append(
-            f"""
-            <button type="button" class="portfolio-holding-card signal-{signal_class}" data-detail-target="{detail_id}" title="{html.escape(more_summary)}"
-              aria-label="{html.escape(str(record.get("symbol", "")))} holding, {signal_label} signal"
-              data-sort-symbol="{html.escape(str(record.get("symbol", "")))}"
-              data-sort-value="{market_value:.6f}"
-              data-sort-gain="{float(display_unrealized_return or 0):.6f}"
-              data-sort-gain-dollars="{float(gain_dollars or 0):.6f}"
-              data-sort-today="{float(today_return or 0):.6f}"
-              data-sort-today-dollars="{float(today_dollars or 0):.6f}"
-              data-sort-weight="{float(record.get("portfolio_weight") or 0):.6f}"
-              data-sort-recent="{float(recent_momentum or 0):.6f}"
-              data-sort-confidence="{confidence_sort:.6f}"
-              data-sort-signal="{signal_rank}"
-              data-filter-signal="{html.escape(signal_label)}"
-              data-filter-sector="{html.escape(sector_label)}">
-              <span class="holding-identity" title="{html.escape(action.replace("_", " "))}"><strong>{html.escape(str(record.get("symbol", "")))}</strong><small>{_optional_number(record.get("shares"))} shares</small></span>
-              <span class="holding-spark" data-label="Trend">{mini_sparkline}</span>
-              <span class="today-pill {today_return_class}" data-label="Today return %"><b>{_optional_signed_percent(today_return)}</b></span>
-              <span class="holding-today-cash {today_return_class}" data-label="Today $"><b>{_signed_compact_money(today_dollars)}</b></span>
-              <span class="holding-market-value" data-label="Market Value"><small>Market Value</small><b>${market_value:,.2f}</b></span>
-              <span class="holding-weight" data-label="Weight"><small>Weight</small><b>{_percent(record.get("portfolio_weight"))}</b></span>
-              <span class="{display_return_class} holding-gain-loss" data-label="Gain/Loss"><small>Gain/Loss</small><b>{_optional_signed_percent(display_unrealized_return)}</b></span>
-              <span class="holding-current {today_return_class}" data-label="Price"><small>Price</small><b>${display_price:,.2f}</b></span>
-            </button>"""
-        )
+        holding_context_by_symbol[symbol] = {
+            "detail_id": detail_id,
+            "signal_class": signal_class,
+            "signal_label": signal_label,
+            "action": action,
+            "mini_sparkline": mini_sparkline,
+            "today_return": today_return,
+            "today_return_class": today_return_class,
+            "today_dollars": today_dollars,
+            "previous_close": previous_close,
+            "display_price": display_price,
+            "portfolio_weight": portfolio_weight,
+            "gain_return": display_unrealized_return,
+            "gain_class": display_return_class,
+            "recent_momentum": recent_momentum,
+            "confidence_sort": confidence_sort,
+            "signal_rank": signal_rank,
+            "sector_label": sector_label,
+            "summary": more_summary,
+        }
         board_rows[signal_label].append(
             (
                 signal_probability or 0,
@@ -2766,101 +2687,11 @@ def build_dashboard(
     top_sell = (
         sorted_signal_tuples["SELL"][0][2] if sorted_signal_tuples["SELL"] else "none"
     )
-    account_history_institution = (
-        str(account_summary.get("institution_name") or "")
-        if account_summary.get("institution_name")
-        else None
-    )
-    account_history = _snaptrade_balance_history(
-        snaptrade_accounts,
-        account_history_institution,
-    )
-    account_history_status = _snaptrade_balance_history_status(
-        snaptrade_accounts,
-        account_history_institution,
-    )
-    portfolio_account_overview = (
-        (
-            _account_connection_notice(account_connection)
-            if not _visible_snaptrade_accounts(snaptrade_accounts)
-            else ""
-        )
-        + _portfolio_account_overview(
-            portfolio_totals,
-            account_history,
-            account_summary,
-            chart_payloads["symbols"],
-            account_history_status,
-        )
-    )
-    sector_filter_options = "".join(
-        f'<option value="{html.escape(sector)}">{html.escape(sector)}</option>'
-        for sector in sorted(portfolio_sector_options)
-        if sector
-    )
-    portfolio_holdings = f"""
-    <section class="portfolio-holdings-panel" aria-label="All portfolio holdings">
-      <div class="holdings-toolbar">
-        <div><small>Your holdings</small><h3>Portfolio</h3></div>
-        <div class="holdings-controls">
-          <label>Search
-            <input id="portfolio-search" type="search" aria-label="Search portfolio ticker" placeholder="Ticker">
-          </label>
-          <label>Signal
-            <select id="portfolio-signal-filter" aria-label="Filter portfolio by signal">
-              <option value="all" selected>All</option>
-              <option value="BUY">BUY</option>
-              <option value="SELL">SELL</option>
-              <option value="WAIT">WAIT</option>
-            </select>
-          </label>
-          <label>Sector
-            <select id="portfolio-sector-filter" aria-label="Filter portfolio by sector">
-              <option value="all" selected>All sectors</option>
-              {sector_filter_options}
-            </select>
-          </label>
-          <label>Weight
-            <select id="portfolio-weight-filter" aria-label="Filter portfolio by weight">
-              <option value="all" selected>All weights</option>
-              <option value="gte-10">10%+</option>
-              <option value="gte-5">5%+</option>
-              <option value="lt-1">&lt;1%</option>
-            </select>
-          </label>
-          <label>Confidence
-            <select id="portfolio-confidence-filter" aria-label="Filter portfolio by signal confidence">
-              <option value="all" selected>All confidence</option>
-              <option value="gte-65">65%+</option>
-              <option value="gte-55">55%+</option>
-              <option value="none">No signal</option>
-            </select>
-          </label>
-          <label>Sort
-            <select id="portfolio-sort" aria-label="Sort portfolio holdings">
-              <option value="today-desc" selected>Today Return %</option>
-              <option value="today-dollars-desc">Today Return $</option>
-              <option value="value-desc">Market value</option>
-              <option value="gain-desc">Gain/Loss %</option>
-              <option value="gain-dollars-desc">Gain/Loss $</option>
-              <option value="recent-desc">12-1 momentum</option>
-              <option value="weight-desc">Portfolio weight</option>
-              <option value="confidence-desc">Signal probability</option>
-              <option value="signal-desc">Signal type</option>
-              <option value="symbol-asc">Symbol A-Z</option>
-            </select>
-          </label>
-        </div>
-      </div>
-      <div class="portfolio-holdings-list" data-portfolio-holdings>
-        {''.join(portfolio_rows) or '<p class="empty-state">No current holdings loaded.</p>'}
-      </div>
-      <p class="holdings-filter-status" data-holdings-filter-status hidden>No holdings match current filters.</p>
-    </section>"""
     asset_home = _asset_home(snaptrade_accounts, account_summary, portfolio_totals)
     broker_tab_buttons, broker_tab_panels = _broker_tab_fragments(
         snaptrade_accounts,
         chart_payloads["symbols"],
+        holding_context_by_symbol,
     )
     moomoo_view = _moomoo_watchlist_view(moomoo_watchlists) if moomoo_watchlists else ""
     moomoo_logo = _broker_logo_html("Moomoo", "broker-tab-mark")
@@ -3273,17 +3104,8 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .broker-logo-moomoo {{ background:#ff6900; color:#050505 }}
 .broker-logo-generic {{ background:#2a2a2a; color:#f5f5f5 }}
 .portfolio-board {{ margin:12px 0 24px }}
-.signals-board-layout {{ align-items:start; display:grid; gap:16px }}
-.signals-chart-column,.signals-list-column {{ min-width:0 }}
-.signals-list-column .portfolio-holdings-panel {{ margin-top:0 }}
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
-.account-connection-notice {{ background:#211604; border:1px solid #5d3d09; border-radius:12px; color:#f6d49a; display:grid; gap:4px; margin:10px 0 12px; padding:13px 16px }}
-.account-connection-notice b {{ color:#ffb84d; font-size:15px }} .account-connection-notice span {{ color:#f0d8b2 }} .account-connection-notice small {{ color:#c2a984 }}
-.account-overview {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:14px 0 18px; max-width:1120px; overflow:hidden; padding:18px 22px 12px }}
-.account-copy small {{ color:var(--muted); display:block; font-size:15px; font-weight:650; margin-bottom:2px }} .account-copy h2 {{ font-size:38px; letter-spacing:-1.5px; line-height:1; margin:0 }}
-.account-copy p {{ color:var(--muted); margin:9px 0 0 }} .account-copy p.positive b,.account-stats .positive {{ color:var(--green) }} .account-copy p.negative b,.account-stats .negative {{ color:var(--red) }}
-.account-chart-wrap {{ margin:10px 0 8px; min-height:280px; width:100% }}
 .account-kline-card {{ background:transparent; border:0; border-radius:0; margin:0; padding:0 }}
 .account-kline-card .interactive-kline {{ height:280px; margin-top:0 }}
 .account-kline-card .chart-controls {{ align-items:center; border-top:1px solid var(--line); display:flex; gap:14px; justify-content:space-between; margin:8px 0 0; padding-top:8px }}
@@ -3294,9 +3116,6 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .account-chart-legend {{ display:none }}
 .account-grid line {{ stroke:#252525; stroke-width:1 }} .account-line {{ fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:3 }}
 .account-chart-empty {{ align-items:center; background:#0b0b0b; border-radius:10px; color:var(--muted); display:flex; min-height:230px; justify-content:center }}
-.account-stats {{ border-top:1px solid var(--line); display:grid; gap:0; grid-template-columns:repeat(4,1fr); margin-top:8px }}
-.account-stats div {{ border-right:1px solid var(--line); padding:11px 14px }} .account-stats div:first-child {{ padding-left:0 }} .account-stats div:last-child {{ border-right:0 }}
-.account-stats small {{ color:var(--muted); display:block; font-size:11px; font-weight:700 }} .account-stats b {{ display:block; font-size:18px; margin-top:2px }}
 .asset-home {{ background:#050505; border:1px solid var(--line); border-radius:16px; display:grid; gap:22px; grid-template-columns:minmax(320px,.95fr) minmax(360px,1.2fr); margin:14px 0 22px; max-width:1120px; padding:26px }}
 .asset-home small,.moomoo-hero small {{ color:var(--green); display:block; font-size:11px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }}
 .asset-home h2 {{ font-size:52px; letter-spacing:-2.2px; line-height:1; margin:4px 0 }}
@@ -3321,10 +3140,8 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .broker-account-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; display:grid; gap:12px; overflow:hidden; padding:15px }}
 .broker-card-title {{ align-items:center; display:flex; gap:10px }} .broker-icon-mini {{ height:28px; width:28px }} .broker-card-title b {{ display:block; font-size:17px }} .broker-card-title small,.broker-sync {{ color:var(--muted); display:block; font-size:12px }}
 .broker-card-grid {{ display:grid; gap:8px; grid-template-columns:repeat(2,minmax(0,1fr)) }} .broker-sync.synced {{ color:var(--green) }}
-.broker-positions-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; overflow:hidden }}
+.broker-account-holdings {{ border:1px solid var(--line); border-radius:12px; overflow:hidden }}
 .broker-section-heading {{ padding:16px 18px 8px }} .broker-section-heading h3 {{ font-size:22px; margin:1px 0 0 }}
-.broker-table-wrap {{ overflow:auto }} .broker-positions-table td:first-child span {{ color:var(--muted); display:block; font-size:12px; margin-top:2px; max-width:360px }}
-.broker-positions-table th {{ color:#00a83b }} .broker-positions-panel .note {{ padding:0 18px 16px }}
 .moomoo-board {{ display:grid; gap:14px; margin:12px 0 24px }}
 .moomoo-hero,.moomoo-watchlist-card {{ background:#050505; border:1px solid var(--line); border-radius:14px; padding:18px }}
 .moomoo-hero {{ align-items:center; display:flex; gap:15px }}
@@ -3332,14 +3149,6 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .moomoo-watchlists-grid {{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)) }}
 .moomoo-watchlist-card header {{ align-items:end; display:flex; justify-content:space-between; gap:12px; margin-bottom:12px }} .moomoo-watchlist-card h3 {{ font-size:22px; margin:0 }} .moomoo-watchlist-card header small {{ color:var(--green); display:block; font-size:10px; font-weight:850; letter-spacing:.6px; text-transform:uppercase }} .moomoo-watchlist-card header b {{ color:var(--muted) }}
 .moomoo-symbol-grid {{ display:grid; gap:8px; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)) }} .moomoo-symbol-grid span {{ background:#101010; border:1px solid var(--line); border-radius:10px; min-width:0; padding:9px }} .moomoo-symbol-grid b {{ display:block; font-size:15px }} .moomoo-symbol-grid small {{ color:var(--muted); display:block; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }}
-.portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:10px 0 16px; overflow:hidden }}
-.holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
-.holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
-.holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select,.holdings-toolbar input {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
-.holdings-toolbar input {{ max-width:112px }}
-.holdings-controls {{ align-items:center; display:flex; flex-wrap:wrap; gap:8px 12px; justify-content:flex-end }}
-.holdings-controls label {{ align-items:center; display:flex; white-space:nowrap }}
-.holdings-filter-status {{ color:var(--muted); margin:0; padding:16px }}
 .inline-info {{ align-items:center; border:1px solid #555; border-radius:50%; color:var(--green); display:inline-flex; font-size:8px; height:13px; justify-content:center; margin-left:3px; text-decoration:none; text-transform:none; width:13px }}
 .portfolio-holdings-list {{ container-type:inline-size; display:grid; grid-template-columns:1fr; position:relative }}
 .portfolio-holding-card {{ align-items:center; background:transparent; border:0; border-bottom:1px solid var(--line); border-left:3px solid transparent; color:var(--text); cursor:pointer; display:grid; font:inherit; gap:8px; grid-template-columns:minmax(86px,1fr) 82px 84px 80px 100px 66px 86px 92px; min-height:60px; min-width:0; overflow:hidden; padding:9px 12px 9px 10px; text-align:left; width:100% }}
@@ -3475,7 +3284,6 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .asset-home {{ grid-template-columns:1fr; max-width:none }}
   .broker-hero {{ grid-template-columns:1fr }}
   .broker-totals {{ grid-template-columns:repeat(3,minmax(0,1fr)) }}
-  .account-stats {{ grid-template-columns:repeat(2,1fr) }} .account-stats div:nth-child(2n) {{ border-right:0 }}
   .portfolio-holding-card {{ gap:6px; grid-template-columns:minmax(92px,1fr) 82px 78px 64px 86px 54px 72px 72px; min-height:64px; padding:11px 10px }}
   .holding-today-cash {{ display:block }}
   .portfolio-holding-card>span::before {{ display:none }}
@@ -3493,11 +3301,10 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   main {{ padding:24px 12px 60px }} .grid,.experiment,.detail-title,.metrics {{ grid-template-columns:1fr }}
   .decision-board {{ grid-template-columns:1fr }} .wait-column {{ grid-column:auto }}
   .board-intro {{ align-items:start; flex-direction:column }} .holding-row {{ grid-template-columns:70px 1fr }}
-  .holdings-toolbar {{ align-items:start; flex-direction:column; gap:10px }}
   .asset-home {{ padding:20px }} .asset-home h2 {{ font-size:38px; letter-spacing:-1.5px }} .asset-home-actions,.broker-totals,.broker-card-grid {{ grid-template-columns:1fr }}
   .broker-hero {{ padding:16px }} .broker-brand {{ align-items:flex-start }} .broker-brand h2,.moomoo-hero h2 {{ font-size:32px }}
   .moomoo-hero {{ align-items:flex-start; padding:16px }}
-  .account-overview {{ padding:16px 16px 12px }} .account-copy h2 {{ font-size:34px }} .account-chart-wrap {{ min-height:260px }} .account-stats {{ grid-template-columns:1fr 1fr }} .account-kline-card .interactive-kline {{ height:260px }} .board-intro p {{ display:none }}
+  .account-kline-card .interactive-kline {{ height:260px }} .board-intro p {{ display:none }}
   .interactive-kline {{ height:380px }}
   .chart-controls {{ align-items:stretch; flex-direction:column; gap:8px }}
   .chart-mode-tabs {{ justify-content:flex-start }}
@@ -3507,42 +3314,29 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .portfolio-holding-card {{ gap:7px; grid-template-columns:minmax(78px,1fr) 64px 78px 82px; padding-left:9px; padding-right:9px }}
   .holding-spark .mini-sparkline {{ height:30px; width:64px }}
   .today-pill b {{ font-size:14px }} .holding-current b {{ font-size:16px }}
-}} @media(min-width:1180px) {{
-  main {{ max-width:1720px }}
-  .signals-board-layout {{ grid-template-columns:minmax(0,1fr) minmax(420px,520px); gap:18px }}
-  .signals-chart-column .account-overview {{ margin:0; max-width:none }}
-  .signals-list-column .portfolio-holdings-panel {{ height:calc(100vh - 150px); min-height:620px; overflow:auto }}
-  .signals-list-column .holdings-toolbar {{ align-items:flex-start; flex-direction:column; gap:10px; padding:13px 14px }}
-  .signals-list-column .holdings-controls {{ justify-content:flex-start }}
-  .signals-list-column .holdings-toolbar select,.signals-list-column .holdings-toolbar input {{ margin-left:6px; padding:6px 10px }}
-  .signals-list-column .holdings-toolbar input {{ max-width:96px }}
-  .signals-list-column .portfolio-holdings-list {{ grid-template-columns:1fr }}
-  .signals-list-column .portfolio-holdings-list::before {{ content:none }}
-  .signals-list-column .portfolio-holding-card {{ background:#050505; gap:4px 9px; grid-template-areas:"id spark today price" "cash value weight gain"; grid-template-columns:minmax(88px,1fr) 92px 74px 82px; min-height:74px; padding:10px 12px }}
-  .signals-list-column .holding-identity {{ align-self:center; grid-area:id }}
-  .signals-list-column .holding-spark {{ grid-area:spark }}
-  .signals-list-column .today-pill {{ grid-area:today; justify-self:stretch; min-width:72px }}
-  .signals-list-column .holding-current {{ grid-area:price }}
-  .signals-list-column .holding-today-cash {{ display:block; grid-area:cash; text-align:left }}
-  .signals-list-column .holding-market-value {{ display:block; grid-area:value }}
-  .signals-list-column .holding-weight {{ display:block; grid-area:weight }}
-  .signals-list-column .holding-gain-loss {{ display:block; grid-area:gain }}
-  .signals-list-column .portfolio-holding-card strong {{ font-size:17px }}
-  .signals-list-column .portfolio-holding-card small {{ font-size:9px }}
-  .signals-list-column .portfolio-holding-card b {{ font-size:13px }}
-  .signals-list-column .holding-current b {{ font-size:16px }}
-  .signals-list-column .holding-spark .mini-sparkline {{ height:28px; width:90px }}
-  .signals-list-column .today-pill b {{ font-size:15px }}
-  .signals-list-column .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.13),rgba(0,200,5,.03) 42%,#050505 82%) }}
-  .signals-list-column .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.15),rgba(255,90,95,.035) 42%,#050505 82%) }}
-  .signals-list-column .portfolio-holding-card.signal-wait {{ background:#050505 }}
-}} @media(min-width:1180px) and (max-width:1380px) {{
-  .signals-board-layout {{ grid-template-columns:minmax(0,1fr) minmax(390px,460px) }}
-  .signals-list-column .portfolio-holding-card {{ gap:4px 7px; grid-template-areas:"id spark today price" "cash value gain gain"; grid-template-columns:minmax(76px,1fr) 72px 66px 72px; padding-left:10px; padding-right:10px }}
-  .signals-list-column .holding-spark .mini-sparkline {{ width:72px }}
-  .signals-list-column .holding-weight {{ display:none }}
-  .signals-list-column .today-pill {{ min-width:66px }}
-  .signals-list-column .today-pill b {{ font-size:14px }}
+}}
+.broker-holdings-list {{ grid-template-columns:1fr }}
+.broker-holding-card.portfolio-holding-card {{ background:#050505; gap:4px 8px; grid-template-areas:"id spark today price" "cash value weight gain"; grid-template-columns:minmax(88px,1fr) 84px 72px 82px; min-height:74px; padding:10px 12px }}
+.broker-holding-card .holding-identity {{ align-self:center; grid-area:id }}
+.broker-holding-card .holding-spark {{ grid-area:spark }}
+.broker-holding-card .today-pill {{ grid-area:today; justify-self:stretch; min-width:68px }}
+.broker-holding-card .holding-current {{ grid-area:price }}
+.broker-holding-card .holding-today-cash {{ display:block; grid-area:cash; text-align:left }}
+.broker-holding-card .holding-market-value {{ display:block; grid-area:value }}
+.broker-holding-card .holding-weight {{ display:block; grid-area:weight }}
+.broker-holding-card .holding-gain-loss {{ display:block; grid-area:gain }}
+.broker-holding-card .holding-spark .mini-sparkline {{ height:28px; width:84px }}
+.broker-holding-card.portfolio-holding-card strong {{ font-size:17px }}
+.broker-holding-card.portfolio-holding-card small {{ font-size:9px }}
+.broker-holding-card.portfolio-holding-card b {{ font-size:13px }}
+.broker-holding-card .holding-current b {{ font-size:16px }}
+.broker-holding-card.no-detail {{ cursor:default; opacity:.82 }}
+.broker-holding-card.no-detail:hover {{ background:#050505 }}
+@media(max-width:520px) {{
+  .broker-holding-card.portfolio-holding-card {{ gap:4px 7px; grid-template-areas:"id spark today price" "cash value gain gain"; grid-template-columns:minmax(76px,1fr) 68px 64px 72px; padding-left:10px; padding-right:10px }}
+  .broker-holding-card .holding-spark .mini-sparkline {{ width:68px }}
+  .broker-holding-card .holding-weight {{ display:none }}
+  .broker-holding-card .today-pill b {{ font-size:14px }}
 }}
 </style>
 </head>
@@ -3554,7 +3348,6 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   <button type="button" class="tab-button active" data-tab-target="home" role="tab" aria-selected="true">Home</button>
   {broker_tab_buttons}
   {moomoo_tab_button}
-  <button type="button" class="tab-button" data-tab-target="signals" role="tab" aria-selected="false">Signals</button>
   <button type="button" class="tab-button" data-tab-target="opportunities" role="tab" aria-selected="false">Opportunities</button>
   <button type="button" class="tab-button" data-tab-target="research" role="tab" aria-selected="false">Research</button>
   <button type="button" class="tab-button" data-tab-target="health" role="tab" aria-selected="false">Health &amp; Risk</button>
@@ -3564,12 +3357,6 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 </section>
 {broker_tab_panels}
 {moomoo_tab_panel}
-<section id="tab-signals" class="tab-view" role="tabpanel" hidden>
-<section class="portfolio-board signals-board-layout">
-  <div class="signals-chart-column">{portfolio_account_overview}</div>
-  <div class="signals-list-column">{portfolio_holdings}</div>
-</section>
-</section>
 <section id="tab-opportunities" class="tab-view" role="tabpanel" hidden>
 {prioritized_board}
 </section>
@@ -3702,84 +3489,6 @@ const activateDashboardTab = (target) => {{
 tabButtons.forEach((button) => button.addEventListener("click", () => activateDashboardTab(button.dataset.tabTarget)));
 document.querySelectorAll("[data-jump-tab]").forEach((button) => button.addEventListener("click", () => activateDashboardTab(button.dataset.jumpTab)));
 
-const portfolioSort = document.getElementById("portfolio-sort");
-const portfolioList = document.querySelector("[data-portfolio-holdings]");
-const portfolioSearch = document.getElementById("portfolio-search");
-const portfolioSignalFilter = document.getElementById("portfolio-signal-filter");
-const portfolioSectorFilter = document.getElementById("portfolio-sector-filter");
-const portfolioWeightFilter = document.getElementById("portfolio-weight-filter");
-const portfolioConfidenceFilter = document.getElementById("portfolio-confidence-filter");
-const holdingsFilterStatus = document.querySelector("[data-holdings-filter-status]");
-const arrangePortfolioRows = (rows) => {{
-  rows.forEach((row) => {{
-    row.style.gridColumn = "";
-    row.style.gridRow = "";
-  }});
-  if (!portfolioList) return;
-  rows.forEach((row) => portfolioList.appendChild(row));
-}};
-const holdingMatchesFilters = (row) => {{
-  const query = (portfolioSearch?.value || "").trim().toUpperCase();
-  if (query && !(row.dataset.sortSymbol || "").toUpperCase().includes(query)) return false;
-  const signal = portfolioSignalFilter?.value || "all";
-  if (signal !== "all" && row.dataset.filterSignal !== signal) return false;
-  const sector = portfolioSectorFilter?.value || "all";
-  if (sector !== "all" && row.dataset.filterSector !== sector) return false;
-  const weight = Number(row.dataset.sortWeight || 0);
-  const weightFilter = portfolioWeightFilter?.value || "all";
-  if (weightFilter === "gte-10" && weight < 0.10) return false;
-  if (weightFilter === "gte-5" && weight < 0.05) return false;
-  if (weightFilter === "lt-1" && weight >= 0.01) return false;
-  const confidence = Number(row.dataset.sortConfidence || 0);
-  const confidenceFilter = portfolioConfidenceFilter?.value || "all";
-  if (confidenceFilter === "gte-65" && confidence < 0.65) return false;
-  if (confidenceFilter === "gte-55" && confidence < 0.55) return false;
-  if (confidenceFilter === "none" && confidence > 0) return false;
-  return true;
-}};
-const sortHoldings = () => {{
-  if (!portfolioSort || !portfolioList) return;
-  const selectedSort = portfolioSort.value;
-  const direction = selectedSort.endsWith("-asc") ? "asc" : "desc";
-  const field = selectedSort.replace(/-(asc|desc)$/, "");
-  const datasetKey = {{
-    value: "sortValue",
-    today: "sortToday",
-    "today-dollars": "sortTodayDollars",
-    gain: "sortGain",
-    "gain-dollars": "sortGainDollars",
-    recent: "sortRecent",
-    weight: "sortWeight",
-    confidence: "sortConfidence",
-    signal: "sortSignal",
-    symbol: "sortSymbol",
-  }}[field];
-  const rows = [...portfolioList.querySelectorAll(".portfolio-holding-card")];
-  rows.forEach((row) => {{
-    row.hidden = !holdingMatchesFilters(row);
-  }});
-  rows.sort((left, right) => {{
-    if (field === "symbol") {{
-      return (left.dataset[datasetKey] || "").localeCompare(right.dataset[datasetKey] || "");
-    }}
-    const leftValue = Number(left.dataset[datasetKey] || 0);
-    const rightValue = Number(right.dataset[datasetKey] || 0);
-    return direction === "asc" ? leftValue - rightValue : rightValue - leftValue;
-  }});
-  const visibleRows = rows.filter((row) => !row.hidden);
-  const hiddenRows = rows.filter((row) => row.hidden);
-  if (holdingsFilterStatus) holdingsFilterStatus.hidden = visibleRows.length > 0;
-  arrangePortfolioRows(visibleRows);
-  hiddenRows.forEach((row) => {{
-    row.style.gridColumn = "";
-    row.style.gridRow = "";
-    portfolioList.appendChild(row);
-  }});
-}};
-portfolioSort?.addEventListener("change", sortHoldings);
-[portfolioSearch, portfolioSignalFilter, portfolioSectorFilter, portfolioWeightFilter, portfolioConfidenceFilter].forEach((control) => control?.addEventListener("input", sortHoldings));
-[portfolioSignalFilter, portfolioSectorFilter, portfolioWeightFilter, portfolioConfidenceFilter].forEach((control) => control?.addEventListener("change", sortHoldings));
-sortHoldings();
 window.StockInvestorKline?.initVisibleCharts();
 
 const refreshButton = document.querySelector("[data-refresh-button]");
@@ -3825,16 +3534,6 @@ refreshButton?.addEventListener("click", async () => {{
   }} catch (_error) {{
     setRefreshState("manual refresh endpoint unavailable", false);
   }}
-}});
-
-let portfolioResizeFrame = null;
-window.addEventListener("resize", () => {{
-  if (portfolioResizeFrame) return;
-  portfolioResizeFrame = window.requestAnimationFrame(() => {{
-    portfolioResizeFrame = null;
-    sortHoldings();
-    window.StockInvestorKline?.initVisibleCharts();
-  }});
 }});
 
 const drawer = document.getElementById("holding-drawer");
