@@ -2801,6 +2801,9 @@ def build_dashboard(
       <div class="holdings-toolbar">
         <div><small>Your holdings</small><h3>Portfolio</h3></div>
         <div class="holdings-controls">
+          <label>Search
+            <input id="portfolio-search" type="search" aria-label="Search portfolio ticker" placeholder="Ticker">
+          </label>
           <label>Signal
             <select id="portfolio-signal-filter" aria-label="Filter portfolio by signal">
               <option value="all" selected>All</option>
@@ -2840,7 +2843,7 @@ def build_dashboard(
               <option value="gain-dollars-desc">Gain/Loss $</option>
               <option value="recent-desc">12-1 momentum</option>
               <option value="weight-desc">Portfolio weight</option>
-              <option value="confidence-desc">Signal confidence</option>
+              <option value="confidence-desc">Signal probability</option>
               <option value="signal-desc">Signal type</option>
               <option value="symbol-asc">Symbol A-Z</option>
             </select>
@@ -3327,7 +3330,8 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .portfolio-holdings-panel {{ background:#050505; border:1px solid var(--line); border-radius:14px; margin:10px 0 16px; overflow:hidden }}
 .holdings-toolbar {{ align-items:center; display:flex; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line) }}
 .holdings-toolbar small {{ color:var(--green); display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase }} .holdings-toolbar h3 {{ font-size:22px; margin:1px 0 0 }}
-.holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
+.holdings-toolbar label {{ color:var(--muted); font-size:12px; font-weight:750 }} .holdings-toolbar select,.holdings-toolbar input {{ background:#101010; border:1px solid #333; border-radius:999px; color:var(--text); font:inherit; margin-left:8px; padding:7px 12px }}
+.holdings-toolbar input {{ max-width:112px }}
 .holdings-controls {{ align-items:center; display:flex; flex-wrap:wrap; gap:8px 12px; justify-content:flex-end }}
 .holdings-controls label {{ align-items:center; display:flex; white-space:nowrap }}
 .holdings-filter-status {{ color:var(--muted); margin:0; padding:16px }}
@@ -3675,6 +3679,7 @@ document.querySelectorAll("[data-jump-tab]").forEach((button) => button.addEvent
 
 const portfolioSort = document.getElementById("portfolio-sort");
 const portfolioList = document.querySelector("[data-portfolio-holdings]");
+const portfolioSearch = document.getElementById("portfolio-search");
 const portfolioSignalFilter = document.getElementById("portfolio-signal-filter");
 const portfolioSectorFilter = document.getElementById("portfolio-sector-filter");
 const portfolioWeightFilter = document.getElementById("portfolio-weight-filter");
@@ -3714,6 +3719,8 @@ const arrangePortfolioRows = (rows) => {{
   }});
 }};
 const holdingMatchesFilters = (row) => {{
+  const query = (portfolioSearch?.value || "").trim().toUpperCase();
+  if (query && !(row.dataset.sortSymbol || "").toUpperCase().includes(query)) return false;
   const signal = portfolioSignalFilter?.value || "all";
   if (signal !== "all" && row.dataset.filterSignal !== signal) return false;
   const sector = portfolioSectorFilter?.value || "all";
@@ -3770,6 +3777,7 @@ const sortHoldings = () => {{
   }});
 }};
 portfolioSort?.addEventListener("change", sortHoldings);
+[portfolioSearch, portfolioSignalFilter, portfolioSectorFilter, portfolioWeightFilter, portfolioConfidenceFilter].forEach((control) => control?.addEventListener("input", sortHoldings));
 [portfolioSignalFilter, portfolioSectorFilter, portfolioWeightFilter, portfolioConfidenceFilter].forEach((control) => control?.addEventListener("change", sortHoldings));
 sortHoldings();
 window.StockInvestorKline?.initVisibleCharts();

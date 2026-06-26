@@ -182,7 +182,7 @@ Current execution queue:
 
 - [x] M081 Add compact model-health and opportunity summaries.
 - [x] M082 Add BUY/SELL/WAIT, sector, weight, and confidence filters.
-- [ ] M083 Add ticker search and probability sorting.
+- [x] M083 Add ticker search and probability sorting.
 - [x] M084 Add chart crosshair and OHLCV tooltips.
 - [x] M084A Restore responsive Robinhood-style holdings rows and visible detail drawer.
 - [x] M085A Robinhood-style interactive K-line chart rewrite research and specification.
