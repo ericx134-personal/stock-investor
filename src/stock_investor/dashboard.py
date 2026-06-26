@@ -2766,31 +2766,33 @@ def build_dashboard(
     top_sell = (
         sorted_signal_tuples["SELL"][0][2] if sorted_signal_tuples["SELL"] else "none"
     )
-    portfolio_account_overview = ""
-    if not _visible_snaptrade_accounts(snaptrade_accounts):
-        account_history_institution = (
-            str(account_summary.get("institution_name") or "")
-            if account_summary.get("institution_name")
-            else None
-        )
-        account_history = _snaptrade_balance_history(
-            snaptrade_accounts,
-            account_history_institution,
-        )
-        account_history_status = _snaptrade_balance_history_status(
-            snaptrade_accounts,
-            account_history_institution,
-        )
-        portfolio_account_overview = (
+    account_history_institution = (
+        str(account_summary.get("institution_name") or "")
+        if account_summary.get("institution_name")
+        else None
+    )
+    account_history = _snaptrade_balance_history(
+        snaptrade_accounts,
+        account_history_institution,
+    )
+    account_history_status = _snaptrade_balance_history_status(
+        snaptrade_accounts,
+        account_history_institution,
+    )
+    portfolio_account_overview = (
+        (
             _account_connection_notice(account_connection)
-            + _portfolio_account_overview(
-                portfolio_totals,
-                account_history,
-                account_summary,
-                chart_payloads["symbols"],
-                account_history_status,
-            )
+            if not _visible_snaptrade_accounts(snaptrade_accounts)
+            else ""
         )
+        + _portfolio_account_overview(
+            portfolio_totals,
+            account_history,
+            account_summary,
+            chart_payloads["symbols"],
+            account_history_status,
+        )
+    )
     sector_filter_options = "".join(
         f'<option value="{html.escape(sector)}">{html.escape(sector)}</option>'
         for sector in sorted(portfolio_sector_options)
@@ -3271,6 +3273,9 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .broker-logo-moomoo {{ background:#ff6900; color:#050505 }}
 .broker-logo-generic {{ background:#2a2a2a; color:#f5f5f5 }}
 .portfolio-board {{ margin:12px 0 24px }}
+.signals-board-layout {{ align-items:start; display:grid; gap:16px }}
+.signals-chart-column,.signals-list-column {{ min-width:0 }}
+.signals-list-column .portfolio-holdings-panel {{ margin-top:0 }}
 .board-intro {{ display:flex; align-items:end; justify-content:space-between; gap:18px; margin-top:12px }}
 .board-intro h2 {{ margin:0; font-size:25px }} .board-intro p {{ color:var(--muted); margin:0 }}
 .account-connection-notice {{ background:#211604; border:1px solid #5d3d09; border-radius:12px; color:#f6d49a; display:grid; gap:4px; margin:10px 0 12px; padding:13px 16px }}
@@ -3454,32 +3459,13 @@ h1 {{ margin:0; font-size:40px; font-weight:750; letter-spacing:-2px }} h1::afte
 .experiment div {{ background:#111; border-radius:7px; padding:14px }} .experiment b {{ display:block; font-size:24px }}
 .experiment span {{ color:var(--muted); font-size:13px }}
 table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; padding:9px; border-bottom:1px solid var(--line) }} th {{ color:var(--green); font-size:12px; letter-spacing:.25px }}
-.note {{ color:var(--muted); font-size:13px }} @media(min-width:900px) {{
-  .portfolio-holdings-list {{ background:transparent; column-gap:22px; grid-template-columns:repeat(2,minmax(0,1fr)); position:relative; row-gap:0 }}
-  .portfolio-holdings-list::before {{ background:#3a3a3a; bottom:0; box-shadow:0 0 0 1px rgba(255,255,255,.04); content:""; left:50%; position:absolute; top:0; width:2px; z-index:1 }}
-  .portfolio-holding-card {{ background:#050505; gap:7px; grid-template-columns:minmax(92px,1fr) 72px 78px 84px; min-height:60px; padding:9px 12px }}
-  .holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss {{ display:none }}
-  .holding-spark .mini-sparkline {{ width:72px }}
-  .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.13),rgba(0,200,5,.03) 40%,#050505 78%) }}
-  .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.15),rgba(255,90,95,.035) 40%,#050505 78%) }}
-  .portfolio-holding-card.signal-wait {{ background:#050505 }}
-}} @media(min-width:1300px) {{
+.note {{ color:var(--muted); font-size:13px }} @media(min-width:1300px) {{
   .portfolio-holding-card {{ gap:6px; grid-template-columns:minmax(92px,1fr) 64px 74px 64px 84px 48px 66px 72px; min-height:62px; padding-left:10px; padding-right:10px }}
   .holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss {{ display:block }}
   .holding-spark .mini-sparkline {{ width:64px }}
   .today-pill {{ min-height:34px; padding:4px 6px }} .today-pill b {{ font-size:15px }}
   .holding-today-cash b,.holding-weight b,.holding-gain-loss b {{ font-size:13px }}
   .holding-market-value b {{ font-size:13px }} .holding-current b {{ font-size:16px }}
-}} @media(max-width:1299px) and (min-width:1100px) {{
-  .portfolio-holding-card {{ gap:7px; grid-template-columns:minmax(76px,1fr) 58px 70px 70px; min-height:58px; padding-left:10px; padding-right:10px }}
-  .holding-spark .mini-sparkline {{ width:58px }}
-  .holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss {{ display:none }}
-  .today-pill {{ min-height:34px; padding:4px 6px }} .today-pill b {{ font-size:14px }} .holding-current b {{ font-size:16px }}
-}} @media(max-width:1099px) and (min-width:900px) {{
-  .portfolio-holding-card {{ gap:7px; grid-template-columns:minmax(74px,1fr) 54px 68px 68px; min-height:58px; padding-left:9px; padding-right:9px }}
-  .holding-spark .mini-sparkline {{ width:54px }}
-  .holding-today-cash,.holding-market-value,.holding-weight,.holding-gain-loss {{ display:none }}
-  .today-pill {{ min-height:34px; padding:4px 6px }} .today-pill b {{ font-size:13px }} .holding-current b {{ font-size:15px }}
 }} @media(max-width:1080px) {{
   .portfolio-holding-card {{ min-height:58px }}
 }} @media(max-width:899px) {{
@@ -3521,6 +3507,42 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
   .portfolio-holding-card {{ gap:7px; grid-template-columns:minmax(78px,1fr) 64px 78px 82px; padding-left:9px; padding-right:9px }}
   .holding-spark .mini-sparkline {{ height:30px; width:64px }}
   .today-pill b {{ font-size:14px }} .holding-current b {{ font-size:16px }}
+}} @media(min-width:1180px) {{
+  main {{ max-width:1720px }}
+  .signals-board-layout {{ grid-template-columns:minmax(0,1fr) minmax(420px,520px); gap:18px }}
+  .signals-chart-column .account-overview {{ margin:0; max-width:none }}
+  .signals-list-column .portfolio-holdings-panel {{ height:calc(100vh - 150px); min-height:620px; overflow:auto }}
+  .signals-list-column .holdings-toolbar {{ align-items:flex-start; flex-direction:column; gap:10px; padding:13px 14px }}
+  .signals-list-column .holdings-controls {{ justify-content:flex-start }}
+  .signals-list-column .holdings-toolbar select,.signals-list-column .holdings-toolbar input {{ margin-left:6px; padding:6px 10px }}
+  .signals-list-column .holdings-toolbar input {{ max-width:96px }}
+  .signals-list-column .portfolio-holdings-list {{ grid-template-columns:1fr }}
+  .signals-list-column .portfolio-holdings-list::before {{ content:none }}
+  .signals-list-column .portfolio-holding-card {{ background:#050505; gap:4px 9px; grid-template-areas:"id spark today price" "cash value weight gain"; grid-template-columns:minmax(88px,1fr) 92px 74px 82px; min-height:74px; padding:10px 12px }}
+  .signals-list-column .holding-identity {{ align-self:center; grid-area:id }}
+  .signals-list-column .holding-spark {{ grid-area:spark }}
+  .signals-list-column .today-pill {{ grid-area:today; justify-self:stretch; min-width:72px }}
+  .signals-list-column .holding-current {{ grid-area:price }}
+  .signals-list-column .holding-today-cash {{ display:block; grid-area:cash; text-align:left }}
+  .signals-list-column .holding-market-value {{ display:block; grid-area:value }}
+  .signals-list-column .holding-weight {{ display:block; grid-area:weight }}
+  .signals-list-column .holding-gain-loss {{ display:block; grid-area:gain }}
+  .signals-list-column .portfolio-holding-card strong {{ font-size:17px }}
+  .signals-list-column .portfolio-holding-card small {{ font-size:9px }}
+  .signals-list-column .portfolio-holding-card b {{ font-size:13px }}
+  .signals-list-column .holding-current b {{ font-size:16px }}
+  .signals-list-column .holding-spark .mini-sparkline {{ height:28px; width:90px }}
+  .signals-list-column .today-pill b {{ font-size:15px }}
+  .signals-list-column .portfolio-holding-card.signal-buy {{ background:linear-gradient(90deg,rgba(0,200,5,.13),rgba(0,200,5,.03) 42%,#050505 82%) }}
+  .signals-list-column .portfolio-holding-card.signal-sell {{ background:linear-gradient(90deg,rgba(255,90,95,.15),rgba(255,90,95,.035) 42%,#050505 82%) }}
+  .signals-list-column .portfolio-holding-card.signal-wait {{ background:#050505 }}
+}} @media(min-width:1180px) and (max-width:1380px) {{
+  .signals-board-layout {{ grid-template-columns:minmax(0,1fr) minmax(390px,460px) }}
+  .signals-list-column .portfolio-holding-card {{ gap:4px 7px; grid-template-areas:"id spark today price" "cash value gain gain"; grid-template-columns:minmax(76px,1fr) 72px 66px 72px; padding-left:10px; padding-right:10px }}
+  .signals-list-column .holding-spark .mini-sparkline {{ width:72px }}
+  .signals-list-column .holding-weight {{ display:none }}
+  .signals-list-column .today-pill {{ min-width:66px }}
+  .signals-list-column .today-pill b {{ font-size:14px }}
 }}
 </style>
 </head>
@@ -3543,7 +3565,10 @@ table {{ width:100%; border-collapse:collapse }} th,td {{ text-align:left; paddi
 {broker_tab_panels}
 {moomoo_tab_panel}
 <section id="tab-signals" class="tab-view" role="tabpanel" hidden>
-<section class="portfolio-board">{portfolio_account_overview}{portfolio_holdings}</section>
+<section class="portfolio-board signals-board-layout">
+  <div class="signals-chart-column">{portfolio_account_overview}</div>
+  <div class="signals-list-column">{portfolio_holdings}</div>
+</section>
 </section>
 <section id="tab-opportunities" class="tab-view" role="tabpanel" hidden>
 {prioritized_board}
@@ -3691,32 +3716,7 @@ const arrangePortfolioRows = (rows) => {{
     row.style.gridRow = "";
   }});
   if (!portfolioList) return;
-  const twoColumn = window.matchMedia("(min-width: 900px)").matches;
-  if (!twoColumn) {{
-    rows.forEach((row) => portfolioList.appendChild(row));
-    return;
-  }}
-  const gainers = rows.filter((row) => Number(row.dataset.sortToday || 0) >= 0);
-  const losers = rows.filter((row) => Number(row.dataset.sortToday || 0) < 0);
-  let leftRows = [];
-  let rightRows = [];
-  if (gainers.length && losers.length) {{
-    leftRows = gainers;
-    rightRows = losers;
-  }} else {{
-    const split = Math.ceil(rows.length / 2);
-    leftRows = rows.slice(0, split);
-    rightRows = rows.slice(split);
-  }}
-  [...leftRows, ...rightRows].forEach((row) => portfolioList.appendChild(row));
-  leftRows.forEach((row, index) => {{
-    row.style.gridColumn = "1";
-    row.style.gridRow = String(index + 1);
-  }});
-  rightRows.forEach((row, index) => {{
-    row.style.gridColumn = "2";
-    row.style.gridRow = String(index + 1);
-  }});
+  rows.forEach((row) => portfolioList.appendChild(row));
 }};
 const holdingMatchesFilters = (row) => {{
   const query = (portfolioSearch?.value || "").trim().toUpperCase();

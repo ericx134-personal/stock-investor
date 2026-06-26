@@ -550,7 +550,18 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("Open monthly portfolio-learning review", page)
         self.assertIn("sortHoldings", page)
         self.assertIn("arrangePortfolioRows", page)
-        self.assertIn('row.style.gridColumn = "1"', page)
+        self.assertIn('class="portfolio-board signals-board-layout"', page)
+        self.assertIn('class="signals-chart-column"', page)
+        self.assertIn('class="signals-list-column"', page)
+        self.assertIn('grid-template-columns:minmax(0,1fr) minmax(420px,520px)', page)
+        self.assertIn('grid-template-areas:"id spark today price" "cash value weight gain"', page)
+        self.assertNotIn('row.style.gridColumn = "1"', page)
+        self.assertNotIn('leftRows', page)
+        self.assertNotIn(
+            ".portfolio-holdings-list { background:transparent; column-gap:22px; grid-template-columns:repeat(2,minmax(0,1fr))",
+            page,
+        )
+        self.assertNotIn(".portfolio-holdings-list::before { background:#3a3a3a", page)
         self.assertIn("window.StockInvestorKline?.initVisibleCharts();", page)
         self.assertIn("kline-chart.js?v=20260623-scratch-ui", page)
         self.assertIn('class="refresh-strip"', page)
