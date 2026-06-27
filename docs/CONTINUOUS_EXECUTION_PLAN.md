@@ -217,7 +217,7 @@ Current execution queue:
   aggregation cannot cover the needed account.
 - [x] M103A Add a SnapTrade/Fidelity read-only authorization and account
   import scaffold.
-- [x] M103B Complete SnapTrade/Fidelity live authorization with `ericx134` and
+- [x] M103B Complete SnapTrade/Fidelity live authorization with ignored local credentials and
   import real accounts.
 - [x] M103C Add a Fidelity dashboard tab from the ignored SnapTrade account
   snapshot without mixing 401k/cash instruments into stock predictions.

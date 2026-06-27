@@ -265,7 +265,7 @@ class SnapTradeProviderTests(unittest.TestCase):
                     [
                         "SNAPTRADE_CLIENT_ID=file-client",
                         "SNAPTRADE_CONSUMER_KEY='file-key'",
-                        "SNAPTRADE_USER_ID=ericx134",
+                        "SNAPTRADE_USER_ID=test-user-id",
                         'SNAPTRADE_USER_SECRET="file-secret"',
                     ]
                 )
@@ -275,7 +275,7 @@ class SnapTradeProviderTests(unittest.TestCase):
 
         self.assertEqual(loaded.client_id, "file-client")
         self.assertEqual(loaded.consumer_key, "file-key")
-        self.assertEqual(loaded.user_id, "ericx134")
+        self.assertEqual(loaded.user_id, "test-user-id")
         self.assertEqual(loaded.user_secret, "file-secret")
 
     def test_environment_overrides_private_service_env(self):

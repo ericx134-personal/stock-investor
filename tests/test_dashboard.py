@@ -927,7 +927,7 @@ class DashboardTests(unittest.TestCase):
                             {
                                 "account": {
                                     "name": "Robinhood Individual",
-                                    "number": "***8183",
+                                    "number": "***1001",
                                     "institution_name": "Robinhood",
                                     "balance": {
                                         "total": {"amount": 1000.0, "currency": "USD"}
@@ -972,7 +972,7 @@ class DashboardTests(unittest.TestCase):
                             {
                                 "account": {
                                     "name": "BrokerageLink",
-                                    "number": "***4500",
+                                    "number": "***2002",
                                     "institution_name": "Fidelity",
                                     "balance": {
                                         "total": {"amount": 1550.0, "currency": "USD"}
@@ -997,7 +997,7 @@ class DashboardTests(unittest.TestCase):
                             {
                                 "account": {
                                     "name": "Health Savings Account",
-                                    "number": "***0135",
+                                    "number": "***3003",
                                     "institution_name": "Fidelity",
                                     "balance": {
                                         "total": {"amount": 1200.0, "currency": "USD"}
@@ -1034,7 +1034,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("1 funded accounts · 1 positions · 1 symbols", page)
         self.assertIn("2 funded accounts · 2 positions · 2 symbols", page)
         self.assertEqual(page.count('class="broker-account-panel"'), 3)
-        self.assertIn('data-chart-symbol="__ACCOUNT__-robinhood-8183"', page)
+        self.assertIn('data-chart-symbol="__ACCOUNT__-robinhood-1001"', page)
         self.assertIn('"source":"snaptrade_balance_history"', page)
         self.assertIn("broker-logo-robinhood", page)
         self.assertIn("broker-logo-fidelity", page)

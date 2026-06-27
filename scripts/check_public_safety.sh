@@ -31,4 +31,13 @@ if [[ -n "$token_hits" ]]; then
   fail "probable secret token committed"
 fi
 
+identity_pattern="$(printf '%s%s_%s|%s%s%s' 'E' 'ricX' '1' 'er' 'icx' '134')"
+identity_hits="$(
+  git grep -n -I -E "$identity_pattern" -- . || true
+)"
+if [[ -n "$identity_hits" ]]; then
+  echo "$identity_hits" >&2
+  fail "personal identity marker committed"
+fi
+
 echo "public-safety check passed"

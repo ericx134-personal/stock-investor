@@ -141,7 +141,7 @@ authorization page.
 # Put these in data/private/service.env; the CLI also respects shell exports.
 SNAPTRADE_CLIENT_ID="..."
 SNAPTRADE_CONSUMER_KEY="..."
-SNAPTRADE_USER_ID="ericx134"
+SNAPTRADE_USER_ID="your-snaptrade-user-id"
 
 PYTHONPATH=src python3 -m stock_investor.cli snaptrade-login-url --broker FIDELITY
 # Open the printed URL, log in to Fidelity there, and approve read-only access.
